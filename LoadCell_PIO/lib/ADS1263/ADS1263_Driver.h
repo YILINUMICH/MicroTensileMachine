@@ -1,6 +1,6 @@
 /**
  * @file ADS1263_Driver.h
- * @brief ADS1263 32-bit ADC driver — Arduino Uno, EXTERNAL 5V reference
+ * @brief ADS1263 32-bit ADC driver — Portenta H7 (M4 core), EXTERNAL 5V reference
  *
  * Signal chain:
  *   Load cell (bridge) → LCA-9PC/LCA-RTC amplifier → ADS1263 AIN0 / AIN1
@@ -20,9 +20,15 @@
  *
  * Scaling:  V_in = (code / 2^31) * VREF_EXTERNAL       (VREF = 5.0 V)
  *
- * Pinout is Arduino Uno (or any AVR Uno clone):
- *   CS    = D10    DRDY  = D2 (INPUT_PULLUP)    RESET = D9
- *   SCK   = D13    MOSI  = D11                  MISO  = D12
+ * Pinout — Portenta H7 Elite + Hat Carrier (J5 Pi-compatible header).
+ * Waveshare ADS1263 HAT plugs directly onto J5. DRDY uses INPUT_PULLUP,
+ * no jumper wire required. The M4 core reads the SAME pads/peripherals
+ * as the M7 — this works because the STM32H747 SPI peripheral and GPIO
+ * pads are shared across both cores.
+ *
+ *   CS    = PE_6   (J2-53, Pi pin 15)
+ *   DRDY  = PJ_11  (J2-50, Pi pin 11) — INPUT_PULLUP required
+ *   RESET = PI_5   (J1-56, Pi pin 12)
  */
 
 #ifndef ADS1263_DRIVER_H
@@ -31,10 +37,10 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-// ── Pin definitions — Arduino Uno ─────────────────────────────────────────
-#define ADS1263_CS_PIN    10   // SPI CS (SS)
-#define ADS1263_DRDY_PIN  2    // Data ready (interrupt-capable pin)
-#define ADS1263_RESET_PIN 9    // Hardware reset
+// ── Pin definitions — Portenta H7 + Hat Carrier ──────────────────────────
+#define ADS1263_CS_PIN    PE_6   // J2-53, Pi pin 15
+#define ADS1263_DRDY_PIN  PJ_11  // J2-50, Pi pin 11 — INPUT_PULLUP
+#define ADS1263_RESET_PIN PI_5   // J1-56, Pi pin 12
 
 // ── External reference value (volts) ──────────────────────────────────────
 #define ADS1263_VREF_V    5.0f

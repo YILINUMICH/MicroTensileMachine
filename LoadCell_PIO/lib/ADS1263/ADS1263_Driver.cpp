@@ -1,12 +1,14 @@
 /**
  * @file ADS1263_Driver.cpp
- * @brief ADS1263 driver — Arduino Uno, EXTERNAL 5V reference (AVDD/AVSS)
+ * @brief ADS1263 driver — Portenta H7 (M4 core), EXTERNAL 5V ref (AVDD/AVSS)
  *
  * Defaults:
  *   - REFMUX = 0x24 (AVDD/AVSS), VREF = 5.000 V
  *   - INTERFACE = 0x05 (STATUS + checksum, 6-byte read frame)
  *   - PGA bypassed, AIN0(+) / AIN1(-)
  *   - DRDY uses INPUT_PULLUP; no external pullup required
+ *   - SPI clock = 500 kHz (matches the proven Stable H7 driver — higher
+ *     speeds exposed mbed SPI timing jitter on the H7 during testing).
  *
  * SFOCAL1 is NOT run at begin() — only run calibrate() after AIN0/AIN1
  * are shorted, otherwise OFCAL will capture whatever offset is present.
@@ -15,7 +17,7 @@
 #include "ADS1263_Driver.h"
 
 ADS1263_Driver::ADS1263_Driver()
-    : _spi(2000000, MSBFIRST, SPI_MODE1),
+    : _spi(500000, MSBFIRST, SPI_MODE1),
       _rate(ADS1263_20SPS),
       _continuous(false),
       _refmux(ADS1263_REFMUX_AVDD_AVSS),
