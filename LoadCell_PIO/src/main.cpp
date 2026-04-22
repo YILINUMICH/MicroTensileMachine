@@ -86,6 +86,16 @@ void setup() {
     Serial.begin(115200);
     CP(1, "Serial.begin done");
 
+    // ADS1263 power-up settle. Matches the Stable M7 sketch, which does
+    // `delay(3000)` right after Serial.begin before touching the ADC.
+    // The HAT's onboard AMS1117-3.3 LDO and the ADS1263's internal 2.5V
+    // reference + oscillator need a sizeable margin before the chip will
+    // answer SPI reliably; without this the ID readback inside adc.begin()
+    // returns 0x00/0xFF and begin() returns FALSE (observed at cp 7→8).
+    RPC.println("[M4] waiting 3000 ms for ADS1263 to power up...");
+    delay(3000);
+    RPC.println("[M4] ADS1263 power-up settle done");
+
     // Drive the ADS1263 pins manually BEFORE calling adc.begin(), so we
     // can localise the hang to a specific pinMode/port clock if there is
     // one. pinMode is idempotent — adc.begin() will redo it harmlessly.
@@ -134,21 +144,36 @@ void setup() {
     RPC.println("[M4] streaming. format: t_ms\\traw_code\\tvoltage_V");
 }
 
+// Sample period for timed polling. At 20 SPS the ADC produces a new
+// conversion every 50 ms, so 55 ms gives a small safety margin.
+// If you change the rate passed to adc.begin() in setup(), update this.
+static const uint32_t SAMPLE_POLL_MS = 55;   // 20 SPS → 50 ms period
+
 void loop() {
-    // Poll DRDY. When a new sample is ready, grab it and forward.
-    // readDirect() does no start/stop — just reads the frame. Caller
-    // must have confirmed DRDY is LOW, which dataReady() does.
-    if (adc.dataReady()) {
-        ADC_Reading r = adc.readDirect();
-        if (r.valid) {
-            RPC.print(millis());
-            RPC.print('\t');
-            RPC.print(r.raw_code);
-            RPC.print('\t');
-            RPC.println(r.voltage_V, 6);
-        }
+    // NOTE: we deliberately do NOT gate on adc.dataReady() here.
+    //
+    // DRDY is wired to PJ_11, which on the Portenta H7 is also the
+    // onboard LoRa module's IRQ line (LORA_IRQ_DUMB). The LoRa chip
+    // holds that pad so the ADS1263's DRDY edge never actually reaches
+    // the MCU — `digitalRead(PJ_11)` stays HIGH forever and the gate
+    // never opens. See ADS1263_H7_Integration_Notes.md §5.
+    //
+    // The Stable M7 sketch hits this same wall and solves it with timed
+    // polling: after startContinuous(), just sleep a bit longer than the
+    // conversion period and call readDirect(). We do the same here.
+    //
+    // Permanent fix (future work): wire DRDY to a free GPIO that no
+    // onboard peripheral owns and switch back to edge-driven sampling.
+    delay(SAMPLE_POLL_MS);
+
+    ADC_Reading r = adc.readDirect();
+    if (r.valid) {
+        RPC.print(millis());
+        RPC.print('\t');
+        RPC.print(r.raw_code);
+        RPC.print('\t');
+        RPC.println(r.voltage_V, 6);
     }
-    // no other work in this step — loop spins and polls
 }
 
 #else

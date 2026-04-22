@@ -12,11 +12,44 @@ guard picks the right branch per environment.
 │ M4  (CORE_CM4)       │◀───────────────▶│ M7 (CORE_CM7)      │◀────▶ Serial
 │  - drives ADS1263    │                 │  - forwards RPC to │       monitor
 │    on Hat Carrier J5 │                 │    USB Serial      │       115200
-│  - polls DRDY,       │                 │  - boots M4 via    │
-│    sends samples via │                 │      RPC.begin()   │
+│  - timed-polls ADC   │                 │  - boots M4 via    │
+│    (DRDY unusable —  │                 │      RPC.begin()   │
+│    see §PJ_11/LoRa), │                 │                    │
+│    sends samples via │                 │                    │
 │    RPC to M7         │                 │                    │
 └──────────────────────┘                 └────────────────────┘
 ```
+
+## Status
+
+**Step 1 data path — proven end-to-end.** After the three fixes in the
+Troubleshooting section below (M4-aware driver logging, 3 s ADS1263
+power-up settle, timed polling instead of DRDY), a clean boot produces:
+
+```
+[M7] bridge up — forwarding RPC to USB Serial
+[M4 cp 0] RPC up
+[M4 cp 1] Serial.begin done
+[M4] waiting 3000 ms for ADS1263 to power up...
+[M4] ADS1263 power-up settle done
+[M4 cp 2..6] pinModes / SPI.begin
+[M4 cp 7] calling adc.begin()
+ADS1263 found. ID=0x23
+ADS1263 ready (ext 5V ref, PGA bypassed)
+[M4 cp 8] adc.begin returned TRUE
+[M4] ADC ready, ID=0x23
+[M4] VREF=5.000 V
+[M4 cp 9] startContinuous done
+[M4] streaming. format: t_ms\traw_code\tvoltage_V
+4012   211853309   0.493259
+4067   166040793   0.386594
+...
+4617   -459082     -0.001069
+```
+
+One sample every ~55 ms at the default 20 SPS. The leading ramp is the
+Sinc3 filter settling; the steady-state ~ −1 mV with tens-of-µV jitter
+is the expected input-stage offset / noise floor with AIN0/AIN1 floating.
 
 ## Flash order
 
@@ -30,11 +63,28 @@ pio device monitor                          # 115200 baud
 
 Thereafter only re-flash `portenta_m4` while iterating on the sampler.
 
+> **Power-cycle the stack after every flash.** The dfu upload resets the
+> H7 MCU but does not cleanly re-power the HAT's 3.3V LDO rail, and the
+> ADS1263 reliably comes up in a latched bad state — you will see
+> `ID=0x00` and `adc.begin returned FALSE` even with the 3 s settle
+> delay in `setup()`. Unplug the Hat Carrier (USB-C and/or J9 screw
+> terminal), wait ~5 s, reapply power, then reopen the serial monitor.
+> Don't start debugging register/SPI issues until you've done this.
+
 ---
 
-## Problem: M4 hangs after `[M4] booting...`
+## Troubleshooting
 
-### Symptom
+Three failure modes have been observed during bring-up. In boot order:
+(1) M4 hangs before any checkpoint prints, (2) boot gets to `cp 7` but
+`adc.begin` returns FALSE, (3) boot is clean all the way through but no
+samples appear. Each one has a distinct root cause and fix.
+
+---
+
+### 1. M4 hangs after `[M4] booting...` (no checkpoints ever print)
+
+#### Symptom
 
 After successfully flashing both firmwares and opening the serial monitor,
 the user sees:
@@ -48,7 +98,7 @@ the user sees:
 is working both directions), but execution never reaches the "ADC ready"
 or sample-stream lines.
 
-### Root cause
+#### Root cause
 
 The ADS1263 driver's internal status messages were written with plain
 `Serial.print(...)`:
@@ -74,7 +124,7 @@ The driver's first successful-path log line (`"ADS1263 found..."`) runs
 right after the chip answers a register read, long before the sample
 stream starts. That's exactly where execution stopped.
 
-### Fix
+#### Fix
 
 **1. Driver log stream is now conditional.** In
 `lib/ADS1263/ADS1263_Driver.cpp`:
@@ -108,31 +158,7 @@ CP(n, "what just finished");   // expands to RPC.println("[M4 cp n] ...")
 If the boot log stops partway through, the last visible checkpoint
 tells you exactly which call hung.
 
-### Expected output after the fix
-
-```
-[M7] bridge up — forwarding RPC to USB Serial
-[M4 cp 0] RPC up
-[M4 cp 1] Serial.begin done
-[M4 cp 2] pinMode CS (PE_6) done
-[M4 cp 3] pinMode RESET (PI_5) done
-[M4 cp 4] pinMode DRDY (PJ_11) done
-[M4 cp 5] CS and RESET driven HIGH
-[M4 cp 6] SPI.begin() returned
-[M4 cp 7] calling adc.begin()
-[M4 cp 8] adc.begin returned TRUE
-[M4] ADC ready, ID=0x20
-[M4] VREF=5.000 V
-[M4 cp 9] startContinuous done
-[M4] streaming. format: t_ms\traw_code\tvoltage_V
-2147   1523    0.000002
-2198   1611    0.000002
-...
-```
-
-Lines arrive roughly every 50 ms at the default 20 SPS.
-
-### What each checkpoint rules out
+#### What each checkpoint rules out
 
 If the log stops at a given checkpoint, the hang is in the **next** step:
 
@@ -143,12 +169,12 @@ If the log stops at a given checkpoint, the hang is in the **next** step:
 | cp 2                  | `pinMode(PI_5)` — GPIOI clock not enabled on M4 |
 | cp 3                  | `pinMode(PJ_11, INPUT_PULLUP)` — GPIOJ clock not enabled on M4 |
 | cp 4 / cp 5           | `digitalWrite` on CS/RESET — unusual, check pin defines |
-| cp 6 (SPI.begin)      | `adc.begin()` internals — see below |
-| cp 7                  | Hang **inside** `adc.begin()` after SPI is up. Most likely an `SPI.transfer()` that never completes — chip not answering on MISO, or SPI peripheral not actually clocking |
-| cp 8 FALSE            | SPI works but chip ID ≠ 0x2X. Wiring or power issue, unrelated to dual-core |
+| cp 6 (SPI.begin)      | `adc.begin()` internals — most likely an `SPI.transfer()` that never completes (chip not answering on MISO, or SPI peripheral not actually clocking) |
+| cp 7                  | Hang **inside** `adc.begin()` after SPI is up — same causes as cp 6 |
+| cp 8 FALSE            | SPI works but chip ID ≠ 0x2X — see §2 below (power-cycle first!) |
 
 If the log stops at **cp 6** (SPI.begin doesn't return), the default
-`SPI` object on Arduino Mbed Portenta is mapped to a peripheral M4
+`SPI` object on Arduino Mbed Portenta may be mapped to a peripheral M4
 can't reach. Workarounds in order of effort:
 
 - Keep SPI on M7 and push commands/samples across RPC (defeats the
@@ -161,6 +187,116 @@ can't reach. Workarounds in order of effort:
 At the time of writing, this hang has not been observed with the
 driver-logging fix applied — the `Serial.print` hang was the actual
 root cause.
+
+---
+
+### 2. `ADS1263 not found. ID=0x0` / `adc.begin returned FALSE` at cp 8
+
+#### Symptom
+
+Boot progresses cleanly through `cp 0 … cp 7`, then:
+
+```
+[M4 cp 7] calling adc.begin()
+ADS1263 not found. ID=0x0
+[M4 cp 8] adc.begin returned FALSE
+[M4] FATAL: ADS1263 init failed
+```
+
+The SPI bus is working (the driver successfully reads register 0x00 —
+it just gets `0x00` back), but the ADS1263 is not yet responding.
+
+#### Root cause — two separate things, check both
+
+**(a) Stale HAT power state after flashing.** The dfu upload at end of
+`pio run -t upload` resets the H7 MCU but does *not* cleanly re-power
+the Waveshare HAT's on-board 3.3V LDO rail. The ADS1263 latches into a
+state where it won't answer SPI until its power is fully removed and
+reapplied. **Always power-cycle the Hat Carrier after a flash** (unplug
+USB-C / J9 screw-terminal, wait ~5 s, reapply). This is the single
+most common cause and should be the first thing tried.
+
+**(b) Insufficient power-up settle time in firmware.** Even on a fresh
+cold boot, the HAT's AMS1117-3.3 LDO and the ADS1263's internal
+oscillator/reference need a substantial margin before the chip will
+reliably answer SPI. The Stable M7 sketch (`ADS1263/Stable/Stable.ino`)
+works around this with `delay(3000)` right after `Serial.begin`; the
+same pattern is now in M4 `setup()` between cp 1 and cp 2:
+
+```cpp
+RPC.println("[M4] waiting 3000 ms for ADS1263 to power up...");
+delay(3000);
+RPC.println("[M4] ADS1263 power-up settle done");
+```
+
+Without this delay the symptom is identical to (a) — `ID=0x00`,
+`begin returned FALSE` — but no amount of power-cycling fixes it,
+because the firmware simply polls the chip too early on every boot.
+
+#### How to triage in practice
+
+1. Power-cycle the carrier. Re-open monitor. If boot goes green → (a).
+2. If it still fails with ID=0x00 after a clean power cycle, the
+   3000 ms settle is the next suspect — confirm it's present in the
+   compiled binary (look for the `waiting 3000 ms...` log line).
+3. Only after both are ruled out should you start suspecting wiring,
+   REFMUX, or the external 5V rail.
+
+---
+
+### 3. Boot is clean all the way through but no samples stream
+
+#### Symptom
+
+```
+[M4 cp 9] startContinuous done
+[M4] streaming. format: t_ms\traw_code\tvoltage_V
+```
+
+…and then nothing. The ADC initialised, `startContinuous` ran, but the
+streaming loop produces no lines.
+
+#### Root cause — DRDY pin collides with onboard LoRa
+
+DRDY is wired to `PJ_11` via the Hat Carrier's Pi-compatible header
+(pin 11). `PJ_11` is *also* the Portenta H7's onboard LoRa module IRQ
+line (`LORA_IRQ_DUMB` in the Arduino core). The LoRa chip is physically
+tied to that pad on both cores, and it holds the line HIGH — the
+ADS1263's DRDY falling edge never reaches the STM32 GPIO input. Any
+`digitalRead(PJ_11) == LOW` check (which is what `adc.dataReady()` is)
+returns FALSE forever, so the `if (adc.dataReady())` gate in the M4
+`loop()` never fires.
+
+This matches the behaviour documented in
+`ADS1263/ADS1263_H7_Integration_Notes.md` §5.
+
+#### Fix — timed polling instead of DRDY
+
+The M4 `loop()` no longer gates on `dataReady()`. It sleeps a bit longer
+than one conversion period and reads unconditionally, same pattern as
+the Stable M7 sketch's AC capture loop:
+
+```cpp
+static const uint32_t SAMPLE_POLL_MS = 55;   // 20 SPS → 50 ms period
+
+void loop() {
+    delay(SAMPLE_POLL_MS);
+    ADC_Reading r = adc.readDirect();
+    if (r.valid) {
+        RPC.print(millis());
+        RPC.print('\t');
+        RPC.print(r.raw_code);
+        RPC.print('\t');
+        RPC.println(r.voltage_V, 6);
+    }
+}
+```
+
+If you change the rate passed to `adc.begin()`, update `SAMPLE_POLL_MS`
+accordingly (~ 2× the conversion period is a safe margin). The
+permanent fix is hardware: reroute DRDY off `PJ_11` to a GPIO no
+onboard peripheral claims, then switch back to edge-driven reads —
+see Next steps.
 
 ---
 
@@ -200,19 +336,21 @@ LoadCell_PIO/
         └── ADS1263_Driver.cpp      log stream is CORE_CM4-aware
 ```
 
-## Current scope (step 1)
-
-- M4 autonomously drives the ADS1263, pushes each sample over RPC.
-- M7 forwards RPC to USB Serial one-way.
-- No user commands, no calibration, no tare in this step — just prove
-  the data path.
-
 ## Next steps
 
-1. Replace RPC transport with a shared-SRAM ring buffer (SRAM4 with
+1. **Sanity-check the scaling.** Short AIN0↔AIN1 and confirm the output
+   collapses to ~0 V with RMS close to the Test B figure (~5 µV). Then
+   apply a known DC (0–5 V) via the LCA and confirm linearity — this
+   also verifies the external-reference path (`REFMUX = 0x24`, AVDD as
+   5 V ref), which is new in this build versus Stable's internal 2.5 V.
+2. Replace RPC transport with a shared-SRAM ring buffer (SRAM4 with
    non-cacheable attribute, 32-bit head/tail + `__DMB()` barriers).
-2. Move M4 reader onto a DRDY-triggered interrupt instead of a busy
-   poll loop, so the M4 core is free between samples.
-3. Re-introduce user commands (tare, calibrate, switch ref) on M7,
+3. **Reroute DRDY off `PJ_11`** (solder-wire from the HAT's DRDY pad to
+   a free HD-connector pin with no onboard peripheral), update
+   `ADS1263_DRDY_PIN` in the driver header, then move the M4 reader to
+   a DRDY-triggered interrupt. Step 3 is blocked on the hardware rework
+   — until it's done, timed polling is the only way samples reach the
+   loop.
+4. Re-introduce user commands (tare, calibrate, switch ref) on M7,
    forwarded to M4 via a tiny command word in shared SRAM.
-4. Layer Ethernet TX on M7 for continuous streaming.
+5. Layer Ethernet TX on M7 for continuous streaming.
