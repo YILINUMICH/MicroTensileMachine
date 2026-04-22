@@ -16,6 +16,18 @@
 
 #include "ADS1263_Driver.h"
 
+// ── Log stream selection ──────────────────────────────────────────────
+// On M4 the hardware UART (`Serial`) isn't initialized and calling
+// DRV_LOG.print() there can hang waiting for TX-empty flags. Route the
+// driver's diagnostic output through RPC so it reaches the M7 bridge.
+// On M7 / Uno / other single-core targets we use Serial as before.
+#if defined(CORE_CM4)
+  #include "RPC.h"
+  #define DRV_LOG RPC
+#else
+  #define DRV_LOG Serial
+#endif
+
 ADS1263_Driver::ADS1263_Driver()
     : _spi(500000, MSBFIRST, SPI_MODE1),
       _rate(ADS1263_20SPS),
@@ -43,12 +55,12 @@ bool ADS1263_Driver::begin(ADS1263_DataRate_t rate) {
 
     uint8_t id = getDeviceID();
     if ((id & 0xF0) != 0x20) {
-        Serial.print(F("ADS1263 not found. ID=0x"));
-        Serial.println(id, HEX);
+        DRV_LOG.print(F("ADS1263 not found. ID=0x"));
+        DRV_LOG.println(id, HEX);
         return false;
     }
-    Serial.print(F("ADS1263 found. ID=0x"));
-    Serial.println(id, HEX);
+    DRV_LOG.print(F("ADS1263 found. ID=0x"));
+    DRV_LOG.println(id, HEX);
 
     writeRegister(ADS1263_REG_POWER, 0x11);
     delay(150);
@@ -67,7 +79,7 @@ bool ADS1263_Driver::begin(ADS1263_DataRate_t rate) {
     writeRegister(ADS1263_REG_OFCAL1,    0x00);
     writeRegister(ADS1263_REG_OFCAL2,    0x00);
 
-    Serial.println(F("ADS1263 ready (ext 5V ref, PGA bypassed)"));
+    DRV_LOG.println(F("ADS1263 ready (ext 5V ref, PGA bypassed)"));
     return true;
 }
 
@@ -102,10 +114,10 @@ void ADS1263_Driver::setRefMux(uint8_t refmux, float vref_V) {
     delay(100);
 
     uint8_t rb = readRegister(ADS1263_REG_REFMUX);
-    Serial.print(F("REFMUX set=0x")); Serial.print(_refmux, HEX);
-    Serial.print(F("  readback=0x")); Serial.print(rb, HEX);
-    Serial.println(rb == _refmux ? F(" OK") : F(" MISMATCH"));
-    Serial.print(F("VREF = ")); Serial.print(_vref_V, 3); Serial.println(F(" V"));
+    DRV_LOG.print(F("REFMUX set=0x")); DRV_LOG.print(_refmux, HEX);
+    DRV_LOG.print(F("  readback=0x")); DRV_LOG.print(rb, HEX);
+    DRV_LOG.println(rb == _refmux ? F(" OK") : F(" MISMATCH"));
+    DRV_LOG.print(F("VREF = ")); DRV_LOG.print(_vref_V, 3); DRV_LOG.println(F(" V"));
 
     if (was) startContinuous();
 }
@@ -202,7 +214,7 @@ bool ADS1263_Driver::calibrate() {
     writeRegister(ADS1263_REG_REFMUX,    _refmux);
 
     uint8_t m2 = readRegister(ADS1263_REG_MODE2);
-    Serial.print(F("Post-cal MODE2: 0x")); Serial.println(m2, HEX);
+    DRV_LOG.print(F("Post-cal MODE2: 0x")); DRV_LOG.println(m2, HEX);
     return ok;
 }
 
@@ -215,29 +227,29 @@ bool ADS1263_Driver::isConnected() {
 }
 
 void ADS1263_Driver::printConfig() {
-    Serial.println(F("--- ADS1263 Config ---"));
-    Serial.print(F("ID   : 0x")); Serial.println(getDeviceID(), HEX);
-    Serial.print(F("Rate : ")); Serial.print(getCurrentDataRate()); Serial.println(F(" SPS"));
-    Serial.println(F("PGA  : bypassed (gain=1)"));
-    Serial.println(F("Input: AIN0(+) vs AIN1(-)   [AIN0=LCA Vo, AIN1=LCA GND]"));
-    Serial.print(F("Ref  : REFMUX=0x")); Serial.print(_refmux, HEX);
-    Serial.print(F("   VREF=")); Serial.print(_vref_V, 3); Serial.println(F(" V"));
-    Serial.println(F("Frame: STATUS+DATA+CRC (INTERFACE=0x05)"));
-    Serial.println(F("----------------------"));
+    DRV_LOG.println(F("--- ADS1263 Config ---"));
+    DRV_LOG.print(F("ID   : 0x")); DRV_LOG.println(getDeviceID(), HEX);
+    DRV_LOG.print(F("Rate : ")); DRV_LOG.print(getCurrentDataRate()); DRV_LOG.println(F(" SPS"));
+    DRV_LOG.println(F("PGA  : bypassed (gain=1)"));
+    DRV_LOG.println(F("Input: AIN0(+) vs AIN1(-)   [AIN0=LCA Vo, AIN1=LCA GND]"));
+    DRV_LOG.print(F("Ref  : REFMUX=0x")); DRV_LOG.print(_refmux, HEX);
+    DRV_LOG.print(F("   VREF=")); DRV_LOG.print(_vref_V, 3); DRV_LOG.println(F(" V"));
+    DRV_LOG.println(F("Frame: STATUS+DATA+CRC (INTERFACE=0x05)"));
+    DRV_LOG.println(F("----------------------"));
 }
 
 void ADS1263_Driver::printRegisters() {
-    Serial.println(F("--- Register Dump ---"));
+    DRV_LOG.println(F("--- Register Dump ---"));
     for (uint8_t i = 0; i <= 0x14; i++) {
         uint8_t val = readRegister(i);
-        Serial.print(F("0x"));
-        if (i < 0x10) Serial.print('0');
-        Serial.print(i, HEX);
-        Serial.print(F(": 0x"));
-        if (val < 0x10) Serial.print('0');
-        Serial.println(val, HEX);
+        DRV_LOG.print(F("0x"));
+        if (i < 0x10) DRV_LOG.print('0');
+        DRV_LOG.print(i, HEX);
+        DRV_LOG.print(F(": 0x"));
+        if (val < 0x10) DRV_LOG.print('0');
+        DRV_LOG.println(val, HEX);
     }
-    Serial.println(F("---------------------"));
+    DRV_LOG.println(F("---------------------"));
 }
 
 // --- Private ---

@@ -63,21 +63,62 @@ void loop() {
 // ══════════════════════════════════════════════════════════════════════
 #elif defined(CORE_CM4)
 
+#include <SPI.h>
 #include "ADS1263_Driver.h"
 
 ADS1263_Driver adc;
+
+// Handy checkpoint macro — prints a labeled line via RPC and flushes.
+// If the log stops at checkpoint N, the hang is between N and N+1.
+#define CP(n, msg)  do { \
+    RPC.print("[M4 cp "); RPC.print(n); RPC.print("] "); RPC.println(msg); \
+} while (0)
 
 void setup() {
     // RPC first so we can report progress to the M7 bridge.
     RPC.begin();
     delay(500);                       // let M7 finish USB enumeration
+    CP(0, "RPC up");
 
-    RPC.println("[M4] booting...");
+    // Belt-and-suspenders: initialise the hardware UART even though we
+    // don't use it. This prevents a rogue Serial.print anywhere in the
+    // toolchain from hanging on an un-clocked peripheral.
+    Serial.begin(115200);
+    CP(1, "Serial.begin done");
 
-    if (!adc.begin(ADS1263_20SPS)) {
+    // Drive the ADS1263 pins manually BEFORE calling adc.begin(), so we
+    // can localise the hang to a specific pinMode/port clock if there is
+    // one. pinMode is idempotent — adc.begin() will redo it harmlessly.
+    pinMode(ADS1263_CS_PIN, OUTPUT);
+    CP(2, "pinMode CS (PE_6) done");
+
+    pinMode(ADS1263_RESET_PIN, OUTPUT);
+    CP(3, "pinMode RESET (PI_5) done");
+
+    pinMode(ADS1263_DRDY_PIN, INPUT_PULLUP);
+    CP(4, "pinMode DRDY (PJ_11) done");
+
+    digitalWrite(ADS1263_CS_PIN, HIGH);
+    digitalWrite(ADS1263_RESET_PIN, HIGH);
+    CP(5, "CS and RESET driven HIGH");
+
+    // SPI.begin() on M4 is the most common suspect. If the log stops
+    // right here, SPI peripheral ownership / clock isn't set up for M4.
+    SPI.begin();
+    CP(6, "SPI.begin() returned");
+
+    // Try a raw ID read before trusting adc.begin() — this confirms the
+    // SPI bus is actually clocking and the chip is answering.
+    // We talk to the driver via its public API from here on.
+    CP(7, "calling adc.begin()");
+    bool ok = adc.begin(ADS1263_20SPS);
+    CP(8, ok ? "adc.begin returned TRUE" : "adc.begin returned FALSE");
+
+    if (!ok) {
         RPC.println("[M4] FATAL: ADS1263 init failed");
         while (1) { delay(1000); }
     }
+
     RPC.print("[M4] ADC ready, ID=0x");
     RPC.println(adc.getDeviceID(), HEX);
     RPC.print("[M4] VREF=");
@@ -88,6 +129,7 @@ void setup() {
     // each time a new sample is ready.
     adc.startContinuous();
     delay(100);                       // one filter-settle interval
+    CP(9, "startContinuous done");
 
     RPC.println("[M4] streaming. format: t_ms\\traw_code\\tvoltage_V");
 }
