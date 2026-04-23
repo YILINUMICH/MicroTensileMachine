@@ -1,0 +1,52 @@
+# =============================================================================
+# LaserHead Calibration — Experiment Parameters
+# =============================================================================
+# These are experiment parameters for a single calibration sweep.
+# Hardware configuration for the Zaber stage lives in ZaberStage/*.json —
+# do NOT duplicate it here.
+#
+# All distances are in millimeters, all times in seconds.
+# Stage positions are RELATIVE to the calibration home position (= 30 mm
+# standoff from the IL-030 reference face).
+# =============================================================================
+
+# --- Stage sweep geometry ----------------------------------------------------
+# IL-030 has a ±5 mm window; we leave 1 mm of margin at each end to stay
+# clear of nonlinear edges.
+sweep_range_mm: [-4.0, 4.0]        # relative to calibration home
+step_size_mm: 0.2                  # 41 points over 8 mm; use 0.1 for finer linearity
+direction: forward_only            # forward_only | bidirectional
+
+# --- Timing ------------------------------------------------------------------
+settle_time_s: 0.5                 # mechanical ringdown after each move
+stage_velocity_mm_s: 1.0           # slow enough that settle_time is comfortable
+
+# --- Sampling ----------------------------------------------------------------
+samples_per_point: 100             # ~1 s at 100 SPS (ADC2 default in firmware)
+baseline_samples: 500              # before and after sweep, at home position
+drain_timeout_s: 2.0               # max time spent draining the serial buffer
+
+# --- Serial I/O --------------------------------------------------------------
+# Set to null for auto-detect on connect (first port that emits ADC-like lines
+# within 3 s). Override with e.g. "COM5" or "/dev/ttyACM0" if auto-detect is
+# ambiguous.
+portenta_port: null
+portenta_baud: 115200
+
+# Zaber stage uses its own saved config; see ZaberStage/safety_config.json.
+zaber_config_path: ../ZaberStage/safety_config.json
+
+# --- Run metadata ------------------------------------------------------------
+# Free-form text captured into meta.json — describe the physical setup so the
+# run can be interpreted six months later.
+operator: ""
+notes: ""
+
+# --- Dry-run override --------------------------------------------------------
+# When run_calibration.py is invoked with --dry-run, these override the sweep
+# above so the full pipeline can be validated in ~1 minute.
+dry_run:
+  sweep_range_mm: [-0.5, 0.5]
+  step_size_mm: 0.1                # 10 points over 1 mm per plan Section 9.3
+  samples_per_point: 20
+  baseline_samples: 50
