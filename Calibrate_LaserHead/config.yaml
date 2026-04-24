@@ -11,10 +11,13 @@
 # =============================================================================
 
 # --- Stage sweep geometry ----------------------------------------------------
-# IL-030 has a ±5 mm window; we leave 1 mm of margin at each end to stay
-# clear of nonlinear edges.
-sweep_range_mm: [-4.0, 4.0]        # relative to calibration home
-step_size_mm: 0.2                  # 41 points over 8 mm; use 0.1 for finer linearity
+# The IL-030 reference distance is 30 mm; we sweep the full measurement window
+# (±5 mm around reference). Absolute stage positions visited: 25 mm to 35 mm.
+# The Zaber safety_config.json must permit at least [25, 35] — currently
+# [10, 40] so we're clear.
+sweep_center_mm: 30.0              # absolute stage position at the IL-030 reference distance
+sweep_range_mm: [-5.0, 5.0]        # relative to sweep_center_mm (the sensor's full window)
+step_size_mm: 0.2                  # 51 points over 10 mm; use 0.1 for finer linearity
 direction: forward_only            # forward_only | bidirectional
 
 # --- Timing ------------------------------------------------------------------
@@ -27,14 +30,14 @@ baseline_samples: 500              # before and after sweep, at home position
 drain_timeout_s: 2.0               # max time spent draining the serial buffer
 
 # --- Serial I/O --------------------------------------------------------------
-# Set to null for auto-detect on connect (first port that emits ADC-like lines
-# within 3 s). Override with e.g. "COM5" or "/dev/ttyACM0" if auto-detect is
-# ambiguous.
-portenta_port: null
+# Portenta H7 (laser-head ADC stream) — USB-CDC.
+portenta_port: "COM8"
 portenta_baud: 115200
 
-# Zaber stage uses its own saved config; see ZaberStage/safety_config.json.
+# Zaber stage. The JSON config holds position limits + device metadata; we
+# override the port here because safety_config.json has port="auto".
 zaber_config_path: ../ZaberStage/safety_config.json
+zaber_port: "COM5"
 
 # --- Run metadata ------------------------------------------------------------
 # Free-form text captured into meta.json — describe the physical setup so the
@@ -44,9 +47,10 @@ notes: ""
 
 # --- Dry-run override --------------------------------------------------------
 # When run_calibration.py is invoked with --dry-run, these override the sweep
-# above so the full pipeline can be validated in ~1 minute.
+# above so the full pipeline can be validated in ~1 minute. Still centered on
+# sweep_center_mm (30 mm absolute), just a much narrower window.
 dry_run:
   sweep_range_mm: [-0.5, 0.5]
-  step_size_mm: 0.1                # 10 points over 1 mm per plan Section 9.3
+  step_size_mm: 0.1                # 11 points over 1 mm per plan Section 9.3
   samples_per_point: 20
   baseline_samples: 50

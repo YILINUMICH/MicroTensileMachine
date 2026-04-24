@@ -1,13 +1,20 @@
 {
-  "port": "auto",
+  "port": "COM5",
   "position_limits_mm": [
     10,
     40
   ],
   "max_velocity_mm_s": 5.0,
   "reading_rate_hz": 100.0,
-  "description": "Safety-limited configuration",
-  "device_info": null,
-  "timestamp": 1776979528.4997213,
-  "timestamp_readable": "2026-04-23 17:25:28"
+  "device_info": {
+    "port": "COM5",
+    "device_id": 0,
+    "serial_number": "MOCK",
+    "name": "Mock Device",
+    "firmware_version": "1.0",
+    "device_type": "Mock",
+    "axis_count": 1
+  },
+  "timestamp": 1776984170.850427,
+  "timestamp_readable": "2026-04-23 18:42:50"
 }
