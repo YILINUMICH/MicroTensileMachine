@@ -1,0 +1,26 @@
+# SMA characterization recorder config
+# Durations: seconds. Frequencies: Hz. Voltages: V.
+
+lcr:
+  resource: null              # null = auto-detect Keysight E4980*
+  function: LSRS              # series L + series R
+  frequency_hz: 1000000       # 1 MHz — best SNR per Notion characterization
+  voltage_V: 0.5
+  integration: SHORT          # SHORT | MED | LONG
+  averaging: 1
+  poll_interval_s: 0.010      # ~100 Hz host poll
+
+h7:
+  port: COM8                  # serial port for the Portenta H7 / ADS1263
+  baud: 115200
+  adc_source: 1               # ADC1 or ADC2 (firmware-dependent)
+
+phases:
+  open_duration_s: 20.0       # OPEN calibration recording window
+  short_duration_s: 20.0      # SHORT calibration recording window
+  # RAW (experiment) duration is NOT configurable here — it runs until Ctrl+C.
+
+run:
+  operator: ""                # filled into meta.json
+  notes: ""                   # free-form, also in meta.json
+  output_dir: data            # relative to sma_recorder.py (or absolute)

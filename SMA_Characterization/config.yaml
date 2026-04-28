@@ -1,0 +1,52 @@
+# =============================================================================
+# SMA Characterization — LCR + Laser concurrent recording configuration
+# =============================================================================
+# Records Keysight E4980AL (LCR) + Portenta ADS1263 laser displacement
+# concurrently to separate raw CSVs. Analysis is done post-hoc from the raw
+# streams; nothing is de-embedded or filtered at record time.
+#
+# Reference: Notion "Shape Memory Alloy Coil/Experiment Log/
+#            Bias-Tee + LCR Dummy DUT Characterization" (2026-04-20)
+# =============================================================================
+
+# --- LCR meter (Keysight E4980AL) --------------------------------------------
+# Validated optimized settings from the Notion characterization run.
+# Usable band was 100 kHz – 1 MHz; best SNR at 1 MHz. σ(Ls) ≈ 0.05 nH / reading
+# on the Flexinol reference — sub-percent stability.
+lcr:
+  # Connection. Leave resource null to auto-select the first E4980 found on
+  # the VISA bus. For deterministic runs, set to the full resource string:
+  #   "USB0::0x0957::0x0909::MY54414655::INSTR"
+  resource: null
+
+  function: "LSRS"        # series L + series R (raw values logged; de-embed post-hoc)
+  frequency_hz: 1000000   # 1 MHz — optimized per Notion §4.1
+  voltage_V: 0.5          # test-signal RMS level
+  integration: "SHORT"    # SHOR | MED | LONG — SHORT maximises throughput
+  averaging: 1            # instrument-side averaging (1 = no averaging)
+
+  # Polling cadence for FETC? reads. At SHORT integration the instrument
+  # produces ~10 ms per measurement, so a 10 ms poll interval saturates the
+  # instrument without over-polling. If FETC? returns identical data twice
+  # in a row, the poll is faster than the measurement — not harmful, just
+  # redundant rows.
+  poll_interval_s: 0.010
+
+# --- Laser head (Portenta H7 → SensorHub_PIO firmware) -----------------------
+# Current signal chain: IL-030 → HAT AIN0(+)/AIN1(-) → ADC1 → M4 → USB-CDC.
+# Laser voltage is recorded raw; the displacement conversion using the
+# calibration k = -0.1171 mV/µm, V0 = 566.957 mV happens post-hoc.
+laser:
+  port: "COM8"
+  baud: 115200
+  adc_source: 1           # ADC1 on AIN0/AIN1
+
+# --- Run ----------------------------------------------------------------------
+run:
+  # Total recording duration in seconds. Set to null for "run until Ctrl+C"
+  # mode, which is typical for SMA actuation experiments where the heater
+  # schedule is controlled externally.
+  duration_s: 60
+  operator: ""
+  notes: ""
+  output_prefix: null     # null → auto: sma_YYYYMMDD_HHMMSS

@@ -306,7 +306,12 @@ def run(cfg: SweepConfig, dry_run: bool) -> None:
 
         # ---- 4. Connect the Portenta ---------------------------------------
         log.info("Opening Portenta on %s @ %d", port, cfg.portenta_baud)
-        with PortentaReader(port=port, baud=cfg.portenta_baud) as reader:
+        # adc_source=1: the laser is currently wired through ADC1/AIN0-AIN1
+        # via the HAT's load-cell front-end. For a 3-column (single-ADC)
+        # firmware stream this is ignored; for a 4-column (dual-ADC) stream
+        # it selects the src=1 lines and drops src=2.
+        with PortentaReader(port=port, baud=cfg.portenta_baud,
+                            adc_source=1) as reader:
 
             paths = next_run_paths(_THIS_DIR / "data")
             log.info("Writing run outputs with prefix %s", paths.prefix)

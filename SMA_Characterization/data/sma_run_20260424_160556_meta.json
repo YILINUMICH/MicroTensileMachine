@@ -1,0 +1,48 @@
+{
+  "run_prefix": "sma_run_20260424_160556",
+  "run_type": "run",
+  "workers_started_at_utc": "2026-04-24T20:05:56Z",
+  "ready_to_fire_at_utc": "2026-04-24T20:06:02Z",
+  "ended_at_utc": "2026-04-24T20:06:44Z",
+  "startup_s": 5.6160783767700195,
+  "duration_s": 42.936058044433594,
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  },
+  "lcr": {
+    "resource": null,
+    "function": "LSRS",
+    "frequency_hz": 1000000,
+    "voltage_V": 0.5,
+    "integration": "SHORT",
+    "averaging": 1,
+    "poll_interval_s": 0.01,
+    "idn": null
+  },
+  "laser": {
+    "port": "COM8",
+    "baud": 115200,
+    "adc_source": 1
+  },
+  "run": {
+    "duration_s": 60,
+    "operator": "",
+    "notes": "",
+    "output_prefix": null
+  },
+  "counts": {
+    "lcr_measurements": 4047,
+    "laser_samples": 13963
+  },
+  "outputs": {
+    "lcr_csv": "sma_run_20260424_160556_lcr_raw.csv",
+    "laser_csv": "sma_run_20260424_160556_laser_raw.csv"
+  },
+  "notes_from_calibration": {
+    "laser_k_mV_per_um": -0.1171,
+    "laser_V0_mV": 566.957,
+    "conversion": "displacement_um = (V_mV - V0_mV) / k",
+    "calibration_source": "Calibrate_LaserHead/data/2026-04-24_run07_*"
+  }
+}

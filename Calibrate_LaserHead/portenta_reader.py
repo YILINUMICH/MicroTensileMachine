@@ -64,8 +64,11 @@ class Sample:
 # Line parsing
 # ---------------------------------------------------------------------------
 # Three accepted on-wire shapes:
-#   1. "<t_ms>\t<raw>\t<voltage>"              — current LaserHead_PIO (ADC2 only)
-#   2. "<t_ms>\t<src>\t<raw>\t<voltage>"        — future merged build (ADC1+ADC2)
+#   1. "<t_ms>\t<raw>\t<voltage>"              — single-ADC build (ADC1 or ADC2
+#                                                alone; src column suppressed)
+#   2. "<t_ms>\t<src>\t<raw>\t<voltage>"        — dual-ADC build (ADC1 & ADC2
+#                                                interleaved; filter by
+#                                                adc_source in the reader)
 #   3. "<t_us>,<voltage>"                       — plan-spec CSV format
 #
 # Anything with brackets or alphabetic chars other than '.', 'e', 'E', '+',
@@ -114,7 +117,7 @@ def parse_line(line: str, adc_source: int = 2) -> Optional[Sample]:
         except ValueError:
             return None
 
-    # 3-column TSV (ADC2 only): "<t_ms>\t<raw>\t<V>"
+    # 3-column TSV (single-ADC build, ADC1 or ADC2 alone): "<t_ms>\t<raw>\t<V>"
     m = _TSV_3COL.match(line)
     if m:
         try:

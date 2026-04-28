@@ -1,0 +1,46 @@
+{
+  "run_prefix": "sma_run_20260424_154919",
+  "run_type": "run",
+  "started_at_utc": "2026-04-24T19:49:19Z",
+  "ended_at_utc": "2026-04-24T19:49:34Z",
+  "duration_s": 15.014832496643066,
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  },
+  "lcr": {
+    "resource": null,
+    "function": "LSRS",
+    "frequency_hz": 1000000,
+    "voltage_V": 0.5,
+    "integration": "SHORT",
+    "averaging": 1,
+    "poll_interval_s": 0.01,
+    "idn": null
+  },
+  "laser": {
+    "port": "COM8",
+    "baud": 115200,
+    "adc_source": 1
+  },
+  "run": {
+    "duration_s": 60,
+    "operator": "",
+    "notes": "",
+    "output_prefix": null
+  },
+  "counts": {
+    "lcr_measurements": 770,
+    "laser_samples": 0
+  },
+  "outputs": {
+    "lcr_csv": "sma_run_20260424_154919_lcr_raw.csv",
+    "laser_csv": "sma_run_20260424_154919_laser_raw.csv"
+  },
+  "notes_from_calibration": {
+    "laser_k_mV_per_um": -0.1171,
+    "laser_V0_mV": 566.957,
+    "conversion": "displacement_um = (V_mV - V0_mV) / k",
+    "calibration_source": "Calibrate_LaserHead/data/2026-04-24_run07_*"
+  }
+}

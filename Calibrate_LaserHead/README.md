@@ -30,6 +30,13 @@ module separately.
 
 ## Physical setup (plan §1)
 
+**Wiring update** — with the ADC1/AIN0-AIN1 routing above, connect:
+
+- IL-030 analog signal out → **HAT screw terminal AIN0**
+- IL-030 sensor ground     → **HAT screw terminal AIN1**
+- IL-030 supply ground (0 V) → **HAT AVSS / GND** (separate wire — do
+  not rely on AIN1 alone to define the ground reference)
+
 1. Mount the IL-030 on the fixed frame; mount the diffuse reference plate on
    the Zaber carriage, aligned so the stage axis is parallel to the laser
    beam.
@@ -45,16 +52,30 @@ module separately.
 
 ## Firmware prerequisite
 
-Flash the current `LaserHead_PIO` project (`ENABLE_ADC2 = 1`). Confirm via
-a serial monitor that you see streaming lines like:
+**Current routing (temporary):** the laser head signal is read via
+**ADC1 on AIN0/AIN1** (through the HAT's load-cell front-end). This is
+because the ADC2 path (AIN2/AIN3) saturates under any non-zero input on
+this particular HAT and is being skipped until the root cause is
+resolved. Flash `../SensorHub_PIO/` with `ENABLE_ADC1 = 1` and
+`ENABLE_ADC2 = 0` (the current state of its `src/main.cpp`).
+
+The HAT's AIN0/AIN1 front-end applies a scale factor (measured ~4.4×
+attenuation during bring-up with a 1.6 V battery). The calibration fit
+will absorb this into the measured sensitivity `k`, so the analysis
+still produces a valid line — just with a different `mV/µm` than the
+IL-030 datasheet's 0.5 mV/µm nominal. The plan §7 sanity check against
+0.5 mV/µm nominal will FAIL and that's expected for this configuration;
+what matters is that R² is high and residuals are random.
+
+Confirm via a serial monitor that you see streaming lines like:
 
 ```
 <t_ms>\t<raw_code>\t<voltage_V>
 ```
 
 interleaved with a few `[M4]`/`[M7]` banner lines at boot. The
-`portenta_reader.py` parser discards the banner lines and keeps only the
-sample rows.
+`portenta_reader.py` parser discards the banner lines and keeps only
+the sample rows.
 
 > **Format note.** Plan §2 specifies a cleaner CSV format
 > (`<timestamp_us>,<voltage_V>`). The current firmware emits tab-separated

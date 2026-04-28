@@ -1,0 +1,51 @@
+{
+  "run_prefix": "2026-04-24_run03",
+  "created_at_utc": "2026-04-24T18:36:51Z",
+  "dry_run": false,
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  },
+  "firmware": {
+    "repo_git_hash": "6b648a3e9781bcce9291b128c0c3698fb4b50cff",
+    "firmware_path": "LaserHead_PIO/src/main.cpp",
+    "adc_source": 2,
+    "nominal_sps": 100,
+    "reference_V": 5.0,
+    "inpmux_hex": "0x23",
+    "gain": 1
+  },
+  "stage": {
+    "name": "Mock Device",
+    "serial_number": "MOCK",
+    "firmware_version": "1.0",
+    "port": "COM5"
+  },
+  "config": {
+    "sweep_center_mm": 30.0,
+    "sweep_range_mm": [
+      -5.0,
+      5.0
+    ],
+    "step_size_mm": 0.2,
+    "direction": "forward_only",
+    "settle_time_s": 0.5,
+    "stage_velocity_mm_s": 1.0,
+    "samples_per_point": 100,
+    "baseline_samples": 500,
+    "drain_timeout_s": 2.0,
+    "portenta_port": "COM8",
+    "portenta_baud": 115200,
+    "zaber_config_path": "../ZaberStage/safety_config.json",
+    "zaber_port": "COM5",
+    "operator": "",
+    "notes": ""
+  },
+  "outputs": {
+    "raw_csv": "2026-04-24_run03_raw.csv",
+    "points_csv": "2026-04-24_run03_points.csv"
+  },
+  "baseline_drift_V": 0.0,
+  "baseline_noise_V_pre": 0.0,
+  "baseline_noise_V_post": 0.0
+}
