@@ -63,7 +63,7 @@ Every module below carries a status. Same vocabulary in every README and in the 
 
 | Folder | Status | Purpose |
 |---|---|---|
-| [`ADS1263_FirstPowerUp_PIO/`](ADS1263_FirstPowerUp_PIO/STATUS.md) | **To-Test** (active bring-up) | **Six-checkpoint diagnostic** for the first power-up of the new H7 + Mid Carrier + ADS1263 EVM combination. M7-only, no external deps. Run this before touching `SensorHub_PIO`. |
+| [`ADS1263_FirstPowerUp_PIO/`](ADS1263_FirstPowerUp_PIO/STATUS.md) | **Diagnostic** (passed 2026-05-22) | **Six-checkpoint diagnostic** for the first power-up of the new H7 + Mid Carrier + ADS1263 EVM combination. M7-only, no external deps. Working pin defines (`PA_8/PC_6/PC_7`) and register config (`REFMUX=0x09`, external 5 V ref) live in its [STATUS.md](ADS1263_FirstPowerUp_PIO/STATUS.md) — use those when porting `SensorHub_PIO`. |
 | [`SensorHub_PIO/`](SensorHub_PIO/STATUS.md) | **WIP** (needs Mid Carrier port) | **Current production firmware target.** Dual-ADC driver — load cell on ADC1, laser on ADC2 — single serial stream with `src` column. Supersedes the two single-path builds below. |
 | [`LaserHead_PIO/`](LaserHead_PIO/STATUS.md) | **Diagnostic** | Single-path reference build (ADC2 / laser only). Kept for bring-up isolation. |
 | [`LoadCell_PIO/`](LoadCell_PIO/STATUS.md) | **Diagnostic** | Single-path reference build (ADC1 / load cell only). Kept for bring-up isolation. |

@@ -2,18 +2,34 @@
 
 | Field | Value |
 |---|---|
-| **Status** | **To-Test** — has not been flashed or run yet. The actual first power-up of the new H7 + Mid Carrier + ADS1263 EVM hardware is what this sketch is for. |
+| **Status** | **Diagnostic** — bench-verified on 2026-05-22 (all six checkpoints PASS, noise floor 1.4 µV RMS at 400 SPS / PGA bypass / VREF=5V). Kept around as a re-runnable bring-up tool for any future hardware change. Log: [`data/firstpowerup_20260522_1726.log`](data/firstpowerup_20260522_1726.log). |
 | **Role** | Bring-up diagnostic. Six ordered checkpoints (Serial / GPIO / /RESET pulse / SPI.begin / ADS1263 ID read / self-noise short). Halts on first FAIL with a specific "look at X" hint. M7-only — no M4, no RPC, no shared driver. |
 | **Created** | 2026-05-22 (with the cable map in [`../doc/MEMO_cable_map.md`](../doc/MEMO_cable_map.md)) |
 | **Owner** | Yilin |
 | **Quick test** | `pio run -t upload` then `pio device monitor` — expect six `[cp N] PASS` lines and an `ALL CHECKPOINTS PASSED` banner. |
 | **Dependencies on other modules** | None — fully standalone by design. Inline SPI helpers, no `lib/ADS1263/`, no V1/V2 imports. |
 
+## What the bring-up established (use this when porting other modules)
+
+These are the working values that any other firmware on this rig should match:
+
+| Setting | Value | Source of truth |
+|---|---|---|
+| `PIN_CS`    | `PA_8`  | Mid Carrier J15-25 → HD J2-59. **Do NOT use the macro `PWM_0`** — not defined in the arduino-mbed Portenta H7 core that PlatformIO downloads (`platform = ststm32`, `board = portenta_h7_m7`); compile fails with "PWM_0 was not declared in this scope." |
+| `PIN_DRDY`  | `PC_6`  | J15-27 → J2-61. Same caveat. |
+| `PIN_RESET` | `PC_7`  | J15-29 → J2-63. Same caveat. |
+| `REFMUX`    | `0x09`  | External 5 V reference on AIN0 (+REF) / AIN1 (−REF). Datasheet §9.6.12. |
+| `VREF`      | `5.0 V` | In any volts-per-code math (`V = code · VREF / 2^31` for ADC1). |
+| `INPMUX` for noise-floor | `0xAA` | AINCOM-shorted both inputs. **AIN0/AIN1 are reference-only on this rig and MUST NOT be used as measurement inputs.** |
+| SPI         | mode 1, 500 kHz, default SPI object on the Mid Carrier | |
+| ADS1263 ID  | `0x23` (silicon rev 3) | Read of register 0x00 after reset. |
+
 ## Module TODOs
 
-- [ ] **Run it.** First-power-up the EVM and capture the full serial output. Save the log to `data/firstpowerup_YYYYMMDD_HHMMSS.log` for the record.
-- [ ] **Confirm the pin macros.** Before first flash, verify `PWM0` / `PWM1` / `PWM2` are valid macros in your Arduino-mbed Portenta H7 core version. If not, change `PIN_CS` / `PIN_DRDY` / `PIN_RESET` in `src/main.cpp` to whatever your core uses for J15-25 / J15-27 / J15-29, AND update [`../doc/MEMO_cable_map.md`](../doc/MEMO_cable_map.md) and [`../SensorHub_PIO/STATUS.md`](../SensorHub_PIO/STATUS.md) so the production firmware port uses the same macros.
-- [ ] **Once it passes**, propagate the working pin defines into `SensorHub_PIO/lib/ADS1263/ADS1263_Driver.h` and start the firmware port from the Hat Carrier setup. Flip this module's status from `To-Test` to `Diagnostic` (it stays around as a re-runnable bring-up tool, but is no longer "the active question").
-- [ ] **Add a re-run for the noise floor with shorted inputs** — the default `[cp 5]` is generous (5 mV threshold) because it doesn't require the operator to short AIN0/AIN1. The integration notes' Test B baseline is ~5 µV RMS with shorted inputs — re-run once with the short installed and capture the result.
+- [x] **Run it.** ✅ Done 2026-05-22 — see [`data/firstpowerup_20260522_1726.log`](data/firstpowerup_20260522_1726.log).
+- [x] **Confirm the pin macros.** ✅ `PWM_0/1/2` don't exist in this core — switched to STM32 pin names `PA_8/PC_6/PC_7`. Documented in the table above and in [`src/main.cpp`](src/main.cpp) lines 38-72.
+- [ ] **Propagate the working pin defines + REFMUX/VREF scheme into `SensorHub_PIO/lib/ADS1263/ADS1263_Driver.h`** and start the firmware port from the Hat Carrier setup. (Cross-cutting — also tracked in [`../TODO.md`](../TODO.md).)
+- [ ] **Re-test ADC2 / AIN2-AIN3 on the EVM.** This diagnostic only exercised ADC1. The legacy HAT had a saturation issue on AIN2/AIN3; whether the EVM behaves the same is still unknown. Worth adding a `cp 6` for ADC2 before `SensorHub_PIO` assumes dual-ADC operation. (Cross-cutting — also tracked in [`../TODO.md`](../TODO.md).)
+- [ ] **Decide which AIN pair the load cell migrates to**, since AIN0/AIN1 are now committed to reference duty (contradicts the existing cable-map note that has load cell on AIN0/AIN1). Update [`../doc/MEMO_cable_map.md`](../doc/MEMO_cable_map.md) accordingly.
 
 See [../TODO.md](../TODO.md) for cross-cutting items.

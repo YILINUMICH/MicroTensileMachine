@@ -1,4 +1,4 @@
-> **Status: To-Test** — first-power-up diagnostic for the new H7 + Mid Carrier + ADS1263 EVM hardware. Hasn't been run yet. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+> **Status: Diagnostic** — bench-verified on 2026-05-22 against the new H7 + Mid Carrier + ADS1263 EVM hardware (all six checkpoints PASS, noise floor 1.4 µV RMS). Kept around as a re-runnable bring-up tool. See [STATUS.md](STATUS.md) for the working pin defines and register settings. See [../README.md](../README.md) for project overview.
 
 # ADS1263_FirstPowerUp_PIO — bring-up diagnostic
 

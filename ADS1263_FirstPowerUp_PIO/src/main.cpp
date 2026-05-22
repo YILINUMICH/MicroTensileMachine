@@ -35,37 +35,41 @@
 #include <math.h>
 
 // =====================================================================
-// PIN DEFINES — Mid Carrier J15 → Portenta HD → Arduino-mbed macro
+// PIN DEFINES — Mid Carrier J15 → Portenta HD → STM32 pin name
 // =====================================================================
 // See ../doc/MEMO_cable_map.md for the 6-wire SPI cable layout.
 //
-// J15 silkscreen   | HD Standard | HD pin  | Used here as
-// ---------------- | ----------- | ------- | ------------------------
-// J15-20 SPI1 SCLK | SPI1_CK     | J2-38   | (handled by SPI.begin())
-// J15-22 SPI1 CIPO | SPI1_MISO   | J2-40   | (handled by SPI.begin())
-// J15-24 SPI1 COPI | SPI1_MOSI   | J2-42   | (handled by SPI.begin())
-// J15-25 PWM 0     | PWM_0       | J2-59   | /CS    (GPIO output)
-// J15-27 PWM 1     | PWM_1       | J2-61   | /DRDY  (GPIO input,
-//                                                    not gated here)
-// J15-29 PWM 2     | PWM_2       | J2-63   | /RESET (GPIO output)
+// J15 silkscreen   | HD Standard | HD pin  | STM32 | Used here as
+// ---------------- | ----------- | ------- | ----- | -----------------
+// J15-20 SPI1 SCLK | SPI1_CK     | J2-38   | PI1   | (handled by SPI.begin())
+// J15-22 SPI1 CIPO | SPI1_MISO   | J2-40   | PC2   | (handled by SPI.begin())
+// J15-24 SPI1 COPI | SPI1_MOSI   | J2-42   | PC3   | (handled by SPI.begin())
+// J15-25 PWM 0     | PWM_0       | J2-59   | PA8   | /CS    (GPIO output)
+// J15-27 PWM 1     | PWM_1       | J2-61   | PC6   | /DRDY  (GPIO input,
+//                                                          not gated here)
+// J15-29 PWM 2     | PWM_2       | J2-63   | PC7   | /RESET (GPIO output)
 //
-// ⚠️  PIN-MACRO VERIFICATION (do this once before first flash):
+// HISTORY — why STM32 pin names instead of PWM_0/1/2 macros:
 //
-//     If the build fails with "PWM0/PWM1/PWM2 not declared in this
-//     scope" the Arduino-mbed Portenta H7 core in your version
-//     spells these macros differently. Open:
+//     The Mid Carrier silkscreen and Arduino's pinout documentation
+//     both label these positions as PWM_0/1/2, but the Arduino-mbed
+//     Portenta H7 core's variant.h does not define those macros for
+//     the low numbers (compiler's suggested alternative was PWM_8 —
+//     only PWM_8/PWM_9 are exposed as macros). Rather than chase the
+//     core's naming, we use the absolute STM32 pin names — these are
+//     unambiguous and work across any core version. See the linked
+//     Arduino forum post on HD-connector pin referencing for the
+//     pattern.
 //
-//       <core install>/variants/PORTENTA_H7_M7/variant.h
-//
-//     and find the right symbol for PWM_0 / PWM_1 / PWM_2 / D2 / etc.
-//     The macros below are the most common spelling in recent cores.
+//     STM32 pin names are taken from the Portenta H7 pinout
+//     (doc/PortentaH7_ABX00042_Pinout.pdf, page 12 — J2_odd table).
 //
 //     If you change these, ALSO update ../doc/MEMO_cable_map.md
 //     and the cross-references in SensorHub_PIO/STATUS.md.
 
-#define PIN_CS     PWM0      // J15-25, /CS
-#define PIN_DRDY   PWM1      // J15-27, /DRDY
-#define PIN_RESET  PWM2      // J15-29, /RESET
+#define PIN_CS     PA_8       // J15-25 → J2-59 → PA8,  /CS
+#define PIN_DRDY   PC_6       // J15-27 → J2-61 → PC6,  /DRDY
+#define PIN_RESET  PC_7       // J15-29 → J2-63 → PC7,  /RESET
 
 // =====================================================================
 // ADS1263 commands & registers (from ADS1263 datasheet, doc/)
@@ -290,23 +294,41 @@ static void cp4_ads1263_id() {
 }
 
 static void cp5_noise_floor() {
-    // For first-power-up: do NOT require the operator to short AIN0↔AIN1.
-    // Just measure whatever's on the inputs and report. The threshold
-    // check below will pass if the noise is under 5 mV RMS, which is
-    // generous (Test B was 5 µV with shorted inputs — 1000× margin
-    // tolerates floating inputs).
+    // Bring-up noise-floor test, configured for THIS rig:
+    //
+    //   - External 5 V reference on AIN0 (+REF) / AIN1 (-REF).
+    //     REFMUX = 0x09  →  RMUXP=001 (AIN0), RMUXN=001 (AIN1).
+    //     Datasheet §9.6.12, Table 9-46. External-reference range
+    //     per spec is 0.9 V to 5 V (§9.3.8.2).
+    //
+    //   - Internal "Vshort" via AINCOM on both differential inputs.
+    //     INPMUX = 0xAA  →  MUXP=1010 (AINCOM), MUXN=1010 (AINCOM).
+    //     Datasheet §9.6.7, Table 9-41. This gives 0 V differential
+    //     at the ADC front-end without depending on any external
+    //     wiring — the textbook noise-floor test setup. Matches the
+    //     Test B benchmark in ADS1263_H7_Integration_Notes.md
+    //     (target ~5 µV RMS at 400 SPS, PGA bypass).
+    //
+    //   - PGA bypass, 400 SPS.
+    //     MODE2 = 0x88.
+    //
+    // NOTE: AIN0 / AIN1 are committed to being the reference pair
+    // and MUST NOT be used as measurement inputs simultaneously.
+    // If you change REFMUX to internal reference (0x00), INPMUX
+    // can return to using AIN0/AIN1 for measurement.
 
-    cp_info(5, "configuring ADC1: INPMUX=0x01 (AIN0/AIN1), "
-                "MODE2=0x88 (PGA bypass, 400 SPS), REFMUX=0x00 (internal 2.5V)");
-    ads_write_reg(ADS1263_REG_INPMUX, 0x01);
+    cp_info(5, "configuring ADC1: INPMUX=0xAA (AINCOM-shorted), "
+                "MODE2=0x88 (PGA bypass, 400 SPS), "
+                "REFMUX=0x09 (external 5V ref on AIN0/AIN1)");
+    ads_write_reg(ADS1263_REG_INPMUX, 0xAA);
     ads_write_reg(ADS1263_REG_MODE2,  0x88);
-    ads_write_reg(ADS1263_REG_REFMUX, 0x00);
+    ads_write_reg(ADS1263_REG_REFMUX, 0x09);
 
     // Verify writes stuck.
     uint8_t rb_inpmux = ads_read_reg(ADS1263_REG_INPMUX);
     uint8_t rb_mode2  = ads_read_reg(ADS1263_REG_MODE2);
     uint8_t rb_refmux = ads_read_reg(ADS1263_REG_REFMUX);
-    if (rb_inpmux != 0x01 || rb_mode2 != 0x88 || rb_refmux != 0x00) {
+    if (rb_inpmux != 0xAA || rb_mode2 != 0x88 || rb_refmux != 0x09) {
         cp_fail(5, "register readback mismatch after configure",
                 "Chip is acknowledging RREG but not WREG — check /CS hold, "
                 "SPI mode (must be MODE1), or that no other code is racing.");
@@ -322,8 +344,9 @@ static void cp5_noise_floor() {
         ads_read_conversion(&codes[i]);
     }
 
-    // Compute mean and RMS in volts.  V = code / 2^31 * Vref ; Vref = 2.5 V.
-    const double VREF = 2.5;
+    // Compute mean and RMS in volts.  V = code / 2^31 * Vref ; Vref = 5.0 V
+    // (the external reference applied to AIN0/AIN1 on this rig).
+    const double VREF = 5.0;
     const double LSB  = VREF / 2147483648.0;   // 2^31
     double mean = 0.0;
     for (int i = 0; i < N; i++) mean += (double)codes[i];
@@ -339,15 +362,35 @@ static void cp5_noise_floor() {
 
     char buf[120];
     snprintf(buf, sizeof(buf),
-             "100 samples: mean = %+.3f mV   RMS = %.3f uV",
+             "100 samples: mean = %+.3f mV   RMS = %.3f uV   (target: <50 uV)",
              mean_V * 1000.0, rms_V * 1e6);
     cp_info(5, buf);
 
+    // Sanity threshold: 5 mV RMS. With AINCOM-shorted inputs, a healthy
+    // chain should be ~5–30 µV RMS; >5 mV indicates a real problem
+    // (reference missing, bad PGA bypass, etc.). Codes pinned at one
+    // value (RMS = 0.000 exactly) also indicates a stuck reading —
+    // see the next check.
     if (rms_V > 5e-3) {
         cp_fail(5, "RMS noise > 5 mV — signal chain compromised",
-                "Likely cause: floating differential inputs picking up mains, "
-                "or a reference voltage problem. Short AIN0 to AIN1 on the EVM "
-                "and re-run for a true noise-floor measurement.");
+                "With INPMUX=AINCOM-shorted, the chip should be near 0 V "
+                "differential. >5 mV RMS means the external reference is "
+                "missing/wrong (check the low-reference monitor — datasheet "
+                "§9.3.8.4 — and the 100 nF bypass cap across AIN0/AIN1), "
+                "or the PGA isn't actually in bypass (verify MODE2=0x88).");
+    }
+    // Detect a stuck reading: real ADC samples always bounce by ≥1 LSB
+    // due to noise. RMS = exactly 0 means we read the same code 100×,
+    // which is what we'd see if conversions aren't actually running
+    // (START1 didn't take effect) or RDATA1 is returning the chip's
+    // idle value.
+    if (rms_code == 0.0) {
+        cp_fail(5, "RMS = 0 exactly — every sample is identical",
+                "Conversions don't appear to be advancing. Check that "
+                "START1 command (0x08) is being clocked correctly, that "
+                "POWER register has INTREF=1 (or that the external ref is "
+                "actually present), and that DRDY isn't held in a state "
+                "that prevents RDATA1 from latching new data.");
     }
     cp_pass(5, "ADC stream alive and within sanity threshold");
 }
@@ -366,11 +409,13 @@ void setup() {
 
     banner("ALL CHECKPOINTS PASSED");
     Serial.println(F("Hardware bring-up looks good. Next steps:"));
-    Serial.println(F("  - short AIN0 to AIN1 on the EVM and re-run for the"));
-    Serial.println(F("    true noise-floor measurement (target: < 50 uV RMS)"));
-    Serial.println(F("  - then port SensorHub_PIO pin defines to match the"));
-    Serial.println(F("    PIN_CS / PIN_DRDY / PIN_RESET values that worked here"));
-    Serial.println(F("  - update doc/MEMO_cable_map.md if anything changed."));
+    Serial.println(F("  - port SensorHub_PIO to match what worked here:"));
+    Serial.println(F("    pin defines (PA_8/PC_6/PC_7), REFMUX=0x09,"));
+    Serial.println(F("    VREF=5.0V in any volts-per-code math."));
+    Serial.println(F("  - update doc/MEMO_cable_map.md (load-cell channel"));
+    Serial.println(F("    now needs an AIN pair OTHER than AIN0/AIN1)."));
+    Serial.println(F("  - flip this module's STATUS.md from To-Test to"));
+    Serial.println(F("    Diagnostic; keep it for re-runnable bring-up."));
 
     // Slow heartbeat LED to signal "alive and idle"
     pinMode(LED_BUILTIN, OUTPUT);

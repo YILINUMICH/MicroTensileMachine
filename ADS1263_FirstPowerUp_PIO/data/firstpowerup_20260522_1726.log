@@ -1,0 +1,91 @@
+Bring-up record — ADS1263 first power-up on Mid Carrier + EVM
+=============================================================
+
+Date            : 2026-05-22 (build artifact stamp 17:26 UTC)
+Operator        : Yilin Ma
+Hardware        : Arduino Portenta H7 (ABX00042)
+                  Arduino Portenta Mid Carrier (ASX00055)
+                  TI ADS1263 EVM
+Cable           : 6-wire SPI per doc/MEMO_cable_map.md
+                  CS/DRDY/RESET on Mid Carrier J15-25/27/29
+                  → STM32 PA_8 / PC_6 / PC_7
+Reference       : External 5 V, applied to AIN0 (+REF) / AIN1 (-REF)
+                  REFMUX = 0x09
+Measurement     : Internal Vshort via AINCOM (INPMUX = 0xAA)
+Sample rate     : 400 SPS, PGA bypass (MODE2 = 0x88)
+Result          : ALL CHECKPOINTS PASSED
+
+
+Serial output
+-------------
+============================================================
+  ADS1263 first-power-up diagnostic — M7-only
+============================================================
+Cable map: ../doc/MEMO_cable_map.md
+Carrier:   Portenta Mid Carrier (ASX00055), J15 connector
+EVM:       TI ADS1263 EVM, J2 connector
+
+[cp 0] PASS  Serial up (USB CDC enumerated)
+[cp 1] info  DRDY initial level = HIGH
+[cp 1] PASS  pinMode CS/DRDY/RESET; CS=HIGH, RESET=HIGH
+[cp 2] info  pulsing /RESET LOW for 100 ms (scope-verify if possible)
+[cp 2] PASS  /RESET pulsed
+[cp 3] info  calling SPI.begin() — using default SPI object
+[cp 3] info    (Portenta H7 default SPI → J2-38/40/42 → Mid Carrier J15-20/22/24)
+[cp 3] PASS  SPI.begin() returned
+[cp 4] info  waiting 3000 ms for ADS1263 power-up settle (per integration notes §2)
+[cp 4] info  ID register (0x00) = 0x23  (expecting 0x2X family)
+[cp 4] info  INTERFACE register (0x02) = 0x05  (default 0x05 = STATUS+CRC)
+[cp 4] PASS  ADS1263 found on SPI bus
+[cp 5] info  configuring ADC1: INPMUX=0xAA (AINCOM-shorted), MODE2=0x88 (PGA bypass, 400 SPS), REFMUX=0x09 (external 5V ref on AIN0/AIN1)
+[cp 5] info  100 samples: mean = +0.708 mV   RMS = 1.416 uV   (target: <50 uV)
+[cp 5] PASS  ADC stream alive and within sanity threshold
+
+============================================================
+  ALL CHECKPOINTS PASSED
+============================================================
+
+
+Interpretation
+--------------
+mean = +0.708 mV : sub-millivolt pre-calibration offset, within typical
+                   ADS1263 spec at gain = 1.
+RMS  = 1.416 µV  : 35× below the 50 µV target. Lower than the
+                   ADS1263_H7_Integration_Notes Test B baseline (~5 µV
+                   at 2.5 V VREF), because the bare EVM doesn't include
+                   the legacy Waveshare HAT's 4.4× input attenuator.
+                   Consistent with the chip's intrinsic noise spec at
+                   400 SPS, PGA bypass.
+RMS ≠ 0          : Conversions advance sample-to-sample. SPI / RDATA1 /
+                   START1 path is healthy (the stuck-read guard in cp5
+                   did not trip).
+
+
+Issues encountered and resolved during this bring-up
+----------------------------------------------------
+1. BUILD FAILURE — 'PWM_0' was not declared in this scope.
+   The Arduino-mbed Portenta H7 core packaged with PlatformIO
+   (`platform = ststm32`, `board = portenta_h7_m7`) does NOT define
+   PWM_0/1/2; only the high-numbered PWM_8/PWM_9 are exposed as
+   macros. Fixed by switching to STM32 pin names directly:
+     PWM_0  →  PA_8   (J15-25, /CS)
+     PWM_1  →  PC_6   (J15-27, /DRDY)
+     PWM_2  →  PC_7   (J15-29, /RESET)
+   Mapping confirmed against doc/PortentaH7_ABX00042_Pinout.pdf
+   page 12 (J2_odd table) and doc/PortentaMidCarrier_ASX00055_Pinout.pdf
+   page 3 (J15 table).
+
+2. FIRST PASS, BAD NOISE-FLOOR INTERPRETATION — cp5 reported
+   mean = +2500.000 mV, RMS = 0.000 µV. The threshold check passed
+   but the reading was meaningless: cp5 was configured with
+   INPMUX=0x01 (AIN0/AIN1) and REFMUX=0x00 (internal 2.5 V), but
+   on this rig AIN0/AIN1 carry the external 5 V reference voltage.
+   So the diagnostic was measuring the reference voltage with the
+   internal 2.5 V reference, saturating positive full-scale with no
+   noise expression.
+   Fixed by reconfiguring cp5 for the rig's actual setup:
+     REFMUX = 0x09       (external ref via AIN0+ / AIN1-)
+     INPMUX = 0xAA       (AINCOM-shorted — true Vshort noise test)
+     VREF   = 5.0 V      (in the volts-per-code math)
+   Also added a new RMS == 0.0 stuck-read guard so this failure
+   mode would fail-fast next time instead of silently passing.

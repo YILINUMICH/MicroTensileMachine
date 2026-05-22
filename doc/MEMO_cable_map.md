@@ -1,7 +1,7 @@
 # MEMO — Cable map
 
 **Status:** active — keep updated as the rig changes.
-**Last edited:** 2026-05-22 by Yilin.
+**Last edited:** 2026-05-22 by Yilin (added Cable 2 — external reference wiring after the first power-up bring-up established AIN0/AIN1 as the reference pair).
 
 Operator-maintained record of every cable in the rig. Datasheets tell you what each connector *can* be; this file tells you what it actually *is* on this bench.
 
@@ -39,12 +39,41 @@ This connection replaces the earlier Hat-Carrier + Waveshare-HAT setup (J5 40-pi
 
 ---
 
+## Cable 2 — External 5 V reference: bench supply ↔ ADS1263 EVM AIN0/AIN1
+
+The ADS1263 EVM is configured for an **external 5 V reference** on this rig (not the chip's internal 2.5 V reference). The reference is fed into the AIN0/AIN1 pin pair on the EVM and selected in firmware via `REFMUX = 0x09` (RMUXP=001=External AIN0, RMUXN=001=External AIN1, per datasheet §9.6.12, Table 9-46).
+
+> **Implication for measurement channels:** Once AIN0/AIN1 are committed to reference duty, **they cannot also be used as measurement inputs**. Any firmware that selects `INPMUX = 0x01` (or any encoding that picks AIN0/AIN1 as a measurement pair) is wrong on this rig. The load-cell channel — which the legacy Hat-Carrier setup had on AIN0/AIN1 — needs to move to a different AIN pair (see the open TODO below).
+
+| # | Signal | Direction | **ADS1263 EVM pin** | Color | **Source side** | Notes |
+|---|---|---|---|---|---|---|
+| 1 | **+REF (5 V)** | Supply → EVM | AIN0 screw terminal | TBD (operator: fill in) | Bench 5 V precision reference (operator: fill in supply make/model and adjustment setting) | Range per datasheet §9.3.8.2: 0.9 V to 5 V. We're at the upper bound. |
+| 2 | **−REF (return)** | EVM → Supply | AIN1 screw terminal | TBD | Bench 5 V reference ground/return | Differential pair with wire #1. |
+
+### Bypass / hold-down components (per datasheet §9.3.8.2 and §9.3.8.4)
+
+- **100 nF bypass capacitor across AIN0 ↔ AIN1**, mounted close to the EVM screw terminals. Filters reference noise into the on-chip reference buffer.
+- **100 kΩ resistor across AIN0 ↔ AIN1.** If the reference cable is intermittently disconnected (operator wiring change, cold solder joint), this pull keeps the inputs biased relative to each other so the low-reference monitor (REF_ALM, status byte bit 4) doesn't false-trigger as a transient.
+
+### Bench-verified
+
+Bring-up on 2026-05-22 confirmed the reference is stable: with `INPMUX = 0xAA` (AINCOM-shorted) and PGA bypass at 400 SPS, ADC1 reads **mean = +0.708 mV, RMS = 1.416 µV** — well below the chip's intrinsic noise spec, indicating the external reference is clean and the reference buffer path is working. See [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260522_1726.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260522_1726.log).
+
+### Things to verify if conversions look broken
+
+1. Reference voltage present at AIN0/AIN1 with a multimeter — should be **+5.000 V ± a few mV** referenced to EVM AGND.
+2. The 100 nF bypass cap is actually installed and not shorted/open.
+3. `REFMUX` reads back as `0x09` after firmware writes it (the `ADS1263_FirstPowerUp_PIO` cp5 register-readback check catches this).
+4. If the low-reference alarm (REF_ALM, status byte bit 4) triggers, the differential VREFP − VREFN has fallen below ~0.4 V — check the supply and the cable.
+
+---
+
 ## Other cables (to be documented)
 
 Add an entry per cable as the rig is wired up. Suggested order of importance:
 
-- [ ] **Load cell → LCA-9PC amplifier → ADS1263 EVM AIN0/AIN1.** Signal pair + amplifier excitation. Document amplifier supply rails and which screw terminal on the EVM the signal lands on.
-- [ ] **Keyence IL-030 controller → ADS1263 EVM AIN2/AIN3.** Analog signal out (white) and analog ground (shield) per the IL-Series manual. Note the V↔mm scaling currently configured on the IL-030 controller (1 V/mm default; confirm what's actually set).
+- [ ] ~~**Load cell → LCA-9PC amplifier → ADS1263 EVM AIN0/AIN1.**~~ **Superseded** — AIN0/AIN1 are now the external 5 V reference inputs (see Cable 2 above). The load cell needs a new AIN pair. Candidates: AIN2/AIN3 (worked on the EVM during bring-up? — actually unknown, still TODO to test ADC2's AIN2/AIN3 — see [`../TODO.md`](../TODO.md)), or AIN4/AIN5. **Decide and document.**
+- [ ] **Keyence IL-030 controller → ADS1263 EVM AIN?/AIN?** — Channel assignment pending the load-cell decision above. Analog signal out (white) and analog ground (shield) per the IL-Series manual. Note the V↔mm scaling currently configured on the IL-030 controller (1 V/mm default; confirm what's actually set).
 - [ ] **DC actuation supply → bias-tee DC port → SMA DUT pigtails.** Polarity, current limit setting, supply ground reference.
 - [ ] **Bias-tee AC port → Keysight E4980AL front terminals.** Cable type (BNC? banana?), length (matters for the SHORT de-embedding stability per Notion §4.2).
 - [ ] **USB cables.** Which physical USB-A port on the host PC each instrument uses, since some workflows hard-code `COM5` (Zaber) / `COM8` (H7) — those COM-port assignments are Windows-specific to the current host.
