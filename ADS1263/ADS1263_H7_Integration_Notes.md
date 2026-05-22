@@ -1,4 +1,8 @@
-# ADS1263 Waveshare HAT + Arduino Portenta H7 Integration Notes
+> **Status: Diagnostic** (folder-level) — this file is the canonical reference doc for the ADS1263 silicon on this rig. The sibling sketches (TestA–E, Stable, SPI diagnostics) are historical. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
+> ⚠️ **Hardware context:** the body below describes the **Waveshare ADS1263 HAT on the Portenta Hat Carrier**, the setup used during March–April 2026 bring-up. The rig has since moved to the **bare TI ADS1263 EVM on the Portenta Mid Carrier** (see [`../doc/MEMO_cable_map.md`](../doc/MEMO_cable_map.md) for the current wiring). The ADS1263 silicon and register configuration (§3, §4, §7) carry over unchanged. The HAT-specific content (§1 Hardware Setup, §2 Pin Mapping, §5 DRDY/LoRa conflict, §6 Dupont-cable lessons) is **historical** — it explains how the previous bring-up worked, not the current rig.
+
+# ADS1263 Waveshare HAT + Arduino Portenta H7 Integration Notes (historical — March 2026)
 
 **Date:** March 2026  
 **Hardware:** Waveshare High-Precision AD HAT (ADS1263) + Arduino Portenta H7 + Portenta Hat Carrier (ASX00049)  

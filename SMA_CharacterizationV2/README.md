@@ -1,3 +1,5 @@
+> **Status: To-Test** — current SMA recorder, just refactored to consume `../KeysightLCR/` directly (the local `lcr_reader.py` was deleted). Needs a smoke recording on real hardware before flipping back to Stable. Supersedes `../SMA_Characterization/`. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
 # SMA Characterization Recorder
 
 A single-session recorder for SMA actuator electrical characterization. One
@@ -59,7 +61,7 @@ files), `[Esc]` abort.
 | `workers.py`      | `LcrWorker`, `H7Worker`, sample dataclasses.                |
 | `operator_io.py`  | Prompts, progress bar, banners (uses `readchar`).           |
 | `config.py`       | Typed dataclass config loader.                              |
-| `lcr_reader.py`   | Keysight E4980AL pyvisa wrapper. Unchanged from prior.      |
+| *(LCR driver)*    | Provided by [`../KeysightLCR/lcr_meter.py`](../KeysightLCR/lcr_meter.py) — imported via `sys.path` shim in `workers.py`. No local copy. |
 | `analyze_sma.py`  | Offline 2-term de-embedding + laser interpolation + plot.   |
 | `config.yaml`     | YAML config consumed by both the recorder and analyzer.     |
 | `requirements.txt`| Python deps.                                                |
@@ -224,7 +226,7 @@ because the meaning depends on `function`). The analyzer assumes `LSRS`.
 Each module's standalone test is unchanged from before:
 
 ```bash
-python lcr_reader.py        # connect to LCR, print 5 measurements, quit
+python ../KeysightLCR/test_lcr_meter.py --quick    # LCR connection check
 python ../Calibrate_LaserHead/portenta_reader.py   # H7 stream sanity check
 ```
 

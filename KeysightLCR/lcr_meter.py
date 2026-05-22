@@ -19,7 +19,7 @@ HDR Lab
 
 import time
 import logging
-from typing import Optional, Tuple, Dict, List, Callable
+from typing import Optional, Tuple, Dict, List, Callable, Iterator
 from dataclasses import dataclass
 from enum import Enum
 
@@ -56,6 +56,12 @@ class MeasurementConfig:
     function: MeasurementFunction = MeasurementFunction.CPD
     averaging: int = 1             # Number of averages (1 for max speed)
     integration_time: str = 'SHOR' # SHORT, MED, or LONG
+    disable_corrections: bool = False  # Turn OFF instrument-side OPEN/SHORT/LOAD
+                                       # corrections. Set True for workflows that
+                                       # do de-embedding in post-processing
+                                       # (e.g. SMA characterization recorder).
+    disable_display: bool = False  # Turn OFF the front-panel display redraw to
+                                   # save a few ms per sample. Re-enabled on close.
 
 
 @dataclass
@@ -64,13 +70,17 @@ class MeasurementResult:
     primary: float
     secondary: float
     status: int
-    timestamp: float
+    timestamp: float                # host wall-clock (time.time()) at fetch
     reading_number: int
-    
+    monotonic: float = 0.0          # host monotonic clock (time.monotonic()) at
+                                    # fetch — drift-free, suitable for jitter and
+                                    # inter-sample-spacing analysis. Wall-clock
+                                    # (timestamp) is for cross-instrument joins.
+
     @property
     def is_valid(self) -> bool:
         return self.status == 0
-    
+
     @property
     def status_str(self) -> str:
         if self.status == 0:
@@ -102,13 +112,21 @@ class LCRMeter:
         MeasurementFunction.RX: ('R', 'X', 'Ω', 'Ω'),
     }
     
-    def __init__(self, resource_string: Optional[str] = None, timeout: int = 5000):
+    def __init__(self, resource_string: Optional[str] = None, timeout: int = 5000,
+                 auto_open: bool = True):
         """
         Initialize LCR meter connection
-        
+
         Args:
             resource_string: VISA resource string (auto-detect if None)
-            timeout: Communication timeout in milliseconds
+            timeout: Communication timeout in milliseconds. Workflows that
+                see large measurement transients (e.g. SMA actuation) should
+                pass a higher value such as 10000.
+            auto_open: If True (default, backward-compatible), connect to the
+                instrument from __init__. If False, the caller must invoke
+                .connect(resource_string) or .auto_connect() explicitly —
+                useful for worker threads that want construction to be cheap
+                and the SCPI handshake to happen inside .run().
         """
         self.instrument = None
         self.rm = None
@@ -117,11 +135,18 @@ class LCRMeter:
         self._measurement_count = 0
         self._error_count = 0
         self._start_time = None
-        
-        if resource_string:
-            self.connect(resource_string)
+        self._resource: Optional[str] = None   # remembered for _soft_reconnect()
+        self._idn: Optional[str] = None        # populated on successful IDN check
+
+        if auto_open:
+            if resource_string:
+                self.connect(resource_string)
+            else:
+                self.auto_connect()
         else:
-            self.auto_connect()
+            # Caller will open explicitly. Remember the hint resource so
+            # auto_connect() / connect() can be called without args later.
+            self._resource = resource_string
     
     def auto_connect(self) -> bool:
         """Automatically find and connect to E4980A/AL"""
@@ -186,6 +211,8 @@ class LCRMeter:
             idn = instrument.query('*IDN?').strip()
             if 'E4980A' in idn or 'E4980AL' in idn:
                 self.instrument = instrument
+                self._resource = resource_string
+                self._idn = idn
                 logger.info(f"Connected: {idn}")
                 return True
             else:
@@ -286,14 +313,15 @@ class LCRMeter:
         """
         if not self.instrument:
             raise RuntimeError("Not connected")
-        
+
         self.config = config
-        
+
         try:
             # Reset for clean state
+            self.instrument.write('*CLS')
             self.instrument.write('*RST')
             time.sleep(0.2)
-            
+
             # Configure for maximum speed
             commands = [
                 f':FREQ {config.frequency}',
@@ -308,17 +336,39 @@ class LCRMeter:
                 ':CALC:MATH:STAT OFF',  # Disable statistics for speed
                 ':FORM:DATA ASC',  # ASCII format
             ]
-            
+
+            # Opt-in: turn instrument-side OPEN/SHORT/LOAD corrections OFF
+            # for workflows that de-embed in post-processing (e.g. the SMA
+            # characterization recorder). Must come AFTER *RST since *RST
+            # resets the correction state.
+            if config.disable_corrections:
+                commands += [
+                    ':CORR:OPEN:STAT OFF',
+                    ':CORR:SHOR:STAT OFF',
+                    ':CORR:LOAD:STAT OFF',
+                ]
+
+            # Opt-in: disable front-panel display redraw to save a few ms
+            # per sample. Restored on close().
+            if config.disable_display:
+                commands.append(':DISP:ENAB OFF')
+
             for cmd in commands:
                 self.instrument.write(cmd)
                 time.sleep(0.01)  # Minimal delay for stability
-            
+
+            # Block until all writes have been committed by the instrument.
+            try:
+                self.instrument.query('*OPC?')
+            except Exception:
+                pass  # OPC? failures here aren't fatal; commands already sent.
+
             # Verify configuration
             actual_func = self.instrument.query(':FUNC:IMP?').strip()
             logger.info(f"Configured: {config.frequency}Hz, {config.voltage}V, {actual_func}")
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Configuration failed: {e}")
             return False
@@ -329,11 +379,11 @@ class LCRMeter:
         """
         if not self.instrument:
             raise RuntimeError("Not connected")
-        
+
         try:
             # Use FETCH for maximum speed (doesn't trigger new measurement)
             data = self.instrument.query(':FETCH?')
-            
+
             # Fast parsing
             values = data.strip().split(',')
             if len(values) >= 2:
@@ -343,12 +393,113 @@ class LCRMeter:
                     secondary=float(values[1]),
                     status=int(values[2]) if len(values) > 2 else 0,
                     timestamp=time.time(),
-                    reading_number=self._measurement_count
+                    reading_number=self._measurement_count,
+                    monotonic=time.monotonic(),
                 )
         except Exception as e:
             self._error_count += 1
             logger.debug(f"Read error: {e}")
             return None
+
+    def iter_measurements(self,
+                          poll_interval_s: float = 0.010,
+                          max_consecutive_errors: int = 20,
+                          reconnect_on_error: bool = True,
+                          ) -> Iterator[MeasurementResult]:
+        """
+        Yield measurements forever at approximately ``poll_interval_s``.
+
+        Designed for long-running recorders (e.g. the SMA characterization
+        worker). Transient VISA errors (VI_ERROR_SYSTEM_ERROR etc. — common
+        during SMA actuation transients) are caught, logged, and retried.
+        After ``max_consecutive_errors`` consecutive failures the iterator
+        reraises. If ``reconnect_on_error`` is True, a single soft reconnect
+        + reconfigure attempt is made after the first error in a burst, so a
+        USB session dropout doesn't end the whole run.
+
+        Yields:
+            MeasurementResult instances. Both .timestamp (wall-clock) and
+            .monotonic are populated.
+
+        Raises:
+            pyvisa.errors.VisaIOError: when the consecutive-error ceiling is hit
+            RuntimeError: when reconnect is needed but no resource is known
+        """
+        if not self.instrument:
+            raise RuntimeError("Not connected; call .auto_connect() or .connect() first")
+
+        next_time = time.monotonic()
+        consecutive_errors = 0
+        reconnected_this_burst = False
+        while True:
+            now = time.monotonic()
+            if now < next_time:
+                time.sleep(next_time - now)
+            try:
+                result = self.read_single()
+                if result is None:
+                    # read_single() returned None due to a non-VISA parse failure
+                    # — treat as a transient error.
+                    raise RuntimeError("read_single() returned None (parse failed)")
+                yield result
+                consecutive_errors = 0
+                reconnected_this_burst = False
+            except pyvisa.errors.VisaIOError as e:
+                consecutive_errors += 1
+                logger.warning(
+                    "VISA error #%d on FETCH? — %s (retrying)",
+                    consecutive_errors, e)
+                if consecutive_errors >= max_consecutive_errors:
+                    raise
+                if reconnect_on_error and not reconnected_this_burst:
+                    try:
+                        self._soft_reconnect()
+                        reconnected_this_burst = True
+                    except Exception as rc:
+                        logger.warning("Reconnect failed: %s", rc)
+                time.sleep(0.1)
+            except RuntimeError as e:
+                consecutive_errors += 1
+                logger.warning(
+                    "Read error #%d on FETCH? — %s (retrying)",
+                    consecutive_errors, e)
+                if consecutive_errors >= max_consecutive_errors:
+                    raise
+                time.sleep(0.1)
+            next_time += poll_interval_s
+
+    def _soft_reconnect(self) -> None:
+        """Close the current VISA session and re-open + reconfigure.
+
+        Used by iter_measurements() to recover from transient USB session
+        dropouts during long runs (e.g. SMA actuation transients). Reuses
+        the originally-resolved resource string captured during the first
+        successful connection.
+        """
+        logger.info("Attempting soft reconnect...")
+        try:
+            if self.instrument is not None:
+                try:
+                    self.instrument.close()
+                except Exception:
+                    pass
+                self.instrument = None
+        finally:
+            pass
+
+        if not self._resource:
+            raise RuntimeError("Soft reconnect: no resource string remembered")
+        if not self.rm:
+            raise RuntimeError("Soft reconnect: VISA resource manager is None")
+
+        if not self._try_connect(self._resource):
+            raise RuntimeError(f"Soft reconnect: re-open failed for {self._resource}")
+
+        # Re-push the last configure() settings so the instrument comes
+        # back in the exact same state. self.config holds the most recent
+        # successful MeasurementConfig.
+        self.configure(self.config)
+        logger.info("Soft reconnect succeeded.")
     
     def read_continuous(self, 
                        callback: Optional[Callable[[MeasurementResult], bool]] = None,
@@ -418,6 +569,11 @@ class LCRMeter:
             logger.info(f"  Rate: {rate:.1f} readings/second")
             logger.info(f"  Errors: {self._error_count}")
     
+    @property
+    def idn(self) -> Optional[str]:
+        """*IDN? response captured at connect time, or None if not connected."""
+        return self._idn
+
     def get_parameters(self) -> Tuple[str, str, str, str]:
         """Get parameter names and units for current function"""
         return self.PARAMETER_MAP.get(self.config.function, ('P1', 'P2', '', ''))
@@ -434,12 +590,18 @@ class LCRMeter:
         """Close connection and cleanup"""
         if self.instrument:
             try:
+                # Restore display before disconnecting so the front panel
+                # isn't stuck blank for the next user.
+                try:
+                    self.instrument.write(':DISP:ENAB ON')
+                except Exception:
+                    pass
                 self.instrument.write('*CLS')
                 self.instrument.close()
                 logger.info("Connection closed")
             except:
                 pass
-        
+
         if self.rm:
             try:
                 self.rm.close()

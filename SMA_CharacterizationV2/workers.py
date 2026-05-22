@@ -32,18 +32,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from lcr_reader import LCRReader
 from config import LcrConfig, H7Config
 
 
-# Reuse PortentaReader from the sibling Calibrate_LaserHead package via
-# a sys.path shim. When the M4/M7 firmware ships, swap this for an
-# `h7_reader.py` in this folder.
+# Sibling-module imports via sys.path shims. KeysightLCR/ owns the LCR
+# driver; Calibrate_LaserHead/ owns the H7 serial reader. Both are
+# canonical sources of truth — do not re-implement them locally.
 _THIS_DIR = Path(__file__).resolve().parent
+_KEYSIGHT_DIR = _THIS_DIR.parent / "KeysightLCR"
 _CAL_DIR = _THIS_DIR.parent / "Calibrate_LaserHead"
-if str(_CAL_DIR) not in sys.path:
-    sys.path.insert(0, str(_CAL_DIR))
+for _dir in (_KEYSIGHT_DIR, _CAL_DIR):
+    if str(_dir) not in sys.path:
+        sys.path.insert(0, str(_dir))
 
+from lcr_meter import (  # noqa: E402  (sys.path shim)
+    LCRMeter, MeasurementConfig, MeasurementFunction,
+)
 from portenta_reader import PortentaReader  # noqa: E402  (sys.path shim)
 
 
@@ -104,15 +108,41 @@ class LcrWorker(threading.Thread):
 
     # -- main loop ---------------------------------------------------------
     def _main_loop(self) -> None:
-        with LCRReader(
-            resource=self.cfg.resource,
-            function=self.cfg.function,
-            frequency_hz=self.cfg.frequency_hz,
-            voltage_V=self.cfg.voltage_V,
-            integration=self.cfg.integration,
+        # Build the canonical KeysightLCR API objects from this recorder's
+        # config dataclass. Function name in the YAML is a string ("LSRS");
+        # MeasurementFunction(value) maps it back to the enum.
+        try:
+            func = MeasurementFunction(self.cfg.function.upper())
+        except ValueError as e:
+            raise RuntimeError(
+                f"Unknown LCR function {self.cfg.function!r} in config — "
+                f"valid values: {[f.value for f in MeasurementFunction]}"
+            ) from e
+
+        meas_cfg = MeasurementConfig(
+            frequency=self.cfg.frequency_hz,
+            voltage=self.cfg.voltage_V,
+            function=func,
             averaging=self.cfg.averaging,
-        ) as lcr:
-            lcr.configure()
+            integration_time=self.cfg.integration,
+            disable_corrections=True,  # SMA workflow de-embeds post-hoc
+            disable_display=True,      # save a few ms/sample
+        )
+
+        # Defer SCPI connect until inside this thread's run() (auto_open=False).
+        # Construction stays cheap; the worker thread owns the VISA session.
+        # Long timeout to survive SMA actuation transients.
+        lcr = LCRMeter(resource_string=self.cfg.resource,
+                       timeout=10_000,
+                       auto_open=False)
+        try:
+            connected = (lcr.connect(self.cfg.resource)
+                         if self.cfg.resource else lcr.auto_connect())
+            if not connected or not lcr.instrument:
+                raise RuntimeError(
+                    "Could not connect to Keysight E4980 LCR meter. "
+                    "Check USB/LAN cable, instrument power, and VISA backend.")
+            lcr.configure(meas_cfg)
             self.idn = lcr.idn
             self.logger.info("LCR ready: %s", self.idn)
 
@@ -136,6 +166,8 @@ class LcrWorker(threading.Thread):
                         self.logger.warning(
                             "LCR queue full — dropped %d samples (controller "
                             "may be stalled)", self.n_dropped)
+        finally:
+            lcr.close()
 
 
 # ---------------------------------------------------------------------------

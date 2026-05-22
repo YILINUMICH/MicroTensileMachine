@@ -1,3 +1,5 @@
+> **Status: Stable** — produces the `k` / `V₀` constants consumed by `../SMA_CharacterizationV2/`. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
 # LaserHead Calibration — Run Book
 
 Implements the procedure in `Calibrate_LaserHead_Plan.md`. This directory

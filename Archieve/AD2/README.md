@@ -1,3 +1,5 @@
+> **Status: Archived** — frozen, do not edit. Replaced by the H7 + ADS1263 path. See [STATUS.md](STATUS.md). See [../../README.md](../../README.md) for project overview.
+
 # AD2 — Digilent Analog Discovery 2 Interface
 
 Two-channel voltage acquisition for the micro tensile machine, replacing

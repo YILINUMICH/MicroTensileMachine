@@ -16,9 +16,15 @@
  *   RDATA1: 6 bytes — STATUS + DATA3(MSB) + DATA2 + DATA1 + DATA0 + CHK
  *   RDATA2: 5 bytes — STATUS + DATA3(MSB) + DATA2 + DATA1 + CHK
  *
- * DRDY is not used for gating. PJ_11 is held by the onboard LoRa IRQ on
- * the H7, and ADC2 has no DRDY output anyway. Timed polling in the
- * caller's loop is the supported pattern for both ADCs.
+ * DRDY is not used for gating. ADC2 has no DRDY output anyway. Timed
+ * polling in the caller's loop is the supported pattern for both ADCs.
+ *
+ * Each RDATAx frame returns a STATUS byte (decoded per datasheet
+ * Table 31 — REF_ALM = bit 4 is the key fault flag for the external
+ * REF7050 reference) and a CHK byte (modulo-256 sum of the data bytes
+ * plus 0x9B). Both are validated in readRawData{32,24} and surfaced on
+ * the ADC_Reading struct: r.status holds the raw STATUS byte, r.valid
+ * is set false on checksum mismatch.
  */
 
 #include "ADS1263_Driver.h"
@@ -118,7 +124,7 @@ bool ADS1263_Driver::begin() {
     // Park ADC1 on an inactive mux/ref. configureADC1() will reprogram
     // these if ADC1 is actually used.
     writeRegister(ADS1263_REG_MODE0,  0x00);
-    writeRegister(ADS1263_REG_MODE1,  0x40);                       // Sinc3
+    writeRegister(ADS1263_REG_MODE1,  0x60);                       // Sinc4 — best 50/60 Hz rejection at 400 SPS
     writeRegister(ADS1263_REG_MODE2,  0x80 | (ADS1263_20SPS & 0x0F));  // PGA bypass, 20 SPS
     writeRegister(ADS1263_REG_INPMUX, _adc1_inpmux);               // AINCOM/AINCOM
     writeRegister(ADS1263_REG_REFMUX, _adc1_refmux);               // internal 2.5 V
@@ -179,9 +185,10 @@ void ADS1263_Driver::configureADC1(uint8_t inpmux,
     writeRegister(ADS1263_REG_INPMUX, _adc1_inpmux);
     writeRegister(ADS1263_REG_REFMUX, _adc1_refmux);
     writeMODE2();
-    // MODE1 = Sinc3 filter, no simultaneous ADC2 (per-ADC setting — ADC2 is
-    // controlled independently by ADC2CFG so this doesn't affect it).
-    writeRegister(ADS1263_REG_MODE1, 0x40);
+    // MODE1 = Sinc4 filter — best 50/60 Hz mains rejection of the filters
+    // legal at 400 SPS (FIR is only valid at ≤20 SPS). ADC2 is controlled
+    // independently by ADC2CFG so this setting doesn't affect it.
+    writeRegister(ADS1263_REG_MODE1, 0x60);
     writeRegister(ADS1263_REG_MODE0, 0x00);
 
     DRV_LOG.print(F("ADC1 configured: INPMUX=0x"));
@@ -207,12 +214,21 @@ void ADS1263_Driver::stopADC1() {
 
 ADC_Reading ADS1263_Driver::readADC1Direct() {
     ADC_Reading r = {};
-    int32_t code = readRawData32();
-    r.valid = true;
+    uint8_t status = 0;
+    bool chk_ok = false;
+    int32_t code = readRawData32(status, chk_ok);
     r.raw_code = code;
+    r.status = status;
+    r.valid = chk_ok;
     r.voltage_V = codeToVoltageADC1(code);
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
+    if (!chk_ok) {
+        DRV_LOG.print(F("[ADC1] checksum mismatch (status=0x"));
+        DRV_LOG.print(status, HEX);
+        DRV_LOG.println(F(")"));
+    }
+    logStatusAlarms(status, "ADC1");
     return r;
 }
 
@@ -224,12 +240,21 @@ ADC_Reading ADS1263_Driver::readADC1Poll(uint32_t poll_ms) {
     sendCommand(ADS1263_CMD_START1);
     delay(poll_ms);
 
-    int32_t code = readRawData32();
-    r.valid = true;
+    uint8_t status = 0;
+    bool chk_ok = false;
+    int32_t code = readRawData32(status, chk_ok);
     r.raw_code = code;
+    r.status = status;
+    r.valid = chk_ok;
     r.voltage_V = codeToVoltageADC1(code);
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
+    if (!chk_ok) {
+        DRV_LOG.print(F("[ADC1] checksum mismatch (status=0x"));
+        DRV_LOG.print(status, HEX);
+        DRV_LOG.println(F(")"));
+    }
+    logStatusAlarms(status, "ADC1");
 
     if (was_running) startADC1();
     return r;
@@ -287,12 +312,21 @@ void ADS1263_Driver::stopADC2() {
 
 ADC_Reading ADS1263_Driver::readADC2Direct() {
     ADC_Reading r = {};
-    int32_t code = readRawData24();
-    r.valid = true;
+    uint8_t status = 0;
+    bool chk_ok = false;
+    int32_t code = readRawData24(status, chk_ok);
     r.raw_code = code;
+    r.status = status;
+    r.valid = chk_ok;
     r.voltage_V = codeToVoltageADC2(code);
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
+    if (!chk_ok) {
+        DRV_LOG.print(F("[ADC2] checksum mismatch (status=0x"));
+        DRV_LOG.print(status, HEX);
+        DRV_LOG.println(F(")"));
+    }
+    logStatusAlarms(status, "ADC2");
     return r;
 }
 
@@ -304,12 +338,21 @@ ADC_Reading ADS1263_Driver::readADC2Poll(uint32_t poll_ms) {
     sendCommand(ADS1263_CMD_START2);
     delay(poll_ms);
 
-    int32_t code = readRawData24();
-    r.valid = true;
+    uint8_t status = 0;
+    bool chk_ok = false;
+    int32_t code = readRawData24(status, chk_ok);
     r.raw_code = code;
+    r.status = status;
+    r.valid = chk_ok;
     r.voltage_V = codeToVoltageADC2(code);
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
+    if (!chk_ok) {
+        DRV_LOG.print(F("[ADC2] checksum mismatch (status=0x"));
+        DRV_LOG.print(status, HEX);
+        DRV_LOG.println(F(")"));
+    }
+    logStatusAlarms(status, "ADC2");
 
     if (was_running) startADC2();
     return r;
@@ -438,7 +481,7 @@ void ADS1263_Driver::sendCommand(uint8_t cmd) {
 //  Private — RDATA1 (ADC1, 32-bit)
 // ══════════════════════════════════════════════════════════════════════
 
-int32_t ADS1263_Driver::readRawData32() {
+int32_t ADS1263_Driver::readRawData32(uint8_t &status_out, bool &chk_ok_out) {
     // CMD → STATUS → D3(MSB) → D2 → D1 → D0(LSB) → CHK
     uint8_t status, chk;
     uint8_t d3, d2, d1, d0;
@@ -454,11 +497,15 @@ int32_t ADS1263_Driver::readRawData32() {
     d1 = SPI.transfer(0xFF);
     d0 = SPI.transfer(0xFF);
     chk = SPI.transfer(0xFF);
-    (void)status; (void)chk;
 
     delayMicroseconds(5);
     digitalWrite(ADS1263_CS_PIN, HIGH);
     SPI.endTransaction();
+
+    // INTERFACE.CRC = 01 ⇒ checksum = (sum of data bytes + 0x9B) mod 256.
+    uint8_t chk_calc = (uint8_t)(d3 + d2 + d1 + d0 + 0x9B);
+    status_out = status;
+    chk_ok_out = (chk_calc == chk);
 
     uint32_t raw = ((uint32_t)d3 << 24)
                  | ((uint32_t)d2 << 16)
@@ -471,7 +518,7 @@ int32_t ADS1263_Driver::readRawData32() {
 //  Private — RDATA2 (ADC2, 24-bit sign-extended)
 // ══════════════════════════════════════════════════════════════════════
 
-int32_t ADS1263_Driver::readRawData24() {
+int32_t ADS1263_Driver::readRawData24(uint8_t &status_out, bool &chk_ok_out) {
     // CMD → STATUS → D3(MSB) → D2 → D1(LSB) → CHK
     uint8_t status, chk;
     uint8_t d3, d2, d1;
@@ -486,11 +533,16 @@ int32_t ADS1263_Driver::readRawData24() {
     d2 = SPI.transfer(0xFF);
     d1 = SPI.transfer(0xFF);
     chk = SPI.transfer(0xFF);
-    (void)status; (void)chk;
 
     delayMicroseconds(5);
     digitalWrite(ADS1263_CS_PIN, HIGH);
     SPI.endTransaction();
+
+    // INTERFACE.CRC = 01 ⇒ checksum = (sum of data bytes + 0x9B) mod 256.
+    // RDATA2 has only 3 data bytes (D3, D2, D1).
+    uint8_t chk_calc = (uint8_t)(d3 + d2 + d1 + 0x9B);
+    status_out = status;
+    chk_ok_out = (chk_calc == chk);
 
     // Pack into bits 31:8 of a uint32 and arithmetic-shift right by 8
     // on the signed int — this sign-extends the 24-bit value cleanly.
@@ -515,7 +567,7 @@ float ADS1263_Driver::codeToVoltageADC2(int32_t code) const {
     return ((float)code / 8388608.0f) * (_adc2_vref_V / gain);
 }
 
-// ═════════════════════════════════════════════════════�
+// ═════════════════════════════════════════════════════�
 
 // ══════════════════════════════════════════════════════════════════════
 //  Private — rate enum → SPS (float) lookups used by printConfig()
@@ -551,4 +603,41 @@ float ADS1263_Driver::rateToSPS_ADC2(ADS1263_ADC2_Rate_t rate) const {
         case ADS1263_ADC2_800SPS: return 800.0f;
     }
     return 0.0f;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  Private — STATUS-byte alarm logging
+// ══════════════════════════════════════════════════════════════════════
+//
+// Datasheet (Table 31): ADC2(7) | ADC1(6) | EXTCLK(5) | REF_ALM(4) |
+//                       PGAL_ALM(3) | PGAH_ALM(2) | PGAD_ALM(1) | RESET(0)
+//
+// REF_ALM (bit 4) is the one we most care about — it asserts when the
+// reference voltage falls below ~0.4 V, which is the failure mode the
+// external REF7050 would exhibit. PGAx_ALM bits indicate that the PGA
+// output saturated against the supply rail.
+//
+// Throttled so a stuck alarm doesn't flood the RPC log.
+void ADS1263_Driver::logStatusAlarms(uint8_t status, const char *which) {
+    static uint32_t last_log_ms = 0;
+    const uint32_t now = millis();
+
+    const bool ref_alm  = (status & 0x10) != 0;   // bit 4
+    const bool pgal_alm = (status & 0x08) != 0;   // bit 3
+    const bool pgah_alm = (status & 0x04) != 0;   // bit 2
+    const bool pgad_alm = (status & 0x02) != 0;   // bit 1
+    if (!(ref_alm || pgal_alm || pgah_alm || pgad_alm)) return;
+
+    if ((now - last_log_ms) < 1000) return;        // 1 Hz throttle
+    last_log_ms = now;
+
+    DRV_LOG.print('[');
+    DRV_LOG.print(which);
+    DRV_LOG.print(F("] STATUS alarm(s): 0x"));
+    DRV_LOG.print(status, HEX);
+    if (ref_alm)  DRV_LOG.print(F(" REF_ALM"));
+    if (pgal_alm) DRV_LOG.print(F(" PGAL_ALM"));
+    if (pgah_alm) DRV_LOG.print(F(" PGAH_ALM"));
+    if (pgad_alm) DRV_LOG.print(F(" PGAD_ALM"));
+    DRV_LOG.println();
 }

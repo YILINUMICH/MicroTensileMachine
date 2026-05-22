@@ -1,3 +1,5 @@
+> **Status: Stable** (v1.0, Nov 2025). See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
 # Zaber Linear Stage Control Module
 
 A simplified Python module for controlling Zaber linear stages with high-speed position reading, velocity control, and device management capabilities.

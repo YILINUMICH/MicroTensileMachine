@@ -1,3 +1,5 @@
+> **Status: Stable**. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
 # LCR Meter Module
 
 A high-performance Python module for controlling E4980A/AL LCR meters, optimized for maximum reading speed and designed for easy integration into larger projects.

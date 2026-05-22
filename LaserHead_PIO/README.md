@@ -1,3 +1,5 @@
+> **Status: Diagnostic** — single-path (laser/ADC2 only) reference build, kept for bring-up isolation. Superseded by `SensorHub_PIO/` for production. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
 # LaserHead_PIO — Portenta H7 dual-core build (dual-ADC-capable)
 
 PlatformIO project built around a **dual-ADC driver for the ADS1263**.

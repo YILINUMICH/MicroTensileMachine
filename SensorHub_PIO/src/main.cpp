@@ -94,13 +94,13 @@ void setup() {
 
     // Drive the pins BEFORE adc.begin() so we can localise any hang.
     pinMode(ADS1263_CS_PIN, OUTPUT);
-    CP(2, "pinMode CS (PE_6) done");
+    CP(2, "pinMode CS (PA_8 / J15-25 / PWM_0) done");
 
     pinMode(ADS1263_RESET_PIN, OUTPUT);
-    CP(3, "pinMode RESET (PI_5) done");
+    CP(3, "pinMode RESET (PC_7 / J15-29 / PWM_2) done");
 
     pinMode(ADS1263_DRDY_PIN, INPUT_PULLUP);
-    CP(4, "pinMode DRDY (PJ_11) done");
+    CP(4, "pinMode DRDY (PC_6 / J15-27 / PWM_1) done");
 
     digitalWrite(ADS1263_CS_PIN, HIGH);
     digitalWrite(ADS1263_RESET_PIN, HIGH);
@@ -122,25 +122,26 @@ void setup() {
     RPC.println(adc.getDeviceID(), HEX);
 
     // ── Configure ADC1 ─────────────────────────────────────────────────
-    // Routing the LASER HEAD through ADC1 on AIN0(+)/AIN1(-) while the
-    // AIN2/AIN3 ADC2 path is in a stuck/saturated state. The HAT's
-    // load-cell front-end (inamp/divider) on AIN0/AIN1 applies a scale
-    // factor that the calibration fit will absorb into the measured
-    // sensitivity k.
-    //   INPMUX = 0x01 → AIN0(+) / AIN1(-)
-    //   REFMUX = AVDD/AVSS (5 V)
-    //   rate   = 400 SPS
-    //   PGA bypass = true (direct to ADC core, front-end is external)
+    // Post-EVM-modification configuration (see doc/ADS1263EVM_Modifications.md):
+    // the REF7050 external reference now drives AIN0(+)/AIN1(-), so the
+    // signal under test moves to AIN2(+)/AIN3(-). PGA stays in the path
+    // for the low-noise input buffer; MODE1 is Sinc4 (set in the driver)
+    // for best 50/60 Hz mains rejection at 400 SPS.
+    //   INPMUX = 0x23                       → AIN2(+) / AIN3(-)
+    //   REFMUX = ADS1263_REFMUX_EXT_AIN01   → 0x09, REF7050 on AIN0/AIN1
+    //   VREF   = 5.0 V                      → matches the REF7050 output
+    //   rate   = 400 SPS                    → load-cell bandwidth
+    //   PGA    = enabled  (pga_bypass=false)
 #if ENABLE_ADC1
     adc.configureADC1(
-        /*inpmux =*/ 0x01,
-        /*refmux =*/ ADS1263_REFMUX_AVDD_AVSS,
-        /*vref_V =*/ 5.0f,
-        /*rate   =*/ ADS1263_400SPS,
-        /*pga_bypass =*/ true
+        /*inpmux     =*/ 0x23,                       // AIN2(+) / AIN3(-)
+        /*refmux     =*/ ADS1263_REFMUX_EXT_AIN01,   // 0x09 — REF7050 on AIN0/AIN1
+        /*vref_V     =*/ 5.0f,
+        /*rate       =*/ ADS1263_400SPS,
+        /*pga_bypass =*/ false                       // PGA enabled (do not rely on default)
     );
     adc.startADC1();
-    CP(9, "ADC1 started on AIN0/AIN1 (laser via load-cell front-end)");
+    CP(9, "ADC1 started on AIN2/AIN3, REF7050 on AIN0/AIN1, PGA enabled");
 #endif
 
     // ── Configure ADC2 ─────────────────────────────────────────────────

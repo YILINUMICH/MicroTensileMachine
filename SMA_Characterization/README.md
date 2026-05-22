@@ -1,3 +1,5 @@
+> **Status: Archived** — superseded by [`../SMA_CharacterizationV2/`](../SMA_CharacterizationV2/). Use V2 for any new work. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
 # SMA Characterization — concurrent LCR + laser recorder
 
 Continuous, time-aligned raw data capture for SMA (Flexinol) coil

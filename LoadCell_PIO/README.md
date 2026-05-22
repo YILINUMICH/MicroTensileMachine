@@ -1,3 +1,5 @@
+> **Status: Diagnostic** — single-path (load-cell/ADC1 only) reference build, kept for bring-up isolation. Superseded by `SensorHub_PIO/` for production. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
+
 # LoadCell_PIO — Portenta H7 dual-core build
 
 PlatformIO project that runs the ADS1263 load-cell reader on the **M4 core**

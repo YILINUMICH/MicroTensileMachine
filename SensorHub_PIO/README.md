@@ -1,3 +1,5 @@
+> **Status: WIP** — needs port from Hat Carrier → Mid Carrier (ASX00055). See [STATUS.md](STATUS.md) for module-level state and TODOs. See [../README.md](../README.md) for project overview.
+
 # SensorHub_PIO — dual-ADC firmware (load cell + laser head)
 
 PlatformIO project that runs **both** ADS1263 ADCs simultaneously on the
