@@ -1,0 +1,152 @@
+Bench record — Phase 2.1 self-calibration verification ALL PASS
+================================================================
+
+Date            : 2026-05-24 (build artifact stamp 19:49 UTC)
+Operator        : Yilin Ma
+Hardware        : Arduino Portenta H7 (ABX00042)
+                  Arduino Portenta Mid Carrier (ASX00055)
+                  TI ADS1263 EVM
+Cable           : 6-wire SPI per doc/MEMO_cable_map.md
+Reference       : External 5 V (REF7050), AIN0 (+REF) / AIN1 (-REF), REFMUX = 0x09
+AVDD assumed    : 5.2056 V (from FirstPowerUp cp10 ratiometric measurement)
+Sketch          : ADS1263_SelfCal_PIO/ (cp0–cp3)
+Outcome         : ALL CHECKPOINTS PASSED (cp0–cp3)
+                  Phase 2.1 self-calibration verification COMPLETE.
+
+
+Headline numbers
+----------------
+SFOCAL1 sweep   : Reduction 94–100% across all PGA gains; predicted vs actual
+                  OFCAL agree within ~80 LSB out of ~1240 (< 7%); INTERFACE
+                  register survived 0x05 at every gain.
+
+SYGCAL1 demo    : Cross-check: actual FSCAL 0x4CCB44 vs predicted from measured
+                  V 0x4CCB3E → diff = +6 LSB = 1.4 ppm of FS. Post-cal reading
+                  = 5.0000 V (exactly +VREF, 0 ppm error). FSCAL gain factor
+                  = 1.199906 = 0x400000 × 5.0V / 4.167V. INTERFACE survived.
+
+INTERFACE       : 7 calibration commands fired (6 SFOCAL1 + 1 SYGCAL1).
+                  INTERFACE register held 0x05 across every cal command.
+                  The legacy Waveshare-HAT "INTERFACE snaps back to default"
+                  issue documented in ADS1263_H7_Integration_Notes.md §6
+                  does NOT reproduce on the bare EVM. (Defensive re-write of
+                  POWER/MODE2/INPMUX/REFMUX is still applied as a safety
+                  net — recommend keeping that in production firmware
+                  even though it appears unnecessary on this EVM.)
+
+
+Serial output
+-------------
+============================================================
+  ADS1263 self-calibration verification — Phase 2.1
+============================================================
+Prerequisite: ADS1263_FirstPowerUp_PIO/ cp0–cp10 all PASS
+Cable map:    ../doc/MEMO_cable_map.md
+AVDD assumed: 5.2056 V (from cp10 ratiometric measurement)
+
+[cp 0] PASS  Serial up (USB CDC enumerated)
+[cp 1] info  pulsing /RESET LOW for 100 ms
+[cp 1] info  SPI.begin() — default object on Mid Carrier J15-20/22/24
+[cp 1] info  ID = 0x23 (expect 0x2X), INTERFACE = 0x05 (expect 0x05)
+[cp 1] info  configuring: REFMUX=0x09 (ext 5V), INPMUX=0xAA (AINCOM-shorted), MODE2=0x08 (PGA on, gain=1, 400 SPS), POWER=0x13 (INTREF + VBIAS)
+[cp 1] PASS  bring-up complete — chip ready for self-cal
+[cp 2] info  SFOCAL1 sweep: AINCOM-shorted, run self-offset-cal at each PGA gain
+[cp 2] info    gain | MODE2 | pre_mean (uV) | OFCAL (predicted)| OFCAL (actual)  | INTERFACE | post_mean (uV) | reduction | result
+[cp 2] info    -----+-------+---------------+------------------+-----------------+-----------+----------------+-----------+--------
+[cp 2] info       1 |  0x08 |     +739.147  | 0x0004D8 (    +1240) | 0x0004D8 (    +1240)| 0x05 OK    |        -0.040  |  100.0%  | pass
+[cp 2] info       2 |  0x18 |     +370.365  | 0x0004DB (    +1243) | 0x00050D (    +1293)| 0x05 OK    |       -15.218  |   95.9%  | pass
+[cp 2] info       4 |  0x28 |     +185.206  | 0x0004DB (    +1243) | 0x000504 (    +1284)| 0x05 OK    |        -6.143  |   96.7%  | pass
+[cp 2] info       8 |  0x38 |      +92.747  | 0x0004DD (    +1245) | 0x0004F7 (    +1271)| 0x05 OK    |        -1.927  |   97.9%  | pass
+[cp 2] info      16 |  0x48 |      +46.562  | 0x0004E2 (    +1250) | 0x000508 (    +1288)| 0x05 OK    |        -1.437  |   96.9%  | pass
+[cp 2] info      32 |  0x58 |      +23.445  | 0x0004EB (    +1259) | 0x000533 (    +1331)| 0x05 OK    |        -1.342  |   94.3%  | pass
+[cp 2] PASS  SFOCAL1 sweep clean across all PGA gains
+[cp 3] info  SYGCAL1 demo: drive TDAC at 0.8·AVDD, run system-gain cal
+[cp 3] info    expected behavior: chip writes FSCAL such that applied V becomes +VREF
+[cp 3] info  applied signal: predicted 4.1645 V (0.8×AVDD), measured 4.1670 V (error =  +604 ppm)
+[cp 3] info  FSCAL pre-cal: 0x400000 (default 0x400000); predicted post-cal = 0x4CCB3E
+[cp 3] info  FSCAL post-cal: 0x4CCB44 (delta from default = +838468 LSB → gain factor 1.199906)
+[cp 3] info  FSCAL cross-check: actual = 0x4CCB44, predicted from measured = 0x4CCB3E, diff = +6 LSB (1.4 ppm of FS)
+[cp 3] info  post-cal measured = 5.0000 V (expected +VREF = 5.0000 V, error =    -0 ppm)
+[cp 3] info  INTERFACE register = 0x05 (OK — survived SYGCAL1)
+[cp 3] PASS  SYGCAL1 demo clean — FSCAL math correct, post-cal reads +VREF, INTERFACE survived
+
+============================================================
+  ALL CHECKPOINTS PASSED (cp0–cp3)
+============================================================
+Phase 2.1 self-calibration verification COMPLETE.
+
+
+Interpretation
+--------------
+cp2 SFOCAL1     : Six iterations (PGA gain {1, 2, 4, 8, 16, 32}), each with a
+                  pre-cal baseline, INPMUX=0xFF before SFOCAL1, defensive
+                  register re-write after. All six PASS.
+
+                  Gain=1 is the cleanest case: pre_mean 739 µV, predicted
+                  OFCAL 0x0004D8 = +1240, actual OFCAL 0x0004D8 = +1240
+                  (identical), post_mean -0.040 µV (essentially zero), 100%
+                  reduction. The chip's SFOCAL1 cancels the pre-PGA offset
+                  exactly when AINCOM-shorted and SFOCAL1's internal short
+                  see the same common-mode level.
+
+                  Gain=2 through 32 show slightly higher actual-vs-predicted
+                  divergence (40–70 LSB) and post-cal residual offsets of
+                  1–15 µV input-referred. This is the chip's noise floor
+                  plus a small systematic — when SFOCAL1 shorts the PGA
+                  inputs internally, the common-mode level may differ
+                  slightly from AINCOM-shorted measurement, producing a
+                  small offset that the cal sees but the measurement
+                  doesn't (or vice versa).  Acceptable; all >94% reduction.
+
+cp3 SYGCAL1     : With 0.8·AVDD applied via TDAC differential:
+                  - Pre-cal V = 4.167 V (chip's default unity-gain reading,
+                    +604 ppm above predicted 4.1645 V — that's the chip's
+                    intrinsic gain error)
+                  - SYGCAL1 writes FSCAL = 0x400000 × VREF / V_input ≈
+                    0x4CCB3E (predicted from measured V).
+                  - Actual FSCAL = 0x4CCB44, +6 LSB = 1.4 ppm of FS off
+                    from prediction. Essentially exact agreement with the
+                    datasheet equation.
+                  - Post-cal reading = 5.0000 V (+VREF), 0 ppm error.
+                  - Behavior matches datasheet §9.4.9.6: SYGCAL1 normalizes
+                    the applied input to read as +VREF after cal. This is
+                    NOT what a casual reading of "system gain cal" implies;
+                    the test's first version misinterpreted this and
+                    failed spuriously — fix landed before this bench run.
+
+INTERFACE       : 0x05 after every one of the 7 calibration commands.
+                  No snap-back observed. The legacy-HAT issue documented
+                  in ADS1263_H7_Integration_Notes.md §6 does not apply
+                  here. Defensive register re-write was performed
+                  regardless (POWER, MODE2, INPMUX, REFMUX) and should
+                  remain in production firmware as a safety net even
+                  though this EVM doesn't need it.
+
+
+Phase 2 status
+--------------
+Phase 2.1 ✓ — bench-verified 2026-05-24 19:49 UTC.
+Phase 2.2 ⊘ — TABLED (precision resistor divider not available).
+Phase 2.3 ⊘ — TABLED (deferred together with 2.2).
+
+Ready to proceed to Phase 3 sensor configuration — see
+doc/PLAN_phase3_sensors.md.
+
+
+Bug found and fixed during this session
+---------------------------------------
+cp3 first version expected SYGCAL1 to write FSCAL such that the post-cal
+reading equals the input value. The datasheet (§9.4.9.6) actually says
+SYGCAL1 assumes the input IS at positive full-scale and writes FSCAL
+to normalize accordingly. So with V_input = 0.8·AVDD ≈ 4.167 V, the
+chip wrote FSCAL ≈ 1.2× (= 0x4CCCCC nominal) such that the applied
+signal would be interpreted as +VREF = 5.0 V. The first-run cp3 saw
+post-cal reading 5.0000 V (not the expected 4.16 V) and FAILed.
+
+Test was rewritten to verify the correct datasheet behavior:
+  - FSCAL_post must match 0x400000 × VREF / V_measured (the cal math)
+  - Post-cal reading must equal +VREF (cal coefficient applied to ADC)
+  - INTERFACE register must survive
+
+Memory note saved to spaces/memory/ads1263_sygcal1_normalizes_to_vref.md
+so future agents don't rediscover this trap.

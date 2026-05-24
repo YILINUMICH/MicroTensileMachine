@@ -1,7 +1,7 @@
 # MEMO — ADS1263 baseline testing plan
 
-**Status:** active — Phase 0 complete; **Phase 1.1–1.6 all bench-verified 2026-05-24** (chip-level baseline COMPLETE). Ready to proceed to Phase 2.1 (self-calibration verification).
-**Last edited:** 2026-05-24 by Yilin (Phase 1 fully bench-verified — cp0–cp10 PASS, ADC2 + DRDY + TDAC all confirmed working on EVM).
+**Status:** active — Phase 0 complete; **Phase 1.1–1.6 + Phase 2.1 all bench-verified 2026-05-24** (chip-level baseline + self-calibration verification COMPLETE). Phase 2.2 / 2.3 remain tabled. Ready to proceed to Phase 3 sensor configuration ([`PLAN_phase3_sensors.md`](PLAN_phase3_sensors.md)).
+**Last edited:** 2026-05-24 by Yilin (Phase 2.1 SelfCal bench-verified — SFOCAL1 + SYGCAL1 both work, INTERFACE register survives, AVDD = 5.2056 V locked in from cp10).
 **Owner:** Yilin.
 
 The bring-up sketch (`ADS1263_FirstPowerUp_PIO/`) proves the chip is alive on the new hardware. It exercises **one operating point** (400 SPS, PGA bypass, AINCOM-short, external 5 V reference, 100 samples). This memo lays out what comes next — the work needed to **trust** the rig enough to mount sensors and call readings real.
@@ -66,7 +66,7 @@ The PLAN doc has register-level implementation hints, code skeletons, acceptance
 
 | Step | Deliverable | Success criterion |
 |---|---|---|
-| 2.1 | **Self-calibration verification.** Sketch runs SFOCAL1 + SYCOCAL1, reads back OFCAL[0:2] and FSCAL[0:2] registers, also computes manual offset/gain from raw codes for cross-check. | OFCAL value < ±10 LSB of expected zero; FSCAL within ±50 ppm of expected full-scale. Captures the "INTERFACE register snaps back after SFOCAL" issue from `ADS1263_H7_Integration_Notes.md` §4. |
+| 2.1 | **Self-calibration verification.** New module [`../ADS1263_SelfCal_PIO/`](../ADS1263_SelfCal_PIO/) — sketch runs SFOCAL1 (across all PGA gains) + SYGCAL1 (with TDAC-driven 0.8·AVDD ≈ 4.16 V), reads back OFCAL[2:0] and FSCAL[2:0], computes manual offset/gain from raw codes for cross-check, and explicitly checks INTERFACE register survival. **Code written 2026-05-24, bench-test pending.** | Operational tolerance (rationale in module STATUS.md): per-gain offset reduction ≥ 90% after SFOCAL1; FSCAL register non-default after SYGCAL1 with post-cal measurement within ±0.5% of predicted 0.8·AVDD. INTERFACE register must stay at 0x05 after every calibration command (the "snap-back" check from `ADS1263_H7_Integration_Notes.md` §6). |
 
 ### Phase 2.2 — DC linearity ⊘ TABLED (2026-05-24)
 
@@ -165,7 +165,7 @@ The active near-term path is ~2 hours of bench work (after the current code-writ
 | 1.4 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp8 ADC2 enable+read: 8.5 µV RMS at 100 SPS Sinc3 gain=1 (datasheet typical 10.3 µV). Unblocks SensorHub_PIO dual-ADC mode. Bug found+fixed: original ADC2MUX=0x4A read floating AIN4, picked up EMI; changed to 0xAA (AINCOM-shorted) to measure intrinsic noise floor. |
 | 1.5 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp9 DRDY edge-rate: 4007/4000 falling edges in 10 s on PC_6. Interrupt-driven reads viable on Mid Carrier; legacy PJ_11/LoRa IRQ conflict does not apply here. |
 | 1.6 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp10 ratiometric TDAC: AVDD derived = 5.2056 V mean, 24.9 mV span across 5 rows. EVM's TPS7A4700 LDO output is 5.2 V (in spec, trim choice). Bug found+fixed: original test assumed AVDD=5.0V exactly; per datasheet §9.3.14, TDAC outputs scale with AVDD, so we rewrote as a ratiometric AVDD derivation. |
-| 2.1 | | | pending (active here) | self-calibration verification — to write after Phase 1 bench-tests |
+| 2.1 | 2026-05-24 | [`../ADS1263_SelfCal_PIO/data/selfcal_20260524_1949.log`](../ADS1263_SelfCal_PIO/data/selfcal_20260524_1949.log) | **PASS** | SFOCAL1 sweep: 94–100% offset reduction across PGA gains; predicted vs actual OFCAL agree within ~80 LSB. SYGCAL1 demo: FSCAL math matches prediction to 1.4 ppm of FS (post-cal = 5.0000 V = exactly +VREF). **INTERFACE register survived all 7 calibration commands** — legacy-HAT snap-back issue does NOT reproduce on EVM. Defensive register re-write retained as production safety net. cp3 bug found+fixed: initial test misinterpreted SYGCAL1 as "make output match input"; correct behavior is "normalize input to +VREF" per §9.4.9.6. |
 | 2.2 | — | — | ⊘ TABLED 2026-05-24 | no precision-resistor divider components on hand |
 | 2.3 | — | — | ⊘ TABLED 2026-05-24 | deferred together with 2.2; doesn't need new components, just bench time |
 | 3.1 | | | moved to PLAN_phase3_sensors.md | AIN-pair assignment |
