@@ -68,6 +68,12 @@
 #define PIN_DRDY   PC_6       // J15-27 → J2-61 → PC6,  /DRDY (not gated here)
 #define PIN_RESET  PC_7       // J15-29 → J2-63 → PC7,  /RESET
 
+// Portenta H7's LED_BUILTIN is wired ACTIVE-LOW (HIGH = off, LOW = on),
+// opposite the standard Arduino convention. Verified on the bench 2026-05-24
+// — without these macros, "LED on during sweep" came out dark.
+#define LED_ON   LOW
+#define LED_OFF  HIGH
+
 // =====================================================================
 // ADS1263 commands & registers (datasheet, see doc/)
 // =====================================================================
@@ -293,7 +299,7 @@ void setup() {
     // checkpoints will localize the failure.
 
     pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(LED_BUILTIN, LED_OFF);    // start dark — turn on at sweep start
 
     pinMode(PIN_CS,    OUTPUT);
     pinMode(PIN_RESET, OUTPUT);
@@ -318,8 +324,8 @@ void setup() {
         Serial.println(F("# FAIL: ADS1263 not responding correctly."));
         Serial.println(F("#       Run ADS1263_FirstPowerUp_PIO/ to localize."));
         while (1) {
-            digitalWrite(LED_BUILTIN, HIGH); delay(150);
-            digitalWrite(LED_BUILTIN, LOW);  delay(150);
+            digitalWrite(LED_BUILTIN, LED_ON);  delay(150);
+            digitalWrite(LED_BUILTIN, LED_OFF); delay(150);
         }
     }
 
@@ -338,8 +344,8 @@ void setup() {
         Serial.println(F("# FAIL: VBIAS bit did not stick — POWER write failed."));
         Serial.println(F("#       Run ADS1263_FirstPowerUp_PIO/ cp6 to triage."));
         while (1) {
-            digitalWrite(LED_BUILTIN, HIGH); delay(150);
-            digitalWrite(LED_BUILTIN, LOW);  delay(150);
+            digitalWrite(LED_BUILTIN, LED_ON);  delay(150);
+            digitalWrite(LED_BUILTIN, LED_OFF); delay(150);
         }
     }
     Serial.print(F("# POWER: 0x")); Serial.print(pwr_before, HEX);
@@ -376,13 +382,13 @@ void setup() {
                      "nfb,stuck_pct"));
 
     // -------------------- The actual sweep --------------------
-    digitalWrite(LED_BUILTIN, HIGH);       // LED on during sweep
+    digitalWrite(LED_BUILTIN, LED_ON);     // solid on during sweep (H7 LED is active-low)
     for (size_t si = 0; si < N_SPS; si++) {
         for (size_t gi = 0; gi < N_GAINS; gi++) {
             measure_point(SPS_TABLE[si], GAIN_CODES[gi], GAIN_VALUES[gi]);
         }
     }
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(LED_BUILTIN, LED_OFF);    // off after sweep — heartbeat takes over in loop()
 
     Serial.print(F("# Sweep complete. "));
     Serial.print((unsigned)(N_SPS * N_GAINS));
@@ -393,6 +399,6 @@ void setup() {
 
 void loop() {
     // Slow heartbeat — sweep is done, just signal alive.
-    digitalWrite(LED_BUILTIN, HIGH); delay(1500);
-    digitalWrite(LED_BUILTIN, LOW);  delay(1500);
+    digitalWrite(LED_BUILTIN, LED_ON);  delay(1500);
+    digitalWrite(LED_BUILTIN, LED_OFF); delay(1500);
 }

@@ -40,37 +40,46 @@ import pandas as pd
 
 
 # ---------------------------------------------------------------------------
-# Datasheet reference — ADS1263 Table 7.10 typical input-referred RMS noise.
+# Datasheet reference — ADS1263 Table 8-1 (NOT 7.10 — table number is 8-1
+# in the SBAS661C revision May 2021 datasheet; the original code comment
+# referencing "Table 7.10" was from an older revision).
 #
-# These numbers are APPROXIMATE — please cross-check against the actual
-# datasheet PDF (doc/ADS1263_Datasheet.pdf, §7.10) and refine. The script
-# flags any measured cell that exceeds `threshold * datasheet_typical_uV`.
+# Values below are the Sinc3 filter, ADC1 typical-noise row from datasheet
+# Table 8-1, exact transcription. Units: µV RMS, input-referred.
 #
-# Units: µV RMS, input-referred, VREF = 5 V, Sinc3 filter, PGA enabled.
+# Note on VREF scaling: Table 8-1 is specified at VREF = 2.5 V, but the
+# numbers are reported in absolute µV (not LSBs). For a 32-bit
+# delta-sigma ADC at typical operating points the noise is dominated by
+# the analog front end (PGA + modulator + filter), which is reference-
+# independent in absolute volts. Therefore the µV values apply equally
+# to our rig's VREF = 5 V configuration. The 4800 SPS bench measurement
+# on 2026-05-24 (3.72 µV typical vs 4.34 µV measured = 1.17×) confirms
+# this scaling assumption is reasonable.
 #
-# Filled in to match the order of magnitude of the bring-up baseline
-# (~1.4 µV RMS at 400 SPS, PGA bypass, internal short). PGA-enabled
-# values are roughly the same to slightly higher at gain=1 due to the
-# PGA's own input-referred noise floor.
+# The script flags any measured cell exceeding `threshold * typical`
+# (default threshold = 1.5×). Healthy chips typically land at 1.0–1.5×
+# typical; values above 1.5× warrant investigation.
+#
+# Sinc3 row only — production firmware uses Sinc3 (MODE1 default).
+# If you ever sweep other filter modes, add them here.
 # ---------------------------------------------------------------------------
 DATASHEET_TYPICAL_UV: dict[tuple[int, int], float] = {
-    # (sps, gain) -> typical RMS µV
-    # The numbers below are PLACEHOLDERS — please replace with values
-    # read off the actual datasheet table.
-    (10,    1): 0.35,  (10,    2): 0.25,  (10,    4): 0.18,
-    (10,    8): 0.13,  (10,   16): 0.10,  (10,   32): 0.08,
-    (50,    1): 0.70,  (50,    2): 0.50,  (50,    4): 0.35,
-    (50,    8): 0.25,  (50,   16): 0.19,  (50,   32): 0.15,
-    (100,   1): 1.00,  (100,   2): 0.70,  (100,   4): 0.50,
-    (100,   8): 0.35,  (100,  16): 0.27,  (100,  32): 0.21,
-    (400,   1): 2.00,  (400,   2): 1.40,  (400,   4): 1.00,
-    (400,   8): 0.70,  (400,  16): 0.55,  (400,  32): 0.42,
-    (1200,  1): 3.50,  (1200,  2): 2.50,  (1200,  4): 1.80,
-    (1200,  8): 1.30,  (1200, 16): 1.00,  (1200, 32): 0.80,
-    (2400,  1): 5.00,  (2400,  2): 3.60,  (2400,  4): 2.60,
-    (2400,  8): 1.90,  (2400, 16): 1.50,  (2400, 32): 1.20,
-    (4800,  1): 7.00,  (4800,  2): 5.10,  (4800,  4): 3.70,
-    (4800,  8): 2.70,  (4800, 16): 2.10,  (4800, 32): 1.70,
+    # (sps, gain) -> typical RMS µV, ADC1, Sinc3 filter, VREF=2.5V
+    # (applies to VREF=5V too — see note above)
+    (10,    1): 0.176, (10,    2): 0.088, (10,    4): 0.043,
+    (10,    8): 0.028, (10,   16): 0.018, (10,   32): 0.014,
+    (50,    1): 0.389, (50,    2): 0.196, (50,    4): 0.104,
+    (50,    8): 0.057, (50,   16): 0.038, (50,   32): 0.030,
+    (100,   1): 0.531, (100,   2): 0.277, (100,   4): 0.143,
+    (100,   8): 0.081, (100,  16): 0.054, (100,  32): 0.043,
+    (400,   1): 1.072, (400,   2): 0.550, (400,   4): 0.285,
+    (400,   8): 0.161, (400,  16): 0.107, (400,  32): 0.087,
+    (1200,  1): 1.858, (1200,  2): 0.960, (1200,  4): 0.494,
+    (1200,  8): 0.281, (1200, 16): 0.186, (1200, 32): 0.148,
+    (2400,  1): 2.656, (2400,  2): 1.337, (2400,  4): 0.705,
+    (2400,  8): 0.395, (2400, 16): 0.262, (2400, 32): 0.211,
+    (4800,  1): 3.720, (4800,  2): 1.894, (4800,  4): 0.998,
+    (4800,  8): 0.560, (4800, 16): 0.367, (4800, 32): 0.297,
 }
 
 
@@ -191,7 +200,7 @@ def main() -> int:
 
     print_section(
         "Input-referred RMS noise (µV)",
-        format_pivot(rms_pv, "{:7.3f}", "lower is better; compare against ADS1263 Tbl 7.10"),
+        format_pivot(rms_pv, "{:7.3f}", "lower is better; compare against ADS1263 Tbl 8-1"),
     )
     print_section(
         "Input-referred peak-to-peak (µV)",
@@ -246,7 +255,7 @@ def main() -> int:
             print(f"  wrote {out}")
 
     print()
-    print("Reference: doc/ADS1263_Datasheet.pdf Table 7.10 (typical noise).")
+    print("Reference: doc/ADS1263_Datasheet.pdf Table 8-1 (typical ADC1 noise).")
     print("           doc/MEMO_baseline_testing.md Phase 1.2 acceptance criteria.")
     print()
 

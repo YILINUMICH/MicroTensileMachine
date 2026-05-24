@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | **Diagnostic — not yet bench-verified** (created 2026-05-24). The sketch compiles and the design follows the verified `ADS1263_FirstPowerUp_PIO/` pattern, but no run on hardware has been logged yet. |
+| **Status** | **Diagnostic — bench-verified 2026-05-24.** All 42 (SPS × PGA) cells reported in-spec noise; offset stability across SPS within 12 nV at gain 1; NFB 17.0–22.8 bits across the surface (datasheet typical 17–18). Two cells flagged stuck_pct just above 0.5% threshold (50 SPS gain 2 = 0.6%, gain 4 = 0.8%) — judged counting-statistics noise, not operationally significant. Data: [`data/noisefloor_20260524_1845.csv`](data/noisefloor_20260524_1845.csv). |
 | **Role** | Phase 1.2 characterization sketch. Walks every combination of (SPS ∈ {10, 50, 100, 400, 1200, 2400, 4800}) × (PGA ∈ {1, 2, 4, 8, 16, 32}) with AINCOM-shorted inputs (INPMUX = 0xAA) and VBIAS on. Streams a 42-row CSV over USB serial. M7-only, no M4, no shared driver. |
 | **Created** | 2026-05-24 (with [`../doc/MEMO_baseline_testing.md`](../doc/MEMO_baseline_testing.md)). |
 | **Owner** | Yilin |

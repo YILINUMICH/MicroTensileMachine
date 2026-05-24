@@ -1,6 +1,6 @@
 # ADS1263_NoiseFloor_PIO — full SPS × PGA noise-floor sweep
 
-> **Status: Diagnostic — not yet bench-verified.** See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview. See [../doc/MEMO_baseline_testing.md](../doc/MEMO_baseline_testing.md) for the wider testing plan this implements (this module is Phase 1.2).
+> **Status: Diagnostic — bench-verified 2026-05-24.** All 42 (SPS × PGA) cells in-spec; data at [`data/noisefloor_20260524_1845.csv`](data/noisefloor_20260524_1845.csv). See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview. See [../doc/MEMO_baseline_testing.md](../doc/MEMO_baseline_testing.md) for the wider testing plan this implements (this module is Phase 1.2).
 
 Walks the ADS1263's noise-vs-mode surface by AINCOM-shorting both ADC differential inputs (`INPMUX = 0xAA`) and stepping through every combination of:
 

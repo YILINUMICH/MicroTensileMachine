@@ -1,0 +1,115 @@
+Bring-up record — ADS1263 cp0–cp6 verification on Mid Carrier + EVM
+===================================================================
+
+Date            : 2026-05-24 (build artifact stamp 17:59 UTC)
+Operator        : Yilin Ma
+Hardware        : Arduino Portenta H7 (ABX00042)
+                  Arduino Portenta Mid Carrier (ASX00055)
+                  TI ADS1263 EVM
+Cable           : 6-wire SPI per doc/MEMO_cable_map.md
+                  CS/DRDY/RESET on Mid Carrier J15-25/27/29
+                  → STM32 PA_8 / PC_6 / PC_7
+Reference       : External 5 V (REF7050), applied to AIN0 (+REF) / AIN1 (-REF)
+                  REFMUX = 0x09
+Measurement     : Internal Vshort via AINCOM (INPMUX = 0xAA), VBIAS on
+Sample rate     : 400 SPS
+Sketch          : ADS1263_FirstPowerUp_PIO/ (cp0–cp6, cp6 = VBIAS + PGA mini-sweep)
+Result          : ALL CHECKPOINTS PASSED — Phase 1.1 bench-verified
+
+
+Serial output
+-------------
+============================================================
+  ADS1263 first-power-up diagnostic — M7-only
+============================================================
+Cable map: ../doc/MEMO_cable_map.md
+Carrier:   Portenta Mid Carrier (ASX00055), J15 connector
+EVM:       TI ADS1263 EVM, J2 connector
+
+[cp 0] PASS  Serial up (USB CDC enumerated)
+[cp 1] info  DRDY initial level = HIGH
+[cp 1] PASS  pinMode CS/DRDY/RESET; CS=HIGH, RESET=HIGH
+[cp 2] info  pulsing /RESET LOW for 100 ms (scope-verify if possible)
+[cp 2] PASS  /RESET pulsed
+[cp 3] info  calling SPI.begin() — using default SPI object
+[cp 3] info    (Portenta H7 default SPI → J2-38/40/42 → Mid Carrier J15-20/22/24)
+[cp 3] PASS  SPI.begin() returned
+[cp 4] info  waiting 3000 ms for ADS1263 power-up settle (per integration notes §2)
+[cp 4] info  ID register (0x00) = 0x23  (expecting 0x2X family)
+[cp 4] info  INTERFACE register (0x02) = 0x05  (default 0x05 = STATUS+CRC)
+[cp 4] PASS  ADS1263 found on SPI bus
+[cp 5] info  configuring ADC1: INPMUX=0xAA (AINCOM-shorted), MODE2=0x88 (PGA bypass, 400 SPS), REFMUX=0x09 (external 5V ref on AIN0/AIN1)
+[cp 5] info  100 samples: mean = +0.708 mV   RMS = 1.257 uV   (target: <50 uV)
+[cp 5] PASS  ADC stream alive and within sanity threshold
+[cp 6] info  enabling VBIAS (POWER bit 1) — biases AINCOM to mid-supply (+2.5 V)
+[cp 6] info  POWER: 0x11 (before) → 0x13 (wrote) → 0x13 (readback)
+[cp 6] info  PGA gain sweep at 400 SPS, AINCOM-shorted, 200 samples per gain
+[cp 6] info    gain | MODE2 |  out mean (uV)  | out RMS (uV) |  in mean (uV)  | in RMS (uV) | result
+[cp 6] info    -----+-------+-----------------+--------------+----------------+-------------+-------
+[cp 6] info       1 |  0x08 |       +739.78   |       1.314  |      +739.78   |      1.314  | pass
+[cp 6] info       2 |  0x18 |       +740.85   |       1.261  |      +370.43   |      0.631  | pass
+[cp 6] info       4 |  0x28 |       +741.04   |       1.482  |      +185.26   |      0.371  | pass
+[cp 6] info       8 |  0x38 |       +742.40   |       1.638  |       +92.80   |      0.205  | pass
+[cp 6] info      16 |  0x48 |       +745.63   |       2.312  |       +46.60   |      0.144  | pass
+[cp 6] info      32 |  0x58 |       +751.63   |       3.883  |       +23.49   |      0.121  | pass
+[cp 6] PASS  VBIAS + PGA mini-sweep clean across all gains
+
+============================================================
+  ALL CHECKPOINTS PASSED
+============================================================
+Hardware bring-up + PGA mini-sweep look good. Next steps:
+  - run ADS1263_NoiseFloor_PIO/ for the full SPS × PGA
+    sweep (Phase 1.2 in doc/MEMO_baseline_testing.md).
+  - port SensorHub_PIO to match what worked here:
+    pin defines (PA_8/PC_6/PC_7), REFMUX=0x09,
+    VREF=5.0V in any volts-per-code math, and
+    POWER bit 1 (VBIAS) set when PGA gain > 1.
+  - update doc/MEMO_cable_map.md (load-cell channel
+    now needs an AIN pair OTHER than AIN0/AIN1).
+
+
+Interpretation
+--------------
+cp5 noise floor : 1.257 µV RMS — within 11% of the 2026-05-22 baseline
+                  (1.416 µV). Rig stability confirmed.
+
+cp6 mini-sweep  : POWER readback 0x13 confirms VBIAS bit landed.
+                  All six gain points PASS.
+                  Output-referred RMS stays in single-digit µV at all
+                  gains. Input-referred RMS drops monotonically from
+                  1.314 µV (gain=1) to 0.121 µV (gain=32) — textbook
+                  PGA-improves-resolution behavior.
+
+OFFSET PATTERN  : Output-referred mean is approximately constant at
+                  ~740 µV across all gains, NOT input-referred mean as
+                  the README's illustrative example predicted. This
+                  means the chip's residual offset is dominated by
+                  POST-PGA backend offset, not input-referred offset.
+                  Pattern signature: in_mean = out_mean / gain (clean
+                  1/gain falloff: 740 → 370 → 185 → 92 → 47 → 23 µV).
+                  This is a valid healthy pattern — the chip is fine;
+                  the README's expected-pattern wording is what needs
+                  updating.
+
+
+Issues encountered and resolved during this bring-up session
+------------------------------------------------------------
+1. DFU UPLOAD CONFUSION — after a fresh flash the H7 entered a
+   fast-blink green state and would not enumerate. Recovery procedure
+   that worked:
+   a) Double-tap reset on the H7 module (not Mid Carrier) to enter
+      persistent bootloader (slow green fade, ~2 s period).
+   b) `pio run -t upload` failed initially with "Cannot configure
+      port, PermissionError(13)" when COM7 was still enumerated.
+   c) Once DFU mode was clean (no COM port), flash succeeded.
+
+   For future reference: in DFU mode the H7 does NOT enumerate as a
+   COM port — it enumerates as a USB DFU device. If COM7 (or any
+   COM port) is visible while you expect DFU mode, the board has
+   left DFU and you need to re-trigger the double-tap.
+
+2. OBSOLETE PIO CORE WARNING — PIO printed "Obsolete PIO Core
+   v6.1.16 is used (previous was 6.1.18)" at the top of every run.
+   Indicates two PIO installations are fighting on the system.
+   Did not block the flash but should be cleaned up — see
+   https://docs.platformio.org/en/latest/core/installation/troubleshooting.html

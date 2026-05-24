@@ -1,4 +1,4 @@
-> **Status: Diagnostic** — cp0–cp5 bench-verified on 2026-05-22 (noise floor 1.4 µV RMS at 400 SPS / PGA bypass). **cp6 (VBIAS + PGA mini-sweep) added 2026-05-24 — not yet bench-verified.** Kept around as a re-runnable bring-up tool. See [STATUS.md](STATUS.md) for the working pin defines and register settings. See [../README.md](../README.md) for project overview. See [`../doc/MEMO_baseline_testing.md`](../doc/MEMO_baseline_testing.md) for the wider Phase 1 testing plan; cp6 is its Phase 1.1.
+> **Status: Diagnostic** — **cp0–cp6 all bench-verified.** cp0–cp5 on 2026-05-22 (noise floor 1.4 µV RMS at 400 SPS / PGA bypass). cp6 (VBIAS + PGA mini-sweep) verified on 2026-05-24 (all six gain points PASS). Kept around as a re-runnable bring-up tool. See [STATUS.md](STATUS.md) for the working pin defines and register settings. See [../README.md](../README.md) for project overview. See [`../doc/MEMO_baseline_testing.md`](../doc/MEMO_baseline_testing.md) for the wider Phase 1 testing plan; cp6 is its Phase 1.1.
 
 # ADS1263_FirstPowerUp_PIO — bring-up diagnostic
 
@@ -98,7 +98,12 @@ Hardware bring-up + PGA mini-sweep look good. Next steps:
     now needs an AIN pair OTHER than AIN0/AIN1).
 ```
 
-**Important caveat on the cp6 example numbers above:** the cp6 row values shown are *illustrative* — they show roughly what a healthy chain *should* produce (input-referred mean stays approximately constant across gains, input-referred RMS drops slightly with gain, output-referred values scale with gain). The actual numbers on your bench will depend on REF7050 trim, chip-to-chip offset variation, and the EVM's exact assembly. What matters is the *pattern*: the input-referred mean should be roughly constant across the gain column, and input-referred RMS should be in the single-digit µV range at every gain.
+**Important caveat on the cp6 example numbers above:** the cp6 row values shown are *illustrative*. The actual numbers on your bench will depend on REF7050 trim, chip-to-chip offset variation, and the EVM's exact assembly. What matters is the *pattern*. Two patterns are both valid signs of a healthy chain:
+
+- **Input-referred offset (input-side):** input-referred mean stays approximately constant across gains; output-referred mean scales with gain. This is what the illustrative table above shows.
+- **Output-referred offset (post-PGA):** output-referred mean stays approximately constant across gains; input-referred mean falls as `mean/gain` in a clean 1/gain pattern. This is what was observed on the 2026-05-24 bench run ([`data/firstpowerup_20260524_1759.log`](data/firstpowerup_20260524_1759.log)): ~740 µV output-referred at every gain, 740 → 23 µV input-referred from gain 1 to gain 32.
+
+In either case, the things that *must* be true: input-referred RMS in the single-digit µV range at every gain (and dropping with gain), no `FAIL stuck` rows, and no rows where output-referred RMS exceeds tens of µV.
 
 Built-in LED blinks slowly (~1 Hz) when sitting in the post-success loop. Fast blink (~3 Hz) when halted on a FAIL.
 

@@ -1,7 +1,7 @@
 # MEMO — ADS1263 baseline testing plan
 
-**Status:** active — Phase 0 complete, Phase 1.1+1.2 written (bench-test pending). Subsequent work is split across this memo + three handoff PLANs (see below).
-**Last edited:** 2026-05-24 by Yilin (restructured to split deferred work into per-phase PLAN docs for parallel agent handoff).
+**Status:** active — Phase 0 complete, Phase 1.1 + Phase 1.2 both bench-verified 2026-05-24. Phase 1.3–1.6 (cp7–cp10) ready to implement per [`PLAN_phase1_followups.md`](PLAN_phase1_followups.md).
+**Last edited:** 2026-05-24 by Yilin (Phase 1.1 + Phase 1.2 bench-verified clean).
 **Owner:** Yilin.
 
 The bring-up sketch (`ADS1263_FirstPowerUp_PIO/`) proves the chip is alive on the new hardware. It exercises **one operating point** (400 SPS, PGA bypass, AINCOM-short, external 5 V reference, 100 samples). This memo lays out what comes next — the work needed to **trust** the rig enough to mount sensors and call readings real.
@@ -159,8 +159,8 @@ The active near-term path is ~2 hours of bench work (after the current code-writ
 |---|---|---|---|---|
 | 0.1 | 2026-05-24 | `doc/MEMO_cable_map.md` Cable 2 | done | REF7050 named in cable map |
 | 0.2 | 2026-05-24 | (this memo) | done | EVM is unipolar +5/0 V by design; VBIAS chosen as AINCOM bias method |
-| 1.1 | | | code written 2026-05-24, bench-test pending | cp6 added to `ADS1263_FirstPowerUp_PIO/src/main.cpp` |
-| 1.2 | | | code written 2026-05-24, bench-test pending | new `ADS1263_NoiseFloor_PIO/` module |
+| 1.1 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1759.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1759.log) | **PASS** | cp6 PGA sweep clean across all gains; cp5 baseline reproduced at 1.257 µV RMS. Notable: chip's residual offset is post-PGA (output-referred mean constant at ~740 µV) rather than input-referred. Healthy pattern, just different from README's illustrative example. |
+| 1.2 | 2026-05-24 | [`../ADS1263_NoiseFloor_PIO/data/noisefloor_20260524_1845.csv`](../ADS1263_NoiseFloor_PIO/data/noisefloor_20260524_1845.csv) | **PASS** | All 42 cells in-spec; offset rock-stable across SPS (12 nV span at gain 1); NFB 17.0–22.8 bits (datasheet typical 17–18); anchor (400 SPS, gain 1) = 1.290 µV vs cp5's 1.257 µV. Two cells (50 SPS, gain 2/4) flagged stuck_pct = 0.6%/0.8% — counting-statistics noise, not operationally significant. |
 | 1.3 | | | moved to PLAN_phase1_followups.md | cp7 AIN-pair scan |
 | 1.4 | | | moved to PLAN_phase1_followups.md | cp8 ADC2 cp |
 | 1.5 | | | moved to PLAN_phase1_followups.md | cp9 DRDY edge-rate |

@@ -1,5 +1,5 @@
 /*
- * ADS1263_FirstPowerUp_PIO — six-checkpoint bring-up diagnostic
+ * ADS1263_FirstPowerUp_PIO — eleven-checkpoint bring-up diagnostic
  *
  * Target hardware:  Arduino Portenta H7 (ABX00042)
  *                 + Arduino Portenta Mid Carrier (ASX00055)
@@ -25,6 +25,23 @@
  *                                     SPS × PGA noise sweep in
  *                                     ADS1263_NoiseFloor_PIO/ (Phase 1.2 of
  *                                     doc/MEMO_baseline_testing.md).
+ *   cp 7 : AIN-pair scan              walks INPMUX across non-reference AIN
+ *                                     pairs (AIN2/3, AIN4/5, AIN6/7, AIN8/9
+ *                                     diff + SE-vs-AINCOM). Retires the
+ *                                     legacy HAT's AIN2/3 saturation question
+ *                                     on the bare EVM (Phase 1.3).
+ *   cp 8 : ADC2 enable + read         configures and reads the chip's
+ *                                     secondary 24-bit ADC (ADC2). Unblocks
+ *                                     SensorHub_PIO's dual-ADC mode (Phase 1.4).
+ *   cp 9 : DRDY edge-rate count       counts falling edges on PC_6 for 10 s
+ *                                     at 400 SPS; expects 4000 ± 1%. Confirms
+ *                                     interrupt-driven DRDY is viable on the
+ *                                     Mid Carrier (Phase 1.5, retires legacy
+ *                                     PJ_11 / LoRa conflict question).
+ *   cp10 : TDAC sanity sweep          drives the chip's internal Test DAC
+ *                                     onto AIN6, measures via ADC1, verifies
+ *                                     within ±50 mV. Free DC-accuracy check
+ *                                     (Phase 1.6).
  *
  * Each line of output is prefixed `[cp N]` so it's easy to grep and easy
  * for an AI agent (or future-you) to parse. A FAIL line includes a
@@ -81,14 +98,27 @@
 #define PIN_RESET  PC_7       // J15-29 → J2-63 → PC7,  /RESET
 
 // =====================================================================
+// LED conventions — Portenta H7's LED_BUILTIN is wired ACTIVE-LOW.
+// HIGH on the pin = LED off; LOW = LED on. This is OPPOSITE the standard
+// Arduino convention. Use these macros everywhere to keep the intent
+// readable. (Verified on the bench 2026-05-24 — NoiseFloor's "solid on
+// during sweep" came out dark until polarity was flipped.)
+// =====================================================================
+#define LED_ON   LOW
+#define LED_OFF  HIGH
+
+// =====================================================================
 // ADS1263 commands & registers (from ADS1263 datasheet, doc/)
 // =====================================================================
 #define ADS1263_CMD_RESET   0x06   // soft reset
 #define ADS1263_CMD_START1  0x08   // start ADC1 continuous conversion
 #define ADS1263_CMD_STOP1   0x0A
+#define ADS1263_CMD_START2  0x0C   // start ADC2 continuous conversion (cp8)
+#define ADS1263_CMD_STOP2   0x0E   // stop ADC2 (cp8)
 #define ADS1263_CMD_RREG    0x20   // read register: | addr in low 5 bits
 #define ADS1263_CMD_WREG    0x40   // write register
 #define ADS1263_CMD_RDATA1  0x12   // read ADC1 conversion result
+#define ADS1263_CMD_RDATA2  0x14   // read ADC2 conversion result (cp8)
 
 #define ADS1263_REG_ID         0x00
 #define ADS1263_REG_POWER      0x01
@@ -98,6 +128,10 @@
 #define ADS1263_REG_MODE2      0x05
 #define ADS1263_REG_INPMUX     0x06
 #define ADS1263_REG_REFMUX     0x0F
+#define ADS1263_REG_TDACP      0x10  // Test DAC positive (cp10): bit 7 = OUTP, bits 4:0 = MAGP
+#define ADS1263_REG_TDACN      0x11  // Test DAC negative (cp10): bit 7 = OUTN, bits 4:0 = MAGN
+#define ADS1263_REG_ADC2CFG    0x15  // ADC2 config (cp8): DR2 / REF2 / GAIN2
+#define ADS1263_REG_ADC2MUX    0x16  // ADC2 input mux (cp8): same encoding as INPMUX
 
 #define ADS1263_EXPECTED_ID_UPPER_5BITS  0x20  // 0x2X — silicon revision in low 3
 
@@ -131,8 +165,8 @@ static void cp_fail(int n, const char *what, const char *hint) {
     Serial.print(F("] hint  ")); Serial.println(hint);
     Serial.println(F("[cp X] halting — see README §Failure triage."));
     while (1) {
-        digitalWrite(LED_BUILTIN, HIGH); delay(150);
-        digitalWrite(LED_BUILTIN, LOW);  delay(150);
+        digitalWrite(LED_BUILTIN, LED_ON);  delay(150);
+        digitalWrite(LED_BUILTIN, LED_OFF); delay(150);
     }
 }
 
@@ -196,6 +230,31 @@ static bool ads_read_conversion(int32_t *out_code) {
     return true;
 }
 
+// Read one ADC2 conversion (cp8). ADC2 is the chip's 24-bit secondary
+// ADC, with its own input mux and command set. With INTERFACE = 0x05
+// (chip default — STATUS + CRC bytes wrap each conversion), the RDATA2
+// transaction returns 5 bytes total: STATUS + 3 data + CRC.
+// Returns the signed 32-bit sign-extended code in *out_code.
+static bool ads_read_conversion_adc2(int32_t *out_code) {
+    uint8_t frame[5];
+    SPI.beginTransaction(SPI_CFG);
+    digitalWrite(PIN_CS, LOW);
+    SPI.transfer(ADS1263_CMD_RDATA2);
+    for (int i = 0; i < 5; i++) {
+        frame[i] = SPI.transfer(0x00);
+    }
+    digitalWrite(PIN_CS, HIGH);
+    SPI.endTransaction();
+    // frame[0] = STATUS, frame[1..3] = 24-bit data (MSB first), frame[4] = CRC
+    uint32_t raw = ((uint32_t)frame[1] << 16)
+                 | ((uint32_t)frame[2] << 8)
+                 |  (uint32_t)frame[3];
+    // Sign-extend 24-bit → 32-bit
+    if (raw & 0x00800000) raw |= 0xFF000000;
+    *out_code = (int32_t)raw;
+    return true;
+}
+
 // =====================================================================
 // Checkpoints
 // =====================================================================
@@ -213,7 +272,7 @@ static void cp0_serial_up() {
     cp_pass(0, "Serial up (USB CDC enumerated)");
 
     pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(LED_BUILTIN, LED_OFF);    // start dark — heartbeat starts after setup() returns
 }
 
 static void cp1_gpio_pinmode() {
@@ -548,6 +607,407 @@ static void cp6_vbias_pga_minisweep() {
 }
 
 // =====================================================================
+// Phase 1.3 — cp7 — AIN-pair scan
+// =====================================================================
+// Goal: confirm each non-reference AIN pair on the bare EVM works, and
+// retire the legacy Waveshare HAT's AIN2/3 saturation question. The
+// legacy HAT had unresolved input-stage circuitry that pinned AIN2/3
+// at full-scale under any non-zero input. The bare TI EVM has different
+// input-stage circuitry (passive RC filters per pair, no front-end amp),
+// so the issue may or may not reproduce.
+//
+// Method: walk INPMUX across {AIN2/3, AIN4/5, AIN6/7, AIN8/9} differential
+// and {AIN2, AIN4, AIN6, AIN8} vs AINCOM single-ended. Skip AIN0/AIN1
+// (committed to the REF7050 reference path).
+//
+// At each row: 500 samples at PGA=1, 400 SPS, two-pass mean/RMS.
+// PASS = no saturation, RMS > 0 (conversions advancing).
+//
+// Restore INPMUX=0xAA on exit so downstream cps start from a known state.
+//
+// Datasheet: §9.6.7 (INPMUX), Table 9-41 (MUXP/MUXN codes).
+static void cp7_ain_pair_scan() {
+    cp_info(7, "AIN-pair scan: confirm each non-reference pair "
+                "doesn't reproduce the legacy HAT AIN2/3 saturation");
+
+    // PGA=1, 400 SPS — generous SPS for fast iteration, gain=1 for max
+    // common-mode tolerance. Note cp6's exit state was MODE2=0x58
+    // (gain=32); reset to 0x08 here.
+    ads_write_reg(ADS1263_REG_MODE2, 0x08);
+
+    cp_info(7, "  inpmux | meaning            |  mean (mV)  |  max code   |  min code   |  RMS (uV)  | result");
+    cp_info(7, "  -------+--------------------+-------------+-------------+-------------+------------+--------");
+
+    struct PairCfg { uint8_t inpmux; const char *label; };
+    const PairCfg pairs[] = {
+        { 0x23, "AIN2 vs AIN3 diff " },
+        { 0x45, "AIN4 vs AIN5 diff " },
+        { 0x67, "AIN6 vs AIN7 diff " },   // note: AIN6/7 are also TDAC outputs — run BEFORE cp10
+        { 0x89, "AIN8 vs AIN9 diff " },
+        { 0x2A, "AIN2 vs AINCOM SE " },
+        { 0x4A, "AIN4 vs AINCOM SE " },
+        { 0x6A, "AIN6 vs AINCOM SE " },
+        { 0x8A, "AIN8 vs AINCOM SE " },
+    };
+
+    const double VREF = 5.0;
+    const double LSB  = VREF / 2147483648.0;
+    const int    N    = 500;
+    int32_t      codes[500];
+    bool         all_ok = true;
+    char         buf[160];
+
+    for (size_t row = 0; row < sizeof(pairs)/sizeof(pairs[0]); row++) {
+        ads_write_reg(ADS1263_REG_INPMUX, pairs[row].inpmux);
+        ads_command(ADS1263_CMD_START1);
+        delay(50);                          // Sinc3 settling
+
+        // Collect samples with the same two-pass pattern as cp5/cp6.
+        int32_t code_max = INT32_MIN;
+        int32_t code_min = INT32_MAX;
+        for (int i = 0; i < N; i++) {
+            delay(3);                       // 400 SPS = 2.5 ms; 3 ms keeps us above the conversion period
+            ads_read_conversion(&codes[i]);
+            if (codes[i] > code_max) code_max = codes[i];
+            if (codes[i] < code_min) code_min = codes[i];
+        }
+
+        double sum = 0.0;
+        for (int i = 0; i < N; i++) sum += (double)codes[i];
+        double mean_code = sum / N;
+        double var = 0.0;
+        for (int i = 0; i < N; i++) {
+            double d = (double)codes[i] - mean_code;
+            var += d * d;
+        }
+        double rms_code = sqrt(var / N);
+
+        double mean_mV = mean_code * LSB * 1000.0;
+        double rms_uV  = rms_code  * LSB * 1e6;
+
+        // Acceptance per row:
+        //   - codes not pinned at ±2^31 (saturated): |max|, |min| < 2^30
+        //   - RMS > 0  (conversions advancing)
+        // Mean can be anywhere — floating inputs may pick up mains hum,
+        // or sit at whatever the EVM's RC filter biases them to. The
+        // test is "does the pair work AT ALL", not "is the value right".
+        const int32_t SAT_LIMIT = (int32_t)(1L << 30);
+        bool saturated = (code_max >  SAT_LIMIT) || (code_max < -SAT_LIMIT) ||
+                         (code_min >  SAT_LIMIT) || (code_min < -SAT_LIMIT);
+        bool stuck     = (rms_code == 0.0);
+        const char *verdict = (saturated ? "FAIL sat " :
+                               stuck     ? "FAIL stuck" : "pass");
+        if (saturated || stuck) all_ok = false;
+
+        snprintf(buf, sizeof(buf),
+                 "  0x%02X   | %s | %+9.3f   | %+11ld | %+11ld | %9.3f  | %s",
+                 pairs[row].inpmux, pairs[row].label,
+                 mean_mV, (long)code_max, (long)code_min, rms_uV, verdict);
+        cp_info(7, buf);
+    }
+
+    // Restore neutral state for downstream cps.
+    ads_write_reg(ADS1263_REG_INPMUX, 0xAA);
+
+    if (!all_ok) {
+        cp_fail(7, "one or more AIN pairs failed (saturated or stuck)",
+                "Possible AIN2/3-style issue on this EVM — inspect the input-stage "
+                "filter components for the failing pair on the EVM schematic. If a "
+                "single pair fails, downstream Phase 3 must avoid assigning a sensor "
+                "to it. If ALL pairs fail, suspect chip configuration (PGA bypass "
+                "state, VBIAS) — re-run cp5/cp6 first.");
+    }
+    cp_pass(7, "AIN-pair scan clean — no legacy AIN2/3-style saturation");
+}
+
+// =====================================================================
+// Phase 1.4 — cp8 — ADC2 enable + read
+// =====================================================================
+// Goal: prove the chip's 24-bit secondary ADC (ADC2) works on this EVM.
+// Production firmware (SensorHub_PIO) plans to use ADC2 for the laser
+// channel so load cell + laser can run concurrently on different rates.
+// The bring-up never exercised ADC2 — unknown if it works.
+//
+// Method: write ADC2CFG (data rate, reference, gain), ADC2MUX (input
+// pair), issue START2, wait, read with RDATA2. Confirm non-stuck,
+// non-saturated codes.
+//
+// Configuration:
+//   ADC2CFG = 0x48  →  DR2 = 01 (100 SPS), REF2 = 001 (external AIN0/1
+//                      ref shared with ADC1), GAIN2 = 000 (1 V/V)
+//   ADC2MUX = 0x4A  →  AIN4 (MUXP2) vs AINCOM (MUXN2), single-ended
+//
+// Datasheet: §9.3.7 (ADC2 architecture), §9.5 (commands), §9.6.16
+//            (ADC2CFG / ADC2MUX), Table 9-50 (REF2 codes).
+static void cp8_adc2_check() {
+    cp_info(8, "ADC2 enable + read: configure secondary 24-bit ADC, "
+                "read 100 samples at 100 SPS, gain=1, AIN4 vs AINCOM");
+
+    // ADC2CFG: DR2=01 (100 SPS), REF2=001 (ext AIN0/1, same REF7050 as ADC1),
+    //          GAIN2=000 (1 V/V). Bits: [7:6]=DR2, [5:3]=REF2, [2:0]=GAIN2
+    //          = 01 001 000 = 0x48.
+    ads_write_reg(ADS1263_REG_ADC2CFG, 0x48);
+    ads_write_reg(ADS1263_REG_ADC2MUX, 0x4A);  // AIN4 vs AINCOM
+
+    // Read back to confirm writes landed
+    uint8_t cfg_rb = ads_read_reg(ADS1263_REG_ADC2CFG);
+    uint8_t mux_rb = ads_read_reg(ADS1263_REG_ADC2MUX);
+    char buf[120];
+    snprintf(buf, sizeof(buf),
+             "ADC2CFG readback = 0x%02X (wrote 0x48); ADC2MUX readback = 0x%02X (wrote 0x4A)",
+             cfg_rb, mux_rb);
+    cp_info(8, buf);
+    if (cfg_rb != 0x48 || mux_rb != 0x4A) {
+        cp_fail(8, "ADC2CFG/ADC2MUX writes did not stick",
+                "WREG to ADC2 registers not landing. Same triage as cp5 register "
+                "readback — check /CS hold, SPI mode 1, that the chip isn't in a "
+                "reset state.");
+    }
+
+    // Start ADC2; leave ADC1 running independently. The two ADCs share
+    // the chip but are otherwise independent.
+    ads_command(ADS1263_CMD_START2);
+    delay(50);                              // ADC2 settling
+
+    // Collect 100 samples. At 100 SPS the conversion period is 10 ms;
+    // use delay(15) for a safe margin. Total ~1.5 s.
+    const int N = 100;
+    int32_t   codes[100];
+    for (int i = 0; i < N; i++) {
+        delay(15);
+        ads_read_conversion_adc2(&codes[i]);
+    }
+
+    // Two-pass mean/RMS — same pattern as cp5/cp6. ADC2 is 24-bit so
+    // full-scale = ±2^23 codes (per datasheet §9.3.7).
+    double sum = 0.0;
+    for (int i = 0; i < N; i++) sum += (double)codes[i];
+    double mean_code = sum / N;
+    double var = 0.0;
+    for (int i = 0; i < N; i++) {
+        double d = (double)codes[i] - mean_code;
+        var += d * d;
+    }
+    double rms_code = sqrt(var / N);
+
+    const double VREF = 5.0;
+    const double LSB  = VREF / 8388608.0;   // 2^23 (ADC2 is 24-bit)
+    double mean_mV = mean_code * LSB * 1000.0;
+    double rms_uV  = rms_code  * LSB * 1e6;
+
+    snprintf(buf, sizeof(buf),
+             "100 samples: mean = %+.3f mV   RMS = %.3f uV   "
+             "(ADC2 spec ~5 uV at gain=1, 100 SPS)",
+             mean_mV, rms_uV);
+    cp_info(8, buf);
+
+    // Acceptance:
+    //   - RMS > 0  (conversions advancing)
+    //   - codes not saturated  (|code| < 2^22)
+    //   - RMS plausibly within an order of magnitude of spec.
+    //     ADC2 is intrinsically noisier than ADC1; we allow up to 50 µV.
+    if (rms_code == 0.0) {
+        cp_fail(8, "ADC2 RMS = 0 — every sample identical",
+                "ADC2 isn't converting. Check START2 was clocked, that REF2 "
+                "selection is valid (external AIN0/1 reference must be present), "
+                "and that ADC2MUX isn't pointing at a non-existent or stuck pin.");
+    }
+    if (rms_uV > 50.0) {
+        cp_fail(8, "ADC2 RMS noise > 50 uV — way above spec",
+                "Expected single-digit µV at gain=1, 100 SPS. Suspect reference "
+                "dropout (the REF7050 must reach AIN0/AIN1 — see cp5 setup), or "
+                "the ADC2 channel sees real ambient noise (try AIN0/AIN1 single-"
+                "channel reads to compare).");
+    }
+    // Saturation check
+    int32_t code_max = INT32_MIN, code_min = INT32_MAX;
+    for (int i = 0; i < N; i++) {
+        if (codes[i] > code_max) code_max = codes[i];
+        if (codes[i] < code_min) code_min = codes[i];
+    }
+    const int32_t SAT_LIMIT = (int32_t)(1L << 22);   // 2^22 — half of ADC2's ±2^23 range
+    if (code_max > SAT_LIMIT || code_min < -SAT_LIMIT) {
+        cp_fail(8, "ADC2 codes are saturated",
+                "AIN4 may be sitting outside the input range. Try a different "
+                "AIN channel (cp7 results say which pairs work).");
+    }
+
+    // Tidy up: stop ADC2 so it isn't burning power. Leave ADC1 alone.
+    ads_command(ADS1263_CMD_STOP2);
+
+    cp_pass(8, "ADC2 stream alive — secondary ADC verified on EVM");
+}
+
+// =====================================================================
+// Phase 1.5 — cp9 — DRDY edge-rate count
+// =====================================================================
+// Goal: confirm /DRDY on PC_6 is interrupt-capable on the Mid Carrier.
+// The bring-up uses timed polling (delay(5) between RDATA1 calls)
+// because the legacy HAT setup had DRDY on PJ_11 which was tied to the
+// LoRa IRQ and never went LOW. On the Mid Carrier, /DRDY moved to PC_6
+// — not shared with LoRa — so DRDY should be usable as an interrupt.
+//
+// Method: configure ADC1 at 400 SPS, attach a falling-edge interrupt
+// on PC_6 that increments a counter, run for 10 s, expect 4000 ± 1%.
+//
+// Subtlety per datasheet §9.4.4: /DRDY goes LOW when a new conversion
+// is available and stays LOW until the next RDATA1. If we don't read,
+// DRDY stays LOW continuously after the first conversion — no edges.
+// Solution: poll DRDY in the loop, read RDATA1 to clear it, AND count
+// the falling edges via the ISR.
+//
+// Datasheet: §9.4.4 (DRDY behaviour), §9.6.4 (MODE1 / DRDY mode).
+volatile uint32_t cp9_drdy_count = 0;
+
+static void cp9_drdy_isr() {
+    cp9_drdy_count++;
+}
+
+static void cp9_drdy_edge_count() {
+    cp_info(9, "DRDY edge-rate count: 10 s at 400 SPS, expect 4000 ± 40 edges");
+
+    // ADC1 should already be configured from cp7's exit state
+    // (INPMUX=0xAA, MODE2=0x08). Re-assert defensively.
+    ads_write_reg(ADS1263_REG_INPMUX, 0xAA);
+    ads_write_reg(ADS1263_REG_MODE2,  0x08);
+    ads_command(ADS1263_CMD_START1);
+    delay(50);                              // settling
+
+    cp9_drdy_count = 0;
+    attachInterrupt(digitalPinToInterrupt(PIN_DRDY), cp9_drdy_isr, FALLING);
+
+    // Run for 10 s, polling DRDY to clear it so it can fall again.
+    uint32_t t0 = millis();
+    int32_t  throwaway;
+    while (millis() - t0 < 10000) {
+        if (digitalRead(PIN_DRDY) == LOW) {
+            ads_read_conversion(&throwaway);
+        }
+    }
+
+    detachInterrupt(digitalPinToInterrupt(PIN_DRDY));
+    uint32_t count = cp9_drdy_count;
+
+    char buf[120];
+    snprintf(buf, sizeof(buf),
+             "counted %lu falling edges in 10 s (expected ~4000)",
+             (unsigned long)count);
+    cp_info(9, buf);
+
+    // Acceptance: 3960 ≤ count ≤ 4040 (1% tolerance).
+    if (count < 3960 || count > 4040) {
+        cp_fail(9, "DRDY edge count outside ±1% of expected",
+                "Either (a) PC_6 isn't wired correctly to the EVM's /DRDY pin "
+                "(verify Mid Carrier J15-27 ↔ EVM J2-11), (b) the chip isn't "
+                "in continuous-conversion mode (cp5/cp6 should have caught this), "
+                "or (c) PC_6 isn't supported as an interrupt source by the "
+                "arduino-mbed core on this carrier. If (c), fall back to timed "
+                "polling for now (the bring-up already does this — performance "
+                "is acceptable for our SPS).");
+    }
+    cp_pass(9, "DRDY interrupt-capable on PC_6 — interrupt-driven reads viable");
+}
+
+// =====================================================================
+// Phase 1.6 — cp10 — TDAC sanity check
+// =====================================================================
+// Goal: use the chip's internal Test DAC (TDAC) to drive a known voltage
+// onto AIN6 and verify ADC1 measures it correctly. Free DC-accuracy
+// sanity check that doesn't need any external voltage source.
+//
+// Method: write TDACP register (OUTP=1, MAGP=code) to drive AIN6 to a
+// known voltage referenced to AVSS=GND. Set INPMUX=0x6A (AIN6 vs AINCOM,
+// single-ended) and measure. Expected differential = TDAC_voltage − VBIAS,
+// where VBIAS = 2.5 V (AINCOM mid-supply, set in cp6).
+//
+// MAGP codes (datasheet §9.6.13, Table 9-48):
+//   00000 = 2.500 V    00111 = 3.000 V    01000 = 3.500 V
+//   01001 = 4.500 V    10111 = 2.000 V    11000 = 1.500 V
+//   11001 = 0.500 V
+//
+// Acceptance: each measured differential within ±50 mV of expected
+// (1% of typical test voltage — accommodates TDAC inaccuracy, chip
+// offset, and reference tolerance).
+//
+// Important: TDAC overrides AIN6/AIN7 drivers. Disable TDAC on exit
+// (write TDACP=0x00) so future cps can use AIN6/AIN7 normally.
+//
+// Datasheet: §9.3.12 (TDAC details), §9.6.13–9.6.14 (TDACP/TDACN
+//            registers). EVM user guide §3.1.1.5 (TDAC on AIN6/AIN7).
+static void cp10_tdac_sanity() {
+    cp_info(10, "TDAC sanity: drive AIN6 to known voltages, "
+                 "read via ADC1, expect measured ≈ configured ± 50 mV");
+
+    // Route ADC1 to AIN6 vs AINCOM, PGA=1, 400 SPS.
+    ads_write_reg(ADS1263_REG_INPMUX, 0x6A);
+    ads_write_reg(ADS1263_REG_MODE2,  0x08);
+
+    struct TdacPoint { uint8_t tdacp_reg; double expected_v_diff; const char *label; };
+    const TdacPoint pts[] = {
+        // tdacp_reg = bit 7 (OUTP) | bits 4:0 (MAGP)
+        // expected_v_diff = TDAC_abs_V − VBIAS_2.5V
+        { 0x80, +0.0, "TDACP = 2.5 V" },    // MAGP=00000 → 2.5 V → diff = 0
+        { 0x88, +1.0, "TDACP = 3.5 V" },    // MAGP=01000 → 3.5 V → diff = +1.0
+        { 0x89, +2.0, "TDACP = 4.5 V" },    // MAGP=01001 → 4.5 V → diff = +2.0
+        { 0x97, -0.5, "TDACP = 2.0 V" },    // MAGP=10111 → 2.0 V → diff = -0.5
+        { 0x98, -1.0, "TDACP = 1.5 V" },    // MAGP=11000 → 1.5 V → diff = -1.0
+        { 0x99, -2.0, "TDACP = 0.5 V" },    // MAGP=11001 → 0.5 V → diff = -2.0
+    };
+
+    cp_info(10, "  TDACP setting  | expected diff | measured diff | error (mV) | result");
+    cp_info(10, "  ---------------+---------------+---------------+------------+--------");
+
+    const double VREF = 5.0;
+    const double LSB  = VREF / 2147483648.0;
+    const int    N    = 100;
+    bool         all_ok = true;
+    char         buf[160];
+
+    for (size_t i = 0; i < sizeof(pts)/sizeof(pts[0]); i++) {
+        ads_write_reg(ADS1263_REG_TDACP, pts[i].tdacp_reg);
+        delay(10);                          // TDAC + RC-filter settling
+
+        ads_command(ADS1263_CMD_START1);
+        delay(50);                          // Sinc3 settling
+
+        // Collect samples, two-pass mean.
+        int32_t codes[100];
+        for (int j = 0; j < N; j++) {
+            delay(5);
+            ads_read_conversion(&codes[j]);
+        }
+        double sum = 0.0;
+        for (int j = 0; j < N; j++) sum += (double)codes[j];
+        double mean_code = sum / N;
+        double measured_v = mean_code * LSB;
+        double err_v      = measured_v - pts[i].expected_v_diff;
+        double err_mV     = err_v * 1000.0;
+
+        const char *verdict = (fabs(err_v) < 0.050) ? "pass" : "FAIL";
+        if (verdict[0] == 'F') all_ok = false;
+
+        snprintf(buf, sizeof(buf),
+                 "  %s |   %+6.3f V    |   %+7.3f V   |  %+8.2f  | %s",
+                 pts[i].label, pts[i].expected_v_diff, measured_v, err_mV, verdict);
+        cp_info(10, buf);
+    }
+
+    // Disable TDAC so AIN6/AIN7 can be used normally afterwards.
+    ads_write_reg(ADS1263_REG_TDACP, 0x00);
+    ads_write_reg(ADS1263_REG_INPMUX, 0xAA);   // restore AINCOM-shorted
+
+    if (!all_ok) {
+        cp_fail(10, "TDAC measurements off-spec (one or more rows > ±50 mV)",
+                "Investigate: (1) VREF wrong — should be 5.0 V on REF7050, re-check "
+                "cp5 reference setup; (2) PGA bypass mode left on (MODE2 bit 7 = 1 "
+                "skips the PGA); (3) TDAC didn't enable — confirm TDACP bit 7 (OUTP); "
+                "(4) chip offset — at PGA=1 we expect ~740 µV offset (per cp6), but "
+                "that should be a constant, not a 50+ mV drift across the sweep.");
+    }
+    cp_pass(10, "TDAC sanity passed across the sweep");
+}
+
+// =====================================================================
 // Arduino entry points
 // =====================================================================
 
@@ -559,25 +1019,31 @@ void setup() {
     cp4_ads1263_id();
     cp5_noise_floor();
     cp6_vbias_pga_minisweep();
+    cp7_ain_pair_scan();
+    cp8_adc2_check();
+    cp9_drdy_edge_count();
+    cp10_tdac_sanity();
 
-    banner("ALL CHECKPOINTS PASSED");
-    Serial.println(F("Hardware bring-up + PGA mini-sweep look good. Next steps:"));
-    Serial.println(F("  - run ADS1263_NoiseFloor_PIO/ for the full SPS × PGA"));
-    Serial.println(F("    sweep (Phase 1.2 in doc/MEMO_baseline_testing.md)."));
+    banner("ALL CHECKPOINTS PASSED (cp0–cp10)");
+    Serial.println(F("Phase 1 chip-level baseline complete. Next steps:"));
+    Serial.println(F("  - Phase 2.1 self-calibration verification —"));
+    Serial.println(F("    see doc/MEMO_baseline_testing.md."));
+    Serial.println(F("  - update doc/MEMO_cable_map.md once Phase 3"));
+    Serial.println(F("    sensor AIN-pair assignment is decided"));
+    Serial.println(F("    (uses cp7 results)."));
     Serial.println(F("  - port SensorHub_PIO to match what worked here:"));
     Serial.println(F("    pin defines (PA_8/PC_6/PC_7), REFMUX=0x09,"));
-    Serial.println(F("    VREF=5.0V in any volts-per-code math, and"));
-    Serial.println(F("    POWER bit 1 (VBIAS) set when PGA gain > 1."));
-    Serial.println(F("  - update doc/MEMO_cable_map.md (load-cell channel"));
-    Serial.println(F("    now needs an AIN pair OTHER than AIN0/AIN1)."));
-    Serial.println(F("  - keep this module as a re-runnable diagnostic;"));
-    Serial.println(F("    its STATUS.md is already Diagnostic."));
+    Serial.println(F("    VREF=5.0V in any volts-per-code math, VBIAS"));
+    Serial.println(F("    on for PGA gain > 1, ADC2 verified working,"));
+    Serial.println(F("    interrupt-driven DRDY viable on PC_6."));
+    Serial.println(F("  - keep this module as a re-runnable diagnostic."));
 
     // Slow heartbeat LED to signal "alive and idle"
     pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {
-    digitalWrite(LED_BUILTIN, HIGH); delay(1000);
-    digitalWrite(LED_BUILTIN, LOW);  delay(1000);
+    // Slow ~0.5 Hz heartbeat — proves "alive and idle" after all cps PASS.
+    digitalWrite(LED_BUILTIN, LED_ON);  delay(1000);
+    digitalWrite(LED_BUILTIN, LED_OFF); delay(1000);
 }
