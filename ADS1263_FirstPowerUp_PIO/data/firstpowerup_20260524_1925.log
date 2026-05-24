@@ -1,0 +1,179 @@
+Bench record — cp0–cp10 ALL PASS on Mid Carrier + EVM
+======================================================
+
+Date            : 2026-05-24 (build artifact stamp 19:25 UTC)
+Operator        : Yilin Ma
+Hardware        : Arduino Portenta H7 (ABX00042)
+                  Arduino Portenta Mid Carrier (ASX00055)
+                  TI ADS1263 EVM
+Cable           : 6-wire SPI per doc/MEMO_cable_map.md
+                  CS/DRDY/RESET on Mid Carrier J15-25/27/29
+                  → STM32 PA_8 / PC_6 / PC_7
+Reference       : External 5 V (REF7050), AIN0 (+REF) / AIN1 (-REF)
+                  REFMUX = 0x09
+Sketch          : ADS1263_FirstPowerUp_PIO/ (cp0–cp10)
+Outcome         : ALL CHECKPOINTS PASSED (cp0–cp10)
+                  Phase 1 chip-level baseline COMPLETE.
+
+
+Headline numbers
+----------------
+cp5 noise floor : 1.229 µV RMS at 400 SPS / PGA bypass — 3rd consecutive
+                  run within 3% of original 1.257 µV baseline. Rig is
+                  reproducible to sub-µV.
+cp6 PGA sweep   : input-referred RMS drops monotonically 1.363 → 0.114 µV
+                  across gain {1..32}; same ~740 µV post-PGA offset
+                  signature as prior runs.
+cp7 AIN scan    : ALL 8 pair configs PASS — legacy HAT AIN2/3 saturation
+                  question is RETIRED for the EVM. No pair saturates.
+cp8 ADC2        : RMS 8.5 µV (datasheet typical 10.3 µV @ 100 SPS Sinc3
+                  gain=1) — secondary ADC verified working on EVM.
+cp9 DRDY        : 4007 falling edges in 10 s on PC_6 (expected 4000±40)
+                  — interrupt-driven reads viable. The legacy PJ_11 /
+                  LoRa IRQ conflict does NOT exist on the Mid Carrier.
+cp10 TDAC AVDD  : Derived AVDD = 5.2056 V mean across 5 ratiometric
+                  rows, 24.9 mV span. EVM's TPS7A4700 LDO output is
+                  +5.20 V (in spec). Linear TDAC + ADC chain confirmed.
+
+
+Serial output
+-------------
+============================================================
+  ADS1263 first-power-up diagnostic — M7-only
+============================================================
+Cable map: ../doc/MEMO_cable_map.md
+Carrier:   Portenta Mid Carrier (ASX00055), J15 connector
+EVM:       TI ADS1263 EVM, J2 connector
+
+[cp 0] PASS  Serial up (USB CDC enumerated)
+[cp 1] info  DRDY initial level = HIGH
+[cp 1] PASS  pinMode CS/DRDY/RESET; CS=HIGH, RESET=HIGH
+[cp 2] info  pulsing /RESET LOW for 100 ms (scope-verify if possible)
+[cp 2] PASS  /RESET pulsed
+[cp 3] info  calling SPI.begin() — using default SPI object
+[cp 3] info    (Portenta H7 default SPI → J2-38/40/42 → Mid Carrier J15-20/22/24)
+[cp 3] PASS  SPI.begin() returned
+[cp 4] info  waiting 3000 ms for ADS1263 power-up settle (per integration notes §2)
+[cp 4] info  ID register (0x00) = 0x23  (expecting 0x2X family)
+[cp 4] info  INTERFACE register (0x02) = 0x05  (default 0x05 = STATUS+CRC)
+[cp 4] PASS  ADS1263 found on SPI bus
+[cp 5] info  configuring ADC1: INPMUX=0xAA (AINCOM-shorted), MODE2=0x88 (PGA bypass, 400 SPS), REFMUX=0x09 (external 5V ref on AIN0/AIN1)
+[cp 5] info  100 samples: mean = +0.707 mV   RMS = 1.229 uV   (target: <50 uV)
+[cp 5] PASS  ADC stream alive and within sanity threshold
+[cp 6] info  enabling VBIAS (POWER bit 1) — biases AINCOM to mid-supply (+2.5 V)
+[cp 6] info  POWER: 0x11 (before) → 0x13 (wrote) → 0x13 (readback)
+[cp 6] info  PGA gain sweep at 400 SPS, AINCOM-shorted, 200 samples per gain
+[cp 6] info    gain | MODE2 |  out mean (uV)  | out RMS (uV) |  in mean (uV)  | in RMS (uV) | result
+[cp 6] info    -----+-------+-----------------+--------------+----------------+-------------+-------
+[cp 6] info       1 |  0x08 |       +739.31   |       1.363  |      +739.31   |      1.363  | pass
+[cp 6] info       2 |  0x18 |       +740.39   |       1.360  |      +370.19   |      0.680  | pass
+[cp 6] info       4 |  0x28 |       +740.74   |       1.460  |      +185.19   |      0.365  | pass
+[cp 6] info       8 |  0x38 |       +742.49   |       1.700  |       +92.81   |      0.212  | pass
+[cp 6] info      16 |  0x48 |       +745.74   |       2.180  |       +46.61   |      0.136  | pass
+[cp 6] info      32 |  0x58 |       +751.94   |       3.641  |       +23.50   |      0.114  | pass
+[cp 6] PASS  VBIAS + PGA mini-sweep clean across all gains
+[cp 7] info  AIN-pair scan: confirm each non-reference pair doesn't reproduce the legacy HAT AIN2/3 saturation
+[cp 7] info    inpmux | meaning            |  mean (mV)  |  max code   |  min code   |  RMS (uV)  | result
+[cp 7] info    -------+--------------------+-------------+-------------+-------------+------------+--------
+[cp 7] info    0x23   | AIN2 vs AIN3 diff  |   +67.046   |   +30623557 |   +25928080 |  3014.400  | pass
+[cp 7] info    0x45   | AIN4 vs AIN5 diff  |   +39.389   |   +22905176 |    +9078694 |  9335.276  | pass
+[cp 7] info    0x67   | AIN6 vs AIN7 diff  |   +91.166   |   +41381546 |   +36738257 |  3480.851  | pass
+[cp 7] info    0x89   | AIN8 vs AIN9 diff  |   +45.436   |   +24442041 |   +13195078 |  7648.177  | pass
+[cp 7] info    0x2A   | AIN2 vs AINCOM SE  | -2166.232   |  -893417640 |  -937581749 | 20794.860  | pass
+[cp 7] info    0x4A   | AIN4 vs AINCOM SE  | -2159.969   |  -874631991 |  -937669890 | 30624.287  | pass
+[cp 7] info    0x6A   | AIN6 vs AINCOM SE  | -2156.710   |  -878494560 |  -935886179 | 27527.204  | pass
+[cp 7] info    0x8A   | AIN8 vs AINCOM SE  | -2144.322   |  -881229919 |  -929486148 | 23056.392  | pass
+[cp 7] PASS  AIN-pair scan clean — no legacy AIN2/3-style saturation
+[cp 8] info  ADC2 enable + read: configure secondary 24-bit ADC, read 100 samples at 100 SPS, gain=1, AINCOM-shorted (noise floor test)
+[cp 8] info  ADC2CFG readback = 0x48 (wrote 0x48); ADC2MUX readback = 0xAA (wrote 0xAA)
+[cp 8] info  100 samples: mean = +0.324 mV   RMS = 8.513 uV   (ADC2 spec ~10 uV at gain=1, 100 SPS, AINCOM-shorted)
+[cp 8] PASS  ADC2 stream alive — secondary ADC verified on EVM
+[cp 9] info  DRDY edge-rate count: 10 s at 400 SPS, expect 4000 ± 40 edges
+[cp 9] info  counted 4007 falling edges in 10 s (expected ~4000)
+[cp 9] PASS  DRDY interrupt-capable on PC_6 — interrupt-driven reads viable
+[cp 10] info  TDAC sanity (ratiometric): drive AIN6 to known fractions of AVDD, derive AVDD from each row, check consistency + spec
+[cp 10] info    TDACP setting                  | measured V    | AVDD derived  | result
+[cp 10] info    -------------------------------+---------------+---------------+--------
+[cp 10] info    TDACP = 0.5·AVDD (MAGP=00000) |  +0.0016 V    | (offset row)  | offset = +1.64 mV
+[cp 10] info    TDACP = 0.7·AVDD (MAGP=01000) |  +1.0436 V    |  5.2178 V     | derived
+[cp 10] info    TDACP = 0.9·AVDD (MAGP=01001) |  +2.0848 V    |  5.2120 V     | derived
+[cp 10] info    TDACP = 0.4·AVDD (MAGP=10111) |  -0.5193 V    |  5.1929 V     | derived
+[cp 10] info    TDACP = 0.3·AVDD (MAGP=11000) |  -1.0403 V    |  5.2015 V     | derived
+[cp 10] info    TDACP = 0.1·AVDD (MAGP=11001) |  -2.0816 V    |  5.2040 V     | derived
+[cp 10] info  AVDD derived: mean = 5.2056 V, span = 0.0249 V (across 5 rows)
+[cp 10] PASS  TDAC ratiometric sweep clean — TDAC linear, AVDD in spec
+
+============================================================
+  ALL CHECKPOINTS PASSED (cp0–cp10)
+============================================================
+
+
+Interpretation
+--------------
+cp5 / cp6       : Same patterns as 2026-05-22 and earlier 2026-05-24 runs.
+                  Sub-µV noise floor at 400 SPS / PGA bypass, ~740 µV
+                  post-PGA offset constant across gains.
+
+cp7             : AIN-pair scan retires the legacy AIN2/3 saturation
+                  question. ALL 8 configs (4 differential + 4 single-ended)
+                  PASS. Codes range ±9M to ±893M, well below ±2^30
+                  saturation. High floating-input RMS (3–31 mV) is mains/EMI
+                  pickup — expected and acceptable. Single-ended readings
+                  consistently land at ~-2.15 V (floating AIN ≈ 0.35 V vs
+                  AINCOM @ 2.5 V VBIAS).
+
+cp8             : ADC2 noise floor 8.5 µV, below datasheet typical of
+                  10.3 µV (Table 8-3, 100 SPS, Sinc3, gain=1). Secondary
+                  ADC verified working on EVM — UNBLOCKS SensorHub_PIO's
+                  dual-ADC mode.
+
+cp9             : 4007 / 4000 expected (0.175% over). PC_6 supports
+                  falling-edge interrupts cleanly. Interrupt-driven reads
+                  are viable on the Mid Carrier — RETIRES the legacy
+                  PJ_11 / LoRa IRQ conflict workaround.
+
+cp10            : Ratiometric TDAC sweep. AVDD derived from 5 non-offset
+                  rows: 5.193 to 5.218 V, mean 5.2056 V, span 24.9 mV.
+                  - Consistency check (span < 50 mV): PASS — TDAC + ADC1
+                    chain is linear across the input range.
+                  - Spec check (AVDD in 5.0 ± 0.25 V): PASS — EVM's
+                    TPS7A4700 LDO output is in spec.
+                  - Free bonus: we now have a precise measurement of the
+                    EVM's actual AVDD = 5.2056 V (use this for any
+                    downstream calibration math that depends on supply).
+                  Offset row (0.5·AVDD, diff=0): 1.64 mV, matches the
+                  chip's intrinsic offset pattern from cp5/cp6.
+
+
+Bug found and fixed during this session
+---------------------------------------
+1. cp8 was originally configured with ADC2MUX = 0x4A (AIN4 vs AINCOM),
+   intending to measure a floating pin via ADC2. That picked up ~167 mV
+   RMS of mains EMI on a 100 µV threshold check → spurious FAIL.
+   Fixed by changing ADC2MUX to 0xAA (AINCOM-shorted, matching cp5/cp6's
+   ADC1 noise floor methodology) and bumping the threshold to 100 µV
+   (10× datasheet typical for ADC2 at 100 SPS gain 1).
+
+2. cp10 originally compared measured differential to nominal values from
+   the datasheet table assuming AVDD = 5.000 V exactly. The TDAC outputs
+   are NOT absolute — datasheet §9.3.14 says "The TDAC reference voltage
+   is the analog supply (V_AVDD − V_AVSS); therefore, the output levels
+   refer to, and scale with, the analog power supply." With AVDD = 5.21 V
+   on this EVM, the measured values were ~4% above the assumed nominals,
+   producing spurious FAILs on the high-magnitude rows.
+   Fixed by switching to ratiometric AVDD derivation (back-compute AVDD
+   from each row, check consistency across rows and spec compliance).
+   This is both more diagnostic AND more correct.
+
+
+Phase 1 status
+--------------
+Phase 1 (chip-level baseline) is COMPLETE. All exit criteria met:
+  - Phase 1.1 ✓ — cp0–cp6 bench-verified
+  - Phase 1.2 ✓ — Full SPS × PGA noise sweep clean
+  - Phase 1.3 ✓ — AIN-pair scan, no saturation (cp7)
+  - Phase 1.4 ✓ — ADC2 verified working (cp8)
+  - Phase 1.5 ✓ — DRDY interrupt-capable on PC_6 (cp9)
+  - Phase 1.6 ✓ — TDAC DC-accuracy sanity (cp10), AVDD = 5.2056 V
+
+Ready to proceed to Phase 2.1 (self-calibration verification).

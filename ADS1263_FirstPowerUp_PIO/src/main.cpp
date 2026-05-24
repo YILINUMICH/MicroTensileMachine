@@ -741,23 +741,28 @@ static void cp7_ain_pair_scan() {
 //            (ADC2CFG / ADC2MUX), Table 9-50 (REF2 codes).
 static void cp8_adc2_check() {
     cp_info(8, "ADC2 enable + read: configure secondary 24-bit ADC, "
-                "read 100 samples at 100 SPS, gain=1, AIN4 vs AINCOM");
+                "read 100 samples at 100 SPS, gain=1, AINCOM-shorted (noise floor test)");
 
     // ADC2CFG: DR2=01 (100 SPS), REF2=001 (ext AIN0/1, same REF7050 as ADC1),
     //          GAIN2=000 (1 V/V). Bits: [7:6]=DR2, [5:3]=REF2, [2:0]=GAIN2
     //          = 01 001 000 = 0x48.
     ads_write_reg(ADS1263_REG_ADC2CFG, 0x48);
-    ads_write_reg(ADS1263_REG_ADC2MUX, 0x4A);  // AIN4 vs AINCOM
+    // ADC2MUX = 0xAA → MUXP2 = AINCOM, MUXN2 = AINCOM, both internally
+    // shorted to the AINCOM pin (which VBIAS biases to mid-supply, +2.5 V).
+    // Same as INPMUX=0xAA for ADC1's noise-floor test in cp5. This isolates
+    // ADC2's intrinsic noise from any external input — proves the ADC2
+    // signal chain is alive without dragging EMI pickup into the result.
+    ads_write_reg(ADS1263_REG_ADC2MUX, 0xAA);
 
     // Read back to confirm writes landed
     uint8_t cfg_rb = ads_read_reg(ADS1263_REG_ADC2CFG);
     uint8_t mux_rb = ads_read_reg(ADS1263_REG_ADC2MUX);
     char buf[120];
     snprintf(buf, sizeof(buf),
-             "ADC2CFG readback = 0x%02X (wrote 0x48); ADC2MUX readback = 0x%02X (wrote 0x4A)",
+             "ADC2CFG readback = 0x%02X (wrote 0x48); ADC2MUX readback = 0x%02X (wrote 0xAA)",
              cfg_rb, mux_rb);
     cp_info(8, buf);
-    if (cfg_rb != 0x48 || mux_rb != 0x4A) {
+    if (cfg_rb != 0x48 || mux_rb != 0xAA) {
         cp_fail(8, "ADC2CFG/ADC2MUX writes did not stick",
                 "WREG to ADC2 registers not landing. Same triage as cp5 register "
                 "readback — check /CS hold, SPI mode 1, that the chip isn't in a "
@@ -797,27 +802,31 @@ static void cp8_adc2_check() {
 
     snprintf(buf, sizeof(buf),
              "100 samples: mean = %+.3f mV   RMS = %.3f uV   "
-             "(ADC2 spec ~5 uV at gain=1, 100 SPS)",
+             "(ADC2 spec ~10 uV at gain=1, 100 SPS, AINCOM-shorted)",
              mean_mV, rms_uV);
     cp_info(8, buf);
 
     // Acceptance:
     //   - RMS > 0  (conversions advancing)
     //   - codes not saturated  (|code| < 2^22)
-    //   - RMS plausibly within an order of magnitude of spec.
-    //     ADC2 is intrinsically noisier than ADC1; we allow up to 50 µV.
+    //   - RMS plausibly within an order of magnitude of datasheet typical.
+    //     Datasheet Table 8-3: ADC2 at 100 SPS Sinc3 gain=1 → 10.3 µV RMS.
+    //     We allow up to 100 µV (10× margin) — generous enough to handle
+    //     ambient lab noise but tight enough to catch real failures like
+    //     reference dropout or stuck conversion.
     if (rms_code == 0.0) {
         cp_fail(8, "ADC2 RMS = 0 — every sample identical",
                 "ADC2 isn't converting. Check START2 was clocked, that REF2 "
                 "selection is valid (external AIN0/1 reference must be present), "
                 "and that ADC2MUX isn't pointing at a non-existent or stuck pin.");
     }
-    if (rms_uV > 50.0) {
-        cp_fail(8, "ADC2 RMS noise > 50 uV — way above spec",
-                "Expected single-digit µV at gain=1, 100 SPS. Suspect reference "
-                "dropout (the REF7050 must reach AIN0/AIN1 — see cp5 setup), or "
-                "the ADC2 channel sees real ambient noise (try AIN0/AIN1 single-"
-                "channel reads to compare).");
+    if (rms_uV > 100.0) {
+        cp_fail(8, "ADC2 RMS noise > 100 uV — way above spec",
+                "With AINCOM-shorted (ADC2MUX=0xAA), expected ~10 µV at gain=1, "
+                "100 SPS per datasheet Table 8-3. >100 µV suggests reference "
+                "dropout (REF7050 must reach AIN0/AIN1 — check cp5 setup), VBIAS "
+                "not driving AINCOM (cp6 should have caught this), or chip "
+                "malfunction. Run cp5 first to confirm REF + AINCOM path.");
     }
     // Saturation check
     int32_t code_max = INT32_MIN, code_min = INT32_MAX;
@@ -909,68 +918,87 @@ static void cp9_drdy_edge_count() {
 }
 
 // =====================================================================
-// Phase 1.6 — cp10 — TDAC sanity check
+// Phase 1.6 — cp10 — TDAC sanity check (ratiometric)
 // =====================================================================
 // Goal: use the chip's internal Test DAC (TDAC) to drive a known voltage
-// onto AIN6 and verify ADC1 measures it correctly. Free DC-accuracy
-// sanity check that doesn't need any external voltage source.
+// onto AIN6, verify ADC1 measures it correctly, and back-compute AVDD
+// from the result. Free DC-accuracy sanity check that doesn't need any
+// external voltage source.
 //
-// Method: write TDACP register (OUTP=1, MAGP=code) to drive AIN6 to a
-// known voltage referenced to AVSS=GND. Set INPMUX=0x6A (AIN6 vs AINCOM,
-// single-ended) and measure. Expected differential = TDAC_voltage − VBIAS,
-// where VBIAS = 2.5 V (AINCOM mid-supply, set in cp6).
+// CRITICAL: TDAC outputs are NOT absolute — they're ratios of AVDD.
+// Per datasheet §9.3.14: "The TDAC reference voltage is the analog
+// supply (V_AVDD – V_AVSS); therefore, the output levels refer to,
+// and scale with, the analog power supply." Table 9-8 gives the
+// divider ratios. AINCOM (via VBIAS) sits at 0.5 × AVDD.
 //
-// MAGP codes (datasheet §9.6.13, Table 9-48):
-//   00000 = 2.500 V    00111 = 3.000 V    01000 = 3.500 V
-//   01001 = 4.500 V    10111 = 2.000 V    11000 = 1.500 V
-//   11001 = 0.500 V
+// So the measured differential at AIN6 vs AINCOM is:
+//   V_diff = (MAGP_ratio − 0.5) × AVDD
 //
-// Acceptance: each measured differential within ±50 mV of expected
-// (1% of typical test voltage — accommodates TDAC inaccuracy, chip
-// offset, and reference tolerance).
+// And we can back-compute the EVM's actual AVDD as:
+//   AVDD_derived = V_diff / (MAGP_ratio − 0.5)
 //
-// Important: TDAC overrides AIN6/AIN7 drivers. Disable TDAC on exit
-// (write TDACP=0x00) so future cps can use AIN6/AIN7 normally.
+// This makes cp10 a TWO-IN-ONE check:
+//   (a) Linearity of the TDAC + ADC1 chain: AVDD_derived should be
+//       consistent across all non-zero rows (within ±50 mV).
+//   (b) EVM analog supply in spec: AVDD_derived should be 5.0 V ± 5 %
+//       (the TPS7A4700 LDO tolerance — datasheet allows for trim).
 //
-// Datasheet: §9.3.12 (TDAC details), §9.6.13–9.6.14 (TDACP/TDACN
-//            registers). EVM user guide §3.1.1.5 (TDAC on AIN6/AIN7).
+// Method: route ADC1 to AIN6 vs AINCOM via INPMUX=0x6A, sweep TDACP
+// across the magnitudes in the datasheet table, compute AVDD_derived
+// for each non-zero row, verify (a) and (b).
+//
+// Bench note (2026-05-24): with this rig's REF7050 + EVM,
+// AVDD_derived comes out at ≈ 5.205 V (chip is fine; the original
+// "+50 mV abs-value" tolerance was wrong because it assumed AVDD = 5.0 V
+// exactly).
+//
+// Datasheet: §9.3.14 (TDAC details + Table 9-8 ratios), §9.6.13–9.6.14
+//            (TDACP/TDACN registers). EVM user guide §3.1.1.5 (TDAC on
+//            AIN6/AIN7).
 static void cp10_tdac_sanity() {
-    cp_info(10, "TDAC sanity: drive AIN6 to known voltages, "
-                 "read via ADC1, expect measured ≈ configured ± 50 mV");
+    cp_info(10, "TDAC sanity (ratiometric): drive AIN6 to known fractions of AVDD, "
+                 "derive AVDD from each row, check consistency + spec");
 
     // Route ADC1 to AIN6 vs AINCOM, PGA=1, 400 SPS.
     ads_write_reg(ADS1263_REG_INPMUX, 0x6A);
     ads_write_reg(ADS1263_REG_MODE2,  0x08);
 
-    struct TdacPoint { uint8_t tdacp_reg; double expected_v_diff; const char *label; };
+    struct TdacPoint {
+        uint8_t tdacp_reg;     // bit 7 (OUTP=1) | bits 4:0 (MAGP)
+        double  magp_ratio;    // TDACP output as fraction of AVDD (datasheet Tbl 9-8)
+        const char *label;
+    };
     const TdacPoint pts[] = {
-        // tdacp_reg = bit 7 (OUTP) | bits 4:0 (MAGP)
-        // expected_v_diff = TDAC_abs_V − VBIAS_2.5V
-        { 0x80, +0.0, "TDACP = 2.5 V" },    // MAGP=00000 → 2.5 V → diff = 0
-        { 0x88, +1.0, "TDACP = 3.5 V" },    // MAGP=01000 → 3.5 V → diff = +1.0
-        { 0x89, +2.0, "TDACP = 4.5 V" },    // MAGP=01001 → 4.5 V → diff = +2.0
-        { 0x97, -0.5, "TDACP = 2.0 V" },    // MAGP=10111 → 2.0 V → diff = -0.5
-        { 0x98, -1.0, "TDACP = 1.5 V" },    // MAGP=11000 → 1.5 V → diff = -1.0
-        { 0x99, -2.0, "TDACP = 0.5 V" },    // MAGP=11001 → 0.5 V → diff = -2.0
+        // MAGP=00000 ratio=0.5: TDAC at mid-supply → diff = 0 regardless of AVDD
+        // (useful as offset check; can't derive AVDD from this row)
+        { 0x80, 0.5,    "TDACP = 0.5·AVDD (MAGP=00000)" },
+        { 0x88, 0.7,    "TDACP = 0.7·AVDD (MAGP=01000)" },
+        { 0x89, 0.9,    "TDACP = 0.9·AVDD (MAGP=01001)" },
+        { 0x97, 0.4,    "TDACP = 0.4·AVDD (MAGP=10111)" },
+        { 0x98, 0.3,    "TDACP = 0.3·AVDD (MAGP=11000)" },
+        { 0x99, 0.1,    "TDACP = 0.1·AVDD (MAGP=11001)" },
     };
 
-    cp_info(10, "  TDACP setting  | expected diff | measured diff | error (mV) | result");
-    cp_info(10, "  ---------------+---------------+---------------+------------+--------");
+    cp_info(10, "  TDACP setting                  | measured V    | AVDD derived  | result");
+    cp_info(10, "  -------------------------------+---------------+---------------+--------");
 
     const double VREF = 5.0;
     const double LSB  = VREF / 2147483648.0;
     const int    N    = 100;
-    bool         all_ok = true;
-    char         buf[160];
+    double       avdd_sum = 0.0;
+    int          avdd_count = 0;
+    double       avdd_values[6];                    // one per row (NAN if not derivable)
+    double       offset_v = 0.0;                    // ratio=0.5 row: pure offset
+    char         buf[180];
 
     for (size_t i = 0; i < sizeof(pts)/sizeof(pts[0]); i++) {
         ads_write_reg(ADS1263_REG_TDACP, pts[i].tdacp_reg);
-        delay(10);                          // TDAC + RC-filter settling
+        delay(10);                                  // TDAC + RC-filter settling
 
         ads_command(ADS1263_CMD_START1);
-        delay(50);                          // Sinc3 settling
+        delay(50);                                  // Sinc3 settling
 
-        // Collect samples, two-pass mean.
+        // Two-pass mean.
         int32_t codes[100];
         for (int j = 0; j < N; j++) {
             delay(5);
@@ -980,31 +1008,75 @@ static void cp10_tdac_sanity() {
         for (int j = 0; j < N; j++) sum += (double)codes[j];
         double mean_code = sum / N;
         double measured_v = mean_code * LSB;
-        double err_v      = measured_v - pts[i].expected_v_diff;
-        double err_mV     = err_v * 1000.0;
 
-        const char *verdict = (fabs(err_v) < 0.050) ? "pass" : "FAIL";
-        if (verdict[0] == 'F') all_ok = false;
-
-        snprintf(buf, sizeof(buf),
-                 "  %s |   %+6.3f V    |   %+7.3f V   |  %+8.2f  | %s",
-                 pts[i].label, pts[i].expected_v_diff, measured_v, err_mV, verdict);
-        cp_info(10, buf);
+        // Back-compute AVDD. ratio=0.5 row gives 0/0 — capture as offset.
+        double delta_ratio = pts[i].magp_ratio - 0.5;
+        if (fabs(delta_ratio) < 1e-6) {
+            // ratio=0.5 row: diff = 0·AVDD + offset = offset only
+            offset_v = measured_v;
+            avdd_values[i] = NAN;
+            snprintf(buf, sizeof(buf),
+                     "  %-30s | %+8.4f V    | (offset row)  | offset = %+5.2f mV",
+                     pts[i].label, measured_v, offset_v * 1000.0);
+            cp_info(10, buf);
+        } else {
+            double avdd_derived = measured_v / delta_ratio;
+            avdd_values[i] = avdd_derived;
+            avdd_sum   += avdd_derived;
+            avdd_count += 1;
+            snprintf(buf, sizeof(buf),
+                     "  %-30s | %+8.4f V    | %7.4f V     | derived",
+                     pts[i].label, measured_v, avdd_derived);
+            cp_info(10, buf);
+        }
     }
 
-    // Disable TDAC so AIN6/AIN7 can be used normally afterwards.
+    // Disable TDAC and restore neutral state.
     ads_write_reg(ADS1263_REG_TDACP, 0x00);
-    ads_write_reg(ADS1263_REG_INPMUX, 0xAA);   // restore AINCOM-shorted
+    ads_write_reg(ADS1263_REG_INPMUX, 0xAA);
 
-    if (!all_ok) {
-        cp_fail(10, "TDAC measurements off-spec (one or more rows > ±50 mV)",
-                "Investigate: (1) VREF wrong — should be 5.0 V on REF7050, re-check "
-                "cp5 reference setup; (2) PGA bypass mode left on (MODE2 bit 7 = 1 "
-                "skips the PGA); (3) TDAC didn't enable — confirm TDACP bit 7 (OUTP); "
-                "(4) chip offset — at PGA=1 we expect ~740 µV offset (per cp6), but "
-                "that should be a constant, not a 50+ mV drift across the sweep.");
+    if (avdd_count < 1) {
+        cp_fail(10, "no AVDD-derivable rows — TDAC sweep collapsed",
+                "Every non-offset row failed to produce a valid reading. Check "
+                "TDACP write took effect (OUTP bit = bit 7 must be 1) and that "
+                "PGA isn't saturating (cp6 should have caught this).");
     }
-    cp_pass(10, "TDAC sanity passed across the sweep");
+
+    double avdd_mean = avdd_sum / avdd_count;
+    double avdd_min  = +1e9, avdd_max = -1e9;
+    for (size_t i = 0; i < sizeof(pts)/sizeof(pts[0]); i++) {
+        if (!isnan(avdd_values[i])) {
+            if (avdd_values[i] < avdd_min) avdd_min = avdd_values[i];
+            if (avdd_values[i] > avdd_max) avdd_max = avdd_values[i];
+        }
+    }
+    double avdd_span = avdd_max - avdd_min;
+
+    snprintf(buf, sizeof(buf),
+             "AVDD derived: mean = %.4f V, span = %.4f V (across %d rows)",
+             avdd_mean, avdd_span, avdd_count);
+    cp_info(10, buf);
+
+    // Acceptance:
+    //   (a) Consistency: AVDD span across rows < 50 mV (1% of 5 V) —
+    //       proves TDAC + ADC chain is linear, no calibration issue.
+    //   (b) Spec: AVDD mean within 5.0 V ± 0.25 V (5 %) — TPS7A4700
+    //       LDO tolerance accommodates trim resistors and load.
+    if (avdd_span > 0.050) {
+        cp_fail(10, "AVDD derivation not consistent across rows",
+                "TDAC chain shows non-linearity. Investigate: (1) PGA "
+                "saturating at the extreme rows (try lower MAGP magnitudes); "
+                "(2) AINCOM bias (VBIAS) drifting (cp6 should have caught "
+                "this); (3) reference dropout under load (REF7050 must hold "
+                "5.000 V — measure with a meter at AIN0/AIN1).");
+    }
+    if (avdd_mean < 4.75 || avdd_mean > 5.25) {
+        cp_fail(10, "AVDD derived outside 5.0 V ± 5%",
+                "EVM analog supply (TPS7A4700 LDO output) appears to be out "
+                "of spec. Measure AVDD at the EVM screw terminals with a "
+                "multimeter to confirm.");
+    }
+    cp_pass(10, "TDAC ratiometric sweep clean — TDAC linear, AVDD in spec");
 }
 
 // =====================================================================

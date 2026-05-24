@@ -1,7 +1,7 @@
 # MEMO — ADS1263 baseline testing plan
 
-**Status:** active — Phase 0 complete, Phase 1.1 + Phase 1.2 both bench-verified 2026-05-24. Phase 1.3–1.6 (cp7–cp10) ready to implement per [`PLAN_phase1_followups.md`](PLAN_phase1_followups.md).
-**Last edited:** 2026-05-24 by Yilin (Phase 1.1 + Phase 1.2 bench-verified clean).
+**Status:** active — Phase 0 complete; **Phase 1.1–1.6 all bench-verified 2026-05-24** (chip-level baseline COMPLETE). Ready to proceed to Phase 2.1 (self-calibration verification).
+**Last edited:** 2026-05-24 by Yilin (Phase 1 fully bench-verified — cp0–cp10 PASS, ADC2 + DRDY + TDAC all confirmed working on EVM).
 **Owner:** Yilin.
 
 The bring-up sketch (`ADS1263_FirstPowerUp_PIO/`) proves the chip is alive on the new hardware. It exercises **one operating point** (400 SPS, PGA bypass, AINCOM-short, external 5 V reference, 100 samples). This memo lays out what comes next — the work needed to **trust** the rig enough to mount sensors and call readings real.
@@ -161,10 +161,10 @@ The active near-term path is ~2 hours of bench work (after the current code-writ
 | 0.2 | 2026-05-24 | (this memo) | done | EVM is unipolar +5/0 V by design; VBIAS chosen as AINCOM bias method |
 | 1.1 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1759.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1759.log) | **PASS** | cp6 PGA sweep clean across all gains; cp5 baseline reproduced at 1.257 µV RMS. Notable: chip's residual offset is post-PGA (output-referred mean constant at ~740 µV) rather than input-referred. Healthy pattern, just different from README's illustrative example. |
 | 1.2 | 2026-05-24 | [`../ADS1263_NoiseFloor_PIO/data/noisefloor_20260524_1845.csv`](../ADS1263_NoiseFloor_PIO/data/noisefloor_20260524_1845.csv) | **PASS** | All 42 cells in-spec; offset rock-stable across SPS (12 nV span at gain 1); NFB 17.0–22.8 bits (datasheet typical 17–18); anchor (400 SPS, gain 1) = 1.290 µV vs cp5's 1.257 µV. Two cells (50 SPS, gain 2/4) flagged stuck_pct = 0.6%/0.8% — counting-statistics noise, not operationally significant. |
-| 1.3 | | | moved to PLAN_phase1_followups.md | cp7 AIN-pair scan |
-| 1.4 | | | moved to PLAN_phase1_followups.md | cp8 ADC2 cp |
-| 1.5 | | | moved to PLAN_phase1_followups.md | cp9 DRDY edge-rate |
-| 1.6 | | | moved to PLAN_phase1_followups.md | cp10 TDAC sanity |
+| 1.3 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp7 AIN-pair scan: all 8 pair configs PASS, no saturation. Legacy AIN2/3 question RETIRED. |
+| 1.4 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp8 ADC2 enable+read: 8.5 µV RMS at 100 SPS Sinc3 gain=1 (datasheet typical 10.3 µV). Unblocks SensorHub_PIO dual-ADC mode. Bug found+fixed: original ADC2MUX=0x4A read floating AIN4, picked up EMI; changed to 0xAA (AINCOM-shorted) to measure intrinsic noise floor. |
+| 1.5 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp9 DRDY edge-rate: 4007/4000 falling edges in 10 s on PC_6. Interrupt-driven reads viable on Mid Carrier; legacy PJ_11/LoRa IRQ conflict does not apply here. |
+| 1.6 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp10 ratiometric TDAC: AVDD derived = 5.2056 V mean, 24.9 mV span across 5 rows. EVM's TPS7A4700 LDO output is 5.2 V (in spec, trim choice). Bug found+fixed: original test assumed AVDD=5.0V exactly; per datasheet §9.3.14, TDAC outputs scale with AVDD, so we rewrote as a ratiometric AVDD derivation. |
 | 2.1 | | | pending (active here) | self-calibration verification — to write after Phase 1 bench-tests |
 | 2.2 | — | — | ⊘ TABLED 2026-05-24 | no precision-resistor divider components on hand |
 | 2.3 | — | — | ⊘ TABLED 2026-05-24 | deferred together with 2.2; doesn't need new components, just bench time |
