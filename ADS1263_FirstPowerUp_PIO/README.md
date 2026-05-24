@@ -1,8 +1,8 @@
-> **Status: Diagnostic** — bench-verified on 2026-05-22 against the new H7 + Mid Carrier + ADS1263 EVM hardware (all six checkpoints PASS, noise floor 1.4 µV RMS). Kept around as a re-runnable bring-up tool. See [STATUS.md](STATUS.md) for the working pin defines and register settings. See [../README.md](../README.md) for project overview.
+> **Status: Diagnostic** — cp0–cp5 bench-verified on 2026-05-22 (noise floor 1.4 µV RMS at 400 SPS / PGA bypass). **cp6 (VBIAS + PGA mini-sweep) added 2026-05-24 — not yet bench-verified.** Kept around as a re-runnable bring-up tool. See [STATUS.md](STATUS.md) for the working pin defines and register settings. See [../README.md](../README.md) for project overview. See [`../doc/MEMO_baseline_testing.md`](../doc/MEMO_baseline_testing.md) for the wider Phase 1 testing plan; cp6 is its Phase 1.1.
 
 # ADS1263_FirstPowerUp_PIO — bring-up diagnostic
 
-Six-checkpoint sketch for the **first power-on** of the new hardware combination:
+Seven-checkpoint sketch for the **first power-on** of the new hardware combination plus the Phase 1.1 PGA mini-sweep:
 
 - Arduino Portenta H7 (ABX00042)
 - Arduino Portenta Mid Carrier (ASX00055)
@@ -68,20 +68,37 @@ EVM:       TI ADS1263 EVM, J2 connector
 [cp 4] info  ID register (0x00) = 0x23  (expecting 0x2X family)
 [cp 4] info  INTERFACE register (0x02) = 0x05  (default 0x05 = STATUS+CRC)
 [cp 4] PASS  ADS1263 found on SPI bus
-[cp 5] info  configuring ADC1: INPMUX=0x01 (AIN0/AIN1), MODE2=0x88 (PGA bypass, 400 SPS), REFMUX=0x00 (internal 2.5V)
-[cp 5] info  100 samples: mean = +0.043 mV   RMS = 12.640 uV
+[cp 5] info  configuring ADC1: INPMUX=0xAA (AINCOM-shorted), MODE2=0x88 (PGA bypass, 400 SPS), REFMUX=0x09 (external 5V ref on AIN0/AIN1)
+[cp 5] info  100 samples: mean = +0.708 mV   RMS = 1.416 uV   (target: <50 uV)
 [cp 5] PASS  ADC stream alive and within sanity threshold
+[cp 6] info  enabling VBIAS (POWER bit 1) — biases AINCOM to mid-supply (+2.5 V)
+[cp 6] info  POWER: 0x11 (before) → 0x13 (wrote) → 0x13 (readback)
+[cp 6] info  PGA gain sweep at 400 SPS, AINCOM-shorted, 200 samples per gain
+[cp 6] info    gain | MODE2 |  out mean (uV)  | out RMS (uV) |  in mean (uV)  | in RMS (uV) | result
+[cp 6] info    -----+-------+-----------------+--------------+----------------+-------------+-------
+[cp 6] info       1 |  0x08 |       +700.00   |      1.500   |     +700.00    |     1.500   | pass
+[cp 6] info       2 |  0x18 |      +1400.00   |      2.000   |     +700.00    |     1.000   | pass
+[cp 6] info       4 |  0x28 |      +2800.00   |      3.000   |     +700.00    |     0.750   | pass
+[cp 6] info       8 |  0x38 |      +5600.00   |      5.000   |     +700.00    |     0.625   | pass
+[cp 6] info      16 |  0x48 |     +11200.00   |      9.000   |     +700.00    |     0.563   | pass
+[cp 6] info      32 |  0x58 |     +22400.00   |     17.000   |     +700.00    |     0.531   | pass
+[cp 6] PASS  VBIAS + PGA mini-sweep clean across all gains
 
 ============================================================
   ALL CHECKPOINTS PASSED
 ============================================================
-Hardware bring-up looks good. Next steps:
-  - short AIN0 to AIN1 on the EVM and re-run for the
-    true noise-floor measurement (target: < 50 uV RMS)
-  - then port SensorHub_PIO pin defines to match the
-    PIN_CS / PIN_DRDY / PIN_RESET values that worked here
-  - update doc/MEMO_cable_map.md if anything changed.
+Hardware bring-up + PGA mini-sweep look good. Next steps:
+  - run ADS1263_NoiseFloor_PIO/ for the full SPS × PGA
+    sweep (Phase 1.2 in doc/MEMO_baseline_testing.md).
+  - port SensorHub_PIO to match what worked here:
+    pin defines (PA_8/PC_6/PC_7), REFMUX=0x09,
+    VREF=5.0V in any volts-per-code math, and
+    POWER bit 1 (VBIAS) set when PGA gain > 1.
+  - update doc/MEMO_cable_map.md (load-cell channel
+    now needs an AIN pair OTHER than AIN0/AIN1).
 ```
+
+**Important caveat on the cp6 example numbers above:** the cp6 row values shown are *illustrative* — they show roughly what a healthy chain *should* produce (input-referred mean stays approximately constant across gains, input-referred RMS drops slightly with gain, output-referred values scale with gain). The actual numbers on your bench will depend on REF7050 trim, chip-to-chip offset variation, and the EVM's exact assembly. What matters is the *pattern*: the input-referred mean should be roughly constant across the gain column, and input-referred RMS should be in the single-digit µV range at every gain.
 
 Built-in LED blinks slowly (~1 Hz) when sitting in the post-success loop. Fast blink (~3 Hz) when halted on a FAIL.
 
@@ -101,7 +118,11 @@ The "hint" line on every FAIL gives you the most likely first thing to check. Be
 | `[cp 4] FAIL ID = 0xFF` (MISO floating high) | No chip is being selected — /CS line broken | The brown wire (cable #4, J15-25 → J2-7) is open. Reseat or replace. Also verify `PIN_CS` macro matches J15-25. |
 | `[cp 4] FAIL ID = 0xXX` (wrong family) | SPI bus alive but the wrong chip is answering, or framing is off | (1) Confirm SPI mode 1 is being used (CPOL=0, CPHA=1 — already set in `SPI_CFG`). (2) Check for any other SPI device on the same bus that might be answering. |
 | `[cp 5] FAIL register readback mismatch` | WREG not landing — usually a /CS hold timing issue | This shouldn't happen on a fresh, clean bring-up. If it does, capture a scope trace of /CS during the WREG transaction — `/CS` should stay LOW for the full 3-byte WREG sequence. |
-| `[cp 5] FAIL RMS > 5 mV` | Floating inputs picking up mains hum, OR reference voltage problem | (1) Short AIN0 to AIN1 on the EVM and re-run — if RMS drops to single-digit µV, this is just unconnected-input pickup and you can ignore it for first power-up. (2) If still high with inputs shorted: check `REFMUX` is `0x00` (internal 2.5 V); check the EVM's REFOUT jumper. |
+| `[cp 5] FAIL RMS > 5 mV` | Floating inputs picking up mains hum, OR reference voltage problem | (1) Verify `INPMUX=0xAA` (AINCOM-shorted internally) — should give differential = 0 regardless of external wiring. (2) If still high: check `REFMUX` is `0x09` and the REF7050 is actually present at AIN0/AIN1 (multimeter to confirm +5 V). |
+| `[cp 6] FAIL VBIAS bit did not stick` | WREG to POWER register not landing | Same triage as cp5 register readback. Sometimes a delay before cp6 helps if back-to-back WREGs are racing. |
+| `[cp 6] FAIL stuck` row at any gain | Conversions not advancing after MODE2 change | START1 command may not be clocking through cleanly when MODE2 is written while the chip is in continuous-conversion mode. Try stopping (STOP1), writing MODE2, then START1 again. |
+| `[cp 6] FAIL noisy` row at gain ≥ 2 | VBIAS didn't land → AINCOM railed → PGA Vcm out of range | (1) Confirm cp6's `POWER readback` line shows bit 1 set (value 0x13 not 0x11). (2) If POWER bit 1 stuck, try the J5:1↔J5:2 jumper on the EVM as a fallback (ties AINCOM to REFOUT = 2.5 V externally). (3) If both bias methods produce noisy gain ≥ 2 rows, suspect the PGA settling delay — try doubling the post-`START1` `delay(50)` to `delay(100)`. |
+| `[cp 6] FAIL noisy` row at gain = 1 only | Either the cp5 baseline was wrong (something changed between cp5 and cp6), or the PGA itself is noisier than spec | Re-run cp5 — its number should be within ~2× of cp6's gain=1 output-referred RMS. A big disagreement means something physical changed during the sketch. |
 
 ---
 

@@ -16,6 +16,15 @@
  *   cp 4 : ADS1263 ID read            reads register 0x00, expects 0x23
  *   cp 5 : Self-noise short test      shorts AIN0 to AIN1 on the EVM and
  *                                     measures the resulting RMS noise
+ *   cp 6 : VBIAS + PGA mini-sweep     enables VBIAS (POWER bit 1 → AINCOM
+ *                                     biased to mid-supply +2.5 V), then
+ *                                     walks PGA gain ∈ {1,2,4,8,16,32} at
+ *                                     400 SPS with AINCOM-shorted inputs.
+ *                                     Confirms the AINCOM biasing strategy
+ *                                     and the PGA path before the full
+ *                                     SPS × PGA noise sweep in
+ *                                     ADS1263_NoiseFloor_PIO/ (Phase 1.2 of
+ *                                     doc/MEMO_baseline_testing.md).
  *
  * Each line of output is prefixed `[cp N]` so it's easy to grep and easy
  * for an AI agent (or future-you) to parse. A FAIL line includes a
@@ -395,6 +404,149 @@ static void cp5_noise_floor() {
     cp_pass(5, "ADC stream alive and within sanity threshold");
 }
 
+static void cp6_vbias_pga_minisweep() {
+    // Phase 1.1 of doc/MEMO_baseline_testing.md — the mini-sweep that
+    // confirms VBIAS biasing works at every PGA gain we care about, before
+    // we commit to the full SPS × PGA grid in ADS1263_NoiseFloor_PIO/.
+    //
+    // Why we need VBIAS:
+    //   cp5 ran with PGA BYPASS (MODE2 = 0x88), which has a rail-to-rail
+    //   input range and tolerates a floating AINCOM. The moment we turn
+    //   the PGA on (any gain ≥ 1 with bit 7 = 0), the common-mode range
+    //   tightens substantially. AINCOM has to sit inside the PGA's Vcm
+    //   range for the conversion to be meaningful.
+    //
+    //   The ADS1263EVM is unipolar by design: AVDD = +5 V from the
+    //   on-board TPS7A4700 LDO, AVSS = GND. Mid-supply is +2.5 V.
+    //   The chip's VBIAS function (POWER register bit 1, datasheet
+    //   §9.3.12 Figure 9-26) drives the AINCOM pin to (AVDD+AVSS)/2,
+    //   which is exactly the middle of the PGA's input range.
+    //
+    //   Settling time per datasheet Table 9-7 is ≤ 0.22 ms at 0.1 µF
+    //   load capacitance. The EVM has only 150 pF on AINCOM (R21/C21),
+    //   so settling is much faster — 5 ms delay below is generous.
+    //
+    // What success looks like:
+    //   At every gain, with AINCOM-shorted (INPMUX = 0xAA, both ADC
+    //   differential inputs internally routed to the AINCOM pin), the
+    //   input-referred RMS noise should be in the single-digit µV
+    //   range. At gain=1 it should roughly match cp5's PGA-bypass
+    //   number (~1.4 µV RMS). At higher gain, output-referred RMS
+    //   scales up by ~gain× while input-referred RMS stays similar
+    //   or drops (PGA dominates over ADC quantization noise as gain
+    //   rises).
+
+    cp_info(6, "enabling VBIAS (POWER bit 1) — biases AINCOM to mid-supply (+2.5 V)");
+
+    uint8_t pwr_before = ads_read_reg(ADS1263_REG_POWER);
+    uint8_t pwr_target = pwr_before | 0x02;
+    ads_write_reg(ADS1263_REG_POWER, pwr_target);
+    delay(5);                              // VBIAS settle, see comment above
+
+    uint8_t pwr_rb = ads_read_reg(ADS1263_REG_POWER);
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "POWER: 0x%02X (before) → 0x%02X (wrote) → 0x%02X (readback)",
+             pwr_before, pwr_target, pwr_rb);
+    cp_info(6, buf);
+    if ((pwr_rb & 0x02) == 0) {
+        cp_fail(6, "VBIAS bit did not stick in POWER register",
+                "WREG to POWER 0x01 not landing. Check /CS hold timing, "
+                "SPI mode 1, and that the chip is not in a reset state. "
+                "On older arduino-mbed cores, very fast back-to-back "
+                "WREGs can race — try adding a delay before this cp.");
+    }
+
+    // INPMUX stays at 0xAA (set in cp5) — both ADC inputs routed to
+    // AINCOM internally. Re-write it defensively in case anything
+    // between cp5 and here disturbed it.
+    ads_write_reg(ADS1263_REG_INPMUX, 0xAA);
+
+    cp_info(6, "PGA gain sweep at 400 SPS, AINCOM-shorted, 200 samples per gain");
+    cp_info(6, "  gain | MODE2 |  out mean (uV)  | out RMS (uV) |  in mean (uV)  | in RMS (uV) | result");
+    cp_info(6, "  -----+-------+-----------------+--------------+----------------+-------------+-------");
+
+    const double VREF = 5.0;
+    const double LSB  = VREF / 2147483648.0;   // 2^31
+    const uint8_t gains[]      = { 1, 2, 4,  8, 16, 32 };
+    const uint8_t gain_codes[] = { 0, 1, 2,  3,  4,  5 };
+    const int     N            = 200;
+    int32_t       codes[200];
+    bool          all_ok       = true;
+
+    for (int g = 0; g < 6; g++) {
+        uint8_t gain  = gains[g];
+        uint8_t mode2 = (uint8_t)((gain_codes[g] << 4) | 0x08);   // bit 7 = 0 (PGA enabled), DR = 1000 (400 SPS)
+        ads_write_reg(ADS1263_REG_MODE2, mode2);
+        uint8_t mode2_rb = ads_read_reg(ADS1263_REG_MODE2);
+        if (mode2_rb != mode2) {
+            snprintf(buf, sizeof(buf),
+                     "  %4u |  0x%02X | MODE2 wrote 0x%02X but readback 0x%02X — skipping row",
+                     gain, mode2, mode2, mode2_rb);
+            cp_info(6, buf);
+            all_ok = false;
+            continue;
+        }
+
+        ads_command(ADS1263_CMD_START1);
+        delay(50);                          // Sinc3 settling
+
+        // Two-pass mean / RMS to avoid double-precision loss when
+        // accumulating squares of int32_t codes (which can hit ~10^9).
+        // Same pattern as cp5_noise_floor() above.
+        int stuck = 0;
+        for (int i = 0; i < N; i++) {
+            delay(5);                        // 400 SPS = 2.5 ms; 5 ms is safe margin
+            ads_read_conversion(&codes[i]);
+            if (i > 0 && codes[i] == codes[i-1]) stuck++;
+        }
+
+        double sum = 0.0;
+        for (int i = 0; i < N; i++) sum += (double)codes[i];
+        double mean_code = sum / N;
+        double var = 0.0;
+        for (int i = 0; i < N; i++) {
+            double d = (double)codes[i] - mean_code;
+            var += d * d;
+        }
+        double rms_code = sqrt(var / N);
+
+        double out_mean_uV = mean_code * LSB * 1e6;
+        double out_rms_uV  = rms_code  * LSB * 1e6;
+        double in_mean_uV  = out_mean_uV / (double)gain;
+        double in_rms_uV   = out_rms_uV  / (double)gain;
+
+        // Sanity verdict per row:
+        //   "FAIL stuck"  → RMS exactly 0  (conversions not advancing)
+        //   "FAIL noisy"  → input-referred RMS > 50 µV (way above spec)
+        //   "WARN dup"    → > 10% of samples were identical to the previous
+        //                   (possible polling-faster-than-conversion at
+        //                    higher gains, but at 400 SPS this is unlikely)
+        //   "pass"        → everything looks healthy
+        const char *verdict;
+        if (rms_code == 0.0)            { verdict = "FAIL stuck"; all_ok = false; }
+        else if (in_rms_uV > 50.0)      { verdict = "FAIL noisy"; all_ok = false; }
+        else if (stuck > N / 10)        { verdict = "WARN dup ";  /* not fatal */ }
+        else                            { verdict = "pass";       }
+
+        snprintf(buf, sizeof(buf),
+                 "  %4u |  0x%02X |  %+12.2f   |  %10.3f  |  %+11.2f   |  %9.3f  | %s",
+                 gain, mode2, out_mean_uV, out_rms_uV, in_mean_uV, in_rms_uV, verdict);
+        cp_info(6, buf);
+    }
+
+    if (!all_ok) {
+        cp_fail(6, "VBIAS / PGA mini-sweep had at least one failing row",
+                "Inspect the table above. 'FAIL stuck' = RMS == 0 "
+                "(conversions not advancing — check START1 was clocked, "
+                "DRDY not held). 'FAIL noisy' = input-referred RMS > 50 µV "
+                "(VBIAS not landing → AINCOM railed; or PGA settling "
+                "incomplete — try doubling the 50 ms post-START1 delay; "
+                "or reference dropout — re-run cp5 first to confirm).");
+    }
+    cp_pass(6, "VBIAS + PGA mini-sweep clean across all gains");
+}
+
 // =====================================================================
 // Arduino entry points
 // =====================================================================
@@ -406,16 +558,20 @@ void setup() {
     cp3_spi_begin();
     cp4_ads1263_id();
     cp5_noise_floor();
+    cp6_vbias_pga_minisweep();
 
     banner("ALL CHECKPOINTS PASSED");
-    Serial.println(F("Hardware bring-up looks good. Next steps:"));
+    Serial.println(F("Hardware bring-up + PGA mini-sweep look good. Next steps:"));
+    Serial.println(F("  - run ADS1263_NoiseFloor_PIO/ for the full SPS × PGA"));
+    Serial.println(F("    sweep (Phase 1.2 in doc/MEMO_baseline_testing.md)."));
     Serial.println(F("  - port SensorHub_PIO to match what worked here:"));
     Serial.println(F("    pin defines (PA_8/PC_6/PC_7), REFMUX=0x09,"));
-    Serial.println(F("    VREF=5.0V in any volts-per-code math."));
+    Serial.println(F("    VREF=5.0V in any volts-per-code math, and"));
+    Serial.println(F("    POWER bit 1 (VBIAS) set when PGA gain > 1."));
     Serial.println(F("  - update doc/MEMO_cable_map.md (load-cell channel"));
     Serial.println(F("    now needs an AIN pair OTHER than AIN0/AIN1)."));
-    Serial.println(F("  - flip this module's STATUS.md from To-Test to"));
-    Serial.println(F("    Diagnostic; keep it for re-runnable bring-up."));
+    Serial.println(F("  - keep this module as a re-runnable diagnostic;"));
+    Serial.println(F("    its STATUS.md is already Diagnostic."));
 
     // Slow heartbeat LED to signal "alive and idle"
     pinMode(LED_BUILTIN, OUTPUT);

@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| **Status** | **Diagnostic** — bench-verified on 2026-05-22 (all six checkpoints PASS, noise floor 1.4 µV RMS at 400 SPS / PGA bypass / VREF=5V). Kept around as a re-runnable bring-up tool for any future hardware change. Log: [`data/firstpowerup_20260522_1726.log`](data/firstpowerup_20260522_1726.log). |
-| **Role** | Bring-up diagnostic. Six ordered checkpoints (Serial / GPIO / /RESET pulse / SPI.begin / ADS1263 ID read / self-noise short). Halts on first FAIL with a specific "look at X" hint. M7-only — no M4, no RPC, no shared driver. |
+| **Status** | **Diagnostic** — bench-verified through cp5 on 2026-05-22 (noise floor 1.4 µV RMS at 400 SPS / PGA bypass / VREF=5V). **cp6 (VBIAS + PGA mini-sweep) added 2026-05-24 — not yet bench-verified.** Kept around as a re-runnable bring-up tool for any future hardware change. Log: [`data/firstpowerup_20260522_1726.log`](data/firstpowerup_20260522_1726.log). |
+| **Role** | Bring-up diagnostic. Seven ordered checkpoints (Serial / GPIO / /RESET pulse / SPI.begin / ADS1263 ID read / self-noise short / **VBIAS + PGA mini-sweep**). Halts on first FAIL with a specific "look at X" hint. M7-only — no M4, no RPC, no shared driver. cp6 implements Phase 1.1 of [`../doc/MEMO_baseline_testing.md`](../doc/MEMO_baseline_testing.md). |
 | **Created** | 2026-05-22 (with the cable map in [`../doc/MEMO_cable_map.md`](../doc/MEMO_cable_map.md)) |
 | **Owner** | Yilin |
 | **Quick test** | `pio run -t upload` then `pio device monitor` — expect six `[cp N] PASS` lines and an `ALL CHECKPOINTS PASSED` banner. |
@@ -21,6 +21,7 @@ These are the working values that any other firmware on this rig should match:
 | `REFMUX`    | `0x09`  | External 5 V reference on AIN0 (+REF) / AIN1 (−REF). Datasheet §9.6.12. |
 | `VREF`      | `5.0 V` | In any volts-per-code math (`V = code · VREF / 2^31` for ADC1). |
 | `INPMUX` for noise-floor | `0xAA` | AINCOM-shorted both inputs. **AIN0/AIN1 are reference-only on this rig and MUST NOT be used as measurement inputs.** |
+| `POWER` for PGA gain > 1 | `0x13` | INTREF on (bit 4) + **VBIAS on (bit 1)** → drives AINCOM to mid-supply (+2.5 V) so the PGA's common-mode range is satisfied. Without VBIAS, AINCOM floats and PGA-enabled measurements will rail or read garbage. Datasheet §9.3.12 Figure 9-26. |
 | SPI         | mode 1, 500 kHz, default SPI object on the Mid Carrier | |
 | ADS1263 ID  | `0x23` (silicon rev 3) | Read of register 0x00 after reset. |
 

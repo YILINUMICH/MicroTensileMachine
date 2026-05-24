@@ -63,7 +63,8 @@ Every module below carries a status. Same vocabulary in every README and in the 
 
 | Folder | Status | Purpose |
 |---|---|---|
-| [`ADS1263_FirstPowerUp_PIO/`](ADS1263_FirstPowerUp_PIO/STATUS.md) | **Diagnostic** (passed 2026-05-22) | **Six-checkpoint diagnostic** for the first power-up of the new H7 + Mid Carrier + ADS1263 EVM combination. M7-only, no external deps. Working pin defines (`PA_8/PC_6/PC_7`) and register config (`REFMUX=0x09`, external 5 V ref) live in its [STATUS.md](ADS1263_FirstPowerUp_PIO/STATUS.md) — use those when porting `SensorHub_PIO`. |
+| [`ADS1263_FirstPowerUp_PIO/`](ADS1263_FirstPowerUp_PIO/STATUS.md) | **Diagnostic** (cp0–cp5 passed 2026-05-22; cp6 added 2026-05-24, not yet bench-verified) | **Seven-checkpoint diagnostic** for the first power-up of the new H7 + Mid Carrier + ADS1263 EVM combination. M7-only, no external deps. cp0–cp5 are bring-up; cp6 (VBIAS + PGA mini-sweep) implements Phase 1.1 of [doc/MEMO_baseline_testing.md](doc/MEMO_baseline_testing.md). Working pin defines (`PA_8/PC_6/PC_7`) and register config (`REFMUX=0x09`, external 5 V ref, **VBIAS on for PGA gain > 1**) live in its [STATUS.md](ADS1263_FirstPowerUp_PIO/STATUS.md) — use those when porting `SensorHub_PIO`. |
+| [`ADS1263_NoiseFloor_PIO/`](ADS1263_NoiseFloor_PIO/STATUS.md) | **Diagnostic** (created 2026-05-24, not yet bench-verified) | **Phase 1.2 noise-floor sweep.** Walks SPS ∈ {10, 50, 100, 400, 1200, 2400, 4800} × PGA ∈ {1, 2, 4, 8, 16, 32} with AINCOM-shorted inputs, streams a 42-row CSV over USB serial. Python script in `tools/` compares to ADS1263 datasheet Table 7.10 and flags anomalies. Run after `ADS1263_FirstPowerUp_PIO/` cp0–cp6 pass. |
 | [`SensorHub_PIO/`](SensorHub_PIO/STATUS.md) | **WIP** (needs Mid Carrier port) | **Current production firmware target.** Dual-ADC driver — load cell on ADC1, laser on ADC2 — single serial stream with `src` column. Supersedes the two single-path builds below. |
 | [`LaserHead_PIO/`](LaserHead_PIO/STATUS.md) | **Diagnostic** | Single-path reference build (ADC2 / laser only). Kept for bring-up isolation. |
 | [`LoadCell_PIO/`](LoadCell_PIO/STATUS.md) | **Diagnostic** | Single-path reference build (ADC1 / load cell only). Kept for bring-up isolation. |
@@ -94,6 +95,7 @@ Every module below carries a status. Same vocabulary in every README and in the 
 | MCU | Arduino Portenta H7 (ABX00042) | [doc/PortentaH7_ABX00042_Pinout.pdf](doc/PortentaH7_ABX00042_Pinout.pdf) |
 | Carrier | Arduino Portenta Mid Carrier (ASX00055) | [doc/PortentaMidCarrier_ASX00055_Pinout.pdf](doc/PortentaMidCarrier_ASX00055_Pinout.pdf) |
 | ADC board | **TI ADS1263 EVM** (32-bit ADC1 + 24-bit ADC2) — connected to the Mid Carrier via a 6-wire SPI cable, see [doc/MEMO_cable_map.md](doc/MEMO_cable_map.md) | [doc/ADS1263_Datasheet.pdf](doc/ADS1263_Datasheet.pdf), [doc/ADS1263_EVM_User_Guide.pdf](doc/ADS1263_EVM_User_Guide.pdf) |
+| Voltage reference | **TI REF7050** (5.000 V precision reference) — feeds the ADS1263's external reference inputs on AIN0 / AIN1, see [doc/MEMO_cable_map.md](doc/MEMO_cable_map.md) Cable 2 | (vendor site) |
 | ~~ADC HAT (legacy)~~ | ~~Waveshare High-Precision AD HAT (ADS1263)~~ — used during March–April 2026 bring-up with the Hat Carrier; **superseded by the EVM**. Many firmware READMEs still reference this setup; the body content remains accurate for historical context but does not describe the current rig. | (same datasheets as the EVM — the silicon is identical) |
 | Displacement sensor | Keyence IL-030 laser, 30 mm reference, ±5 mm range | [doc/KeyenceIL_LaserSensor_Manual.pdf](doc/KeyenceIL_LaserSensor_Manual.pdf) |
 | Load cell amplifier | LCA-9PC / LCA-RTC | [doc/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf](doc/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf) |
@@ -112,6 +114,7 @@ See [doc/README.md](doc/README.md) for the per-PDF index with one-line descripti
 | Run an SMA characterization experiment | [`SMA_CharacterizationV2/`](SMA_CharacterizationV2/) — `python sma_recorder.py` |
 | Re-calibrate the laser head before a run | [`Calibrate_LaserHead/`](Calibrate_LaserHead/) — `python run_calibration.py` |
 | First-time power up the H7 + Mid Carrier + ADS1263 EVM | [`ADS1263_FirstPowerUp_PIO/`](ADS1263_FirstPowerUp_PIO/) — start here for any new hardware combination |
+| Characterize the ADS1263 noise floor across all SPS × PGA modes | [`ADS1263_NoiseFloor_PIO/`](ADS1263_NoiseFloor_PIO/) — run after first-power-up cp0–cp6 pass; see [doc/MEMO_baseline_testing.md](doc/MEMO_baseline_testing.md) |
 | Flash/modify the firmware on the H7 | [`SensorHub_PIO/`](SensorHub_PIO/) (current target, but bring-up must pass first) |
 | Bring up / debug the ADC stand-alone | [`ADS1263_FirstPowerUp_PIO/`](ADS1263_FirstPowerUp_PIO/) first, then [`LoadCell_PIO/`](LoadCell_PIO/) or [`LaserHead_PIO/`](LaserHead_PIO/) |
 | Look up an ADS1263 register or known issue | [`ADS1263/ADS1263_H7_Integration_Notes.md`](ADS1263/ADS1263_H7_Integration_Notes.md) |

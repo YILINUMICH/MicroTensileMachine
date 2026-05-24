@@ -1,7 +1,8 @@
 # MEMO — Cable map
 
 **Status:** active — keep updated as the rig changes.
-**Last edited:** 2026-05-22 by Yilin (added Cable 2 — external reference wiring after the first power-up bring-up established AIN0/AIN1 as the reference pair).
+**Last edited:** 2026-05-24 by Yilin (named the external reference as TI REF7050; previously left as TBD on Cable 2).
+**Previously edited:** 2026-05-22 by Yilin (added Cable 2 — external reference wiring after the first power-up bring-up established AIN0/AIN1 as the reference pair).
 
 Operator-maintained record of every cable in the rig. Datasheets tell you what each connector *can* be; this file tells you what it actually *is* on this bench.
 
@@ -47,8 +48,8 @@ The ADS1263 EVM is configured for an **external 5 V reference** on this rig (not
 
 | # | Signal | Direction | **ADS1263 EVM pin** | Color | **Source side** | Notes |
 |---|---|---|---|---|---|---|
-| 1 | **+REF (5 V)** | Supply → EVM | AIN0 screw terminal | TBD (operator: fill in) | Bench 5 V precision reference (operator: fill in supply make/model and adjustment setting) | Range per datasheet §9.3.8.2: 0.9 V to 5 V. We're at the upper bound. |
-| 2 | **−REF (return)** | EVM → Supply | AIN1 screw terminal | TBD | Bench 5 V reference ground/return | Differential pair with wire #1. |
+| 1 | **+REF (5 V)** | Supply → EVM | AIN0 screw terminal | TBD (operator: fill in) | **TI REF7050** (5.000 V precision voltage reference IC). M-grade: 0.05% initial accuracy, 3 ppm/°C typical drift, ~5 µVpp 0.1–10 Hz noise. | Range per datasheet §9.3.8.2: 0.9 V to 5 V. We're at the upper bound. REF7050 noise is ~7× below the ADS1263's intrinsic noise floor at 400 SPS / PGA=1, so the reference is not the limiting factor for noise; thermal drift (~15 µV/°C on a 5 V ref) sets the long-term ceiling. |
+| 2 | **−REF (return)** | EVM → Supply | AIN1 screw terminal | TBD | REF7050 ground / return | Differential pair with wire #1. |
 
 ### Bypass / hold-down components (per datasheet §9.3.8.2 and §9.3.8.4)
 
