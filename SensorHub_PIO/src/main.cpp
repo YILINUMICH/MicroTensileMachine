@@ -28,7 +28,8 @@
  *   pio run -e portenta_m4        -t upload
  *   pio device monitor
  *
- * → Power-cycle the Hat Carrier after every upload.
+ * → Power-cycle the rig (USB + EVM supply) after every upload — the
+ *   dfu reset alone does not cleanly re-power the EVM's analog rails.
  */
 
 #include <Arduino.h>
@@ -99,8 +100,10 @@ void setup() {
     CP(1, "Serial.begin done");
 
     // ADS1263 power-up settle — required on every cold boot. The dfu
-    // reset doesn't cleanly re-power the HAT's 3.3 V LDO rail, so give
-    // the chip time to come out of reset before we talk SPI to it.
+    // reset doesn't cleanly re-power the EVM's analog rails (the
+    // on-board TPS7A4700 LDO needs a full power-on transient to
+    // settle), so give the chip time to come out of reset before we
+    // talk SPI to it.
     RPC.println("[M4] waiting 3000 ms for ADS1263 to power up...");
     delay(3000);
     RPC.println("[M4] ADS1263 power-up settle done");

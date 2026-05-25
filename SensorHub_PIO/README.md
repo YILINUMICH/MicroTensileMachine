@@ -1,4 +1,4 @@
-> **Status: WIP** — needs port from Hat Carrier → Mid Carrier (ASX00055). See [STATUS.md](STATUS.md) for module-level state and TODOs. See [../README.md](../README.md) for project overview.
+> **Status: WIP** — code port from Hat Carrier → Mid Carrier (ASX00055) is done in source; **not yet bench-verified** on the Mid Carrier + bare TI EVM. See [STATUS.md](STATUS.md) for module-level state and TODOs. See [../README.md](../README.md) for project overview.
 
 # SensorHub_PIO — dual-ADC firmware (load cell + laser head)
 
@@ -23,7 +23,7 @@ This supersedes the legacy Hat-Carrier channel assignment (AIN0/AIN1 + AIN2/AIN3
 ```
 REFMUX         = 0x09   external REF7050 on AIN0 (+REF), AIN1 (-REF)
 POWER          = 0x13   INTREF on, VBIAS on (AINCOM @ +2.5 V)
-MODE1          = 0x80   Sinc3, chop off, delay 8.7 µs
+MODE1          = 0x40   Sinc3 (FILTER[2:0] = 010b → bits 7:5 = 010), chop off
 
 [ADC1 — load cell]
 INPMUX         = 0x23   AIN2 (+), AIN3 (−)
@@ -55,7 +55,7 @@ ADC2CFG        = 0x81   DR2 = 400 SPS, GAIN2 = 1, REF2 = external (shares AIN0/A
 **When to deviate.**
 
 - *Transient capture* (sudden slip, fracture, impact): step both ADCs to **1200 SPS** and switch LCA-9PC jumpers E3/E8 to position **c** (1 kHz LPF). Noise penalty on ADC1 is ~1.7× RMS (1.29 → 2.20 µV) → 19.3 noise-free bits, still plenty for force; Nyquist becomes 600 Hz on both channels.
-- *Maximum DC accuracy, slow experiments* (creep, slow ramps): drop ADC1 to **20 SPS with the FIR filter** (MODE1[6:4] = 0b100) — gives simultaneous 50/60 Hz mains notches. Pair with LCA-9PC jumpers at position **a** (100 Hz LPF).
+- *Maximum DC accuracy, slow experiments* (creep, slow ramps): drop ADC1 to **20 SPS with the FIR filter** (MODE1[7:5] = 0b100 → write `MODE1 = 0x80`) — gives simultaneous 50/60 Hz mains notches. FIR is only valid at ≤20 SPS. Pair with LCA-9PC jumpers at position **a** (100 Hz LPF).
 
 ---
 
@@ -79,15 +79,15 @@ toggled per read) and independent polling timers.
 Two purposes:
 
 1. **Production firmware** — the full tensile rig needs both load and
-   displacement captured from the same HAT with a single serial stream
-   and a shared time base. This is that firmware.
+   displacement captured from the same ADS1263 with a single serial
+   stream and a shared time base. This is that firmware.
 
-2. **Diagnostic isolation** — if ADC2 is misbehaving on AIN2/AIN3 but
-   ADC1 reads correctly on AIN0/AIN1 in this same firmware, the fault
-   is **local to the ADC2 input path** (AIN2/AIN3 pins, input protection
-   components on the HAT, sensor wiring, etc.), *not* the chip itself,
-   the HAT's power rails, the SPI bus, or the driver. Swap load-cell
-   wiring onto AIN2/AIN3 and vice versa to further bisect.
+2. **Diagnostic isolation** — if one ADC path is misbehaving while the
+   other reads correctly in this same firmware, the fault is **local to
+   that ADC's input path** (the AIN pair, sensor wiring, EVM front-end
+   for that pair), *not* the chip itself, the EVM's power rails, the
+   SPI bus, or the driver. Swap the sensor wiring across AIN pairs to
+   further bisect.
 
 ## Wiring
 
@@ -135,11 +135,12 @@ pio device monitor                          # 115200 baud
 
 Thereafter only re-flash `portenta_m4` while iterating.
 
-> **Power-cycle the Hat Carrier after every flash.** The dfu reset
-> does not cleanly re-power the HAT's 3.3 V LDO rail; without a full
-> power cycle you may see `ID=0x00` / `adc.begin returned FALSE`.
-> Unplug USB and J9 (if connected), wait ~5 seconds, reapply, reopen
-> the monitor.
+> **Power-cycle the rig after every flash.** The dfu reset does not
+> cleanly re-power the EVM's analog rails (the on-board TPS7A4700 LDO
+> needs a full power-on transient to settle); without a full power
+> cycle you may see `ID=0x00` / `adc.begin returned FALSE`. Unplug
+> USB and the EVM supply, wait ~5 seconds, reapply, reopen the
+> monitor.
 
 ## Expected boot output
 
