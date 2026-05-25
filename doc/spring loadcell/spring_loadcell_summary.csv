@@ -1,0 +1,26 @@
+"Spring force-displacement characterization (Instron 2530-100N, load-only ramps)"
+
+run_file,n_points,duration_s,disp_min_mm,disp_max_mm,force_min_mN,force_max_mN,force_max_gf,k_fullrange_mN/mm,k_inspec_mN/mm,intercept_mN,R2_inspec,resid_RMS_mN,pct_above_floor
+BMXSpring_1_1.csv,1692,33.8,0.0,33.745,-0.0,1039.5,106.0,30.785,30.738,2.99,0.999998,0.29,61.6
+BMXSpring_2_1.csv,1710,34.2,0.0,34.113,-5.8,1050.6,107.13,30.898,30.891,-2.85,0.999998,0.26,61.6
+BMXSpring_3_1.csv,1711,34.2,0.0,34.145,-6.4,1050.6,107.14,30.904,30.9,-3.64,0.999998,0.25,61.6
+BMXSpring_4_1.csv,1705,34.1,0.0,34.026,-6.7,1047.3,106.8,30.908,30.908,-4.15,0.999998,0.24,61.5
+
+Summary / derived,value,units / note
+pooled_k,30.857,"mN/mm (in-spec data, all runs)"
+pooled_k,3.1465,gf/mm
+pooled_k,30.857,N/m
+pooled_intercept,-1.85,"mN (~0, no initial tension)"
+pooled_R2,0.99995,-
+pooled_resid_RMS,1.33,mN
+k_run_to_run_mean,30.859,mN/mm
+k_run_to_run_std,0.081,mN/mm (0.26% CV)
+est_force_scale_uncertainty,~0.4,% (0.26% run scatter + ~0.3% 100N-cell in-spec)
+100N_cell_spec_floor,400.0,mN (0.4% of capacity)
+100N_cell_spec_floor,40.8,gf
+floor_crossover_disp,12.96,mm (below this k is extrapolated)
+GSO50_fullscale,490.3,mN (= 50 gf)
+spring_disp_at_GSO_FS,15.89,mm (deflection to reach 50 gf)
+GSO_range_chars_in_spec,18.0,% (rest relies on spring linearity)
+hysteresis_data,none,load-only ramps; add load+unload to quantify
+recommended_mapping,F[mN] = 30.86 * x[mm],x = spring deflection from Keyence
