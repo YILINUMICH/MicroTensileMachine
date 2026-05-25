@@ -77,7 +77,10 @@ Add an entry per cable as the rig is wired up. Suggested order of importance:
 - [ ] **Keyence IL-030 controller → ADS1263 EVM AIN?/AIN?** — Channel assignment pending the load-cell decision above. Analog signal out (white) and analog ground (shield) per the IL-Series manual. Note the V↔mm scaling currently configured on the IL-030 controller (1 V/mm default; confirm what's actually set).
 - [ ] **DC actuation supply → bias-tee DC port → SMA DUT pigtails.** Polarity, current limit setting, supply ground reference.
 - [ ] **Bias-tee AC port → Keysight E4980AL front terminals.** Cable type (BNC? banana?), length (matters for the SHORT de-embedding stability per Notion §4.2).
-- [ ] **USB cables.** Which physical USB-A port on the host PC each instrument uses, since some workflows hard-code `COM5` (Zaber) / `COM8` (H7) — those COM-port assignments are Windows-specific to the current host.
+- [ ] **USB cables.** Which physical USB-A port on the host PC each instrument uses. **Current host (Yilin's Windows machine, 2026-05-25):**
+    - **COM5** — Zaber X-LRM200A stage (FTDI bridge, USB VID:PID = `0403:6001`)
+    - **COM8** — Portenta H7 (Arduino CDC, USB VID:PID = `2341:025B` in normal mode; `2341:035B` in DFU mode)
+    - `SensorHub_PIO/platformio.ini` pins `upload_port = COM8` and `monitor_port = COM8` (in a shared `[env]` block) so PIO doesn't grab the Zaber by COM-number race. COM-numbers are Windows-specific and may renumber when the H7 is replugged into a different USB-A port — if that happens, check `pio device list`, update the .ini, or override at the CLI with `--upload-port COMx`. The VID:PIDs above are stable across hosts; PIO's `upload_port` is a glob over port paths and doesn't accept VID:PID directly.
 
 ---
 
