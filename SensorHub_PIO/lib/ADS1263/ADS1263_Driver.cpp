@@ -110,8 +110,13 @@ bool ADS1263_Driver::begin() {
     DRV_LOG.print(F("ADS1263 found. ID=0x"));
     DRV_LOG.println(id, HEX);
 
-    // POWER: internal reference on (harmless if we end up using AVDD/AVSS).
-    writeRegister(ADS1263_REG_POWER, 0x11);
+    // POWER: INTREF on (bit 0) + VBIAS on (bit 1) — VBIAS biases AINCOM to
+    // mid-supply (AVDD/2 ≈ +2.5 V) so the PGA has the headroom it needs at
+    // gain > 1. Leave VBIAS asserted even at gain = 1 so a future operating-
+    // mode change (e.g. dropping LCA-9PC amp gain and turning ADS1263 PGA
+    // up) doesn't introduce a surprise. Datasheet §9.6.2; settling time ≤
+    // 0.22 ms at 0.1 µF (the EVM's 150 pF on AINCOM is much less, so faster).
+    writeRegister(ADS1263_REG_POWER, 0x13);
     delay(150);
 
     // INTERFACE: STATUS + CHK enabled for both ADC1 and ADC2 reads.
@@ -124,7 +129,7 @@ bool ADS1263_Driver::begin() {
     // Park ADC1 on an inactive mux/ref. configureADC1() will reprogram
     // these if ADC1 is actually used.
     writeRegister(ADS1263_REG_MODE0,  0x00);
-    writeRegister(ADS1263_REG_MODE1,  0x60);                       // Sinc4 — best 50/60 Hz rejection at 400 SPS
+    writeRegister(ADS1263_REG_MODE1,  0x40);                       // Sinc3 (matches sibling drivers and README §Recommended)
     writeRegister(ADS1263_REG_MODE2,  0x80 | (ADS1263_20SPS & 0x0F));  // PGA bypass, 20 SPS
     writeRegister(ADS1263_REG_INPMUX, _adc1_inpmux);               // AINCOM/AINCOM
     writeRegister(ADS1263_REG_REFMUX, _adc1_refmux);               // internal 2.5 V
@@ -185,10 +190,15 @@ void ADS1263_Driver::configureADC1(uint8_t inpmux,
     writeRegister(ADS1263_REG_INPMUX, _adc1_inpmux);
     writeRegister(ADS1263_REG_REFMUX, _adc1_refmux);
     writeMODE2();
-    // MODE1 = Sinc4 filter — best 50/60 Hz mains rejection of the filters
-    // legal at 400 SPS (FIR is only valid at ≤20 SPS). ADC2 is controlled
-    // independently by ADC2CFG so this setting doesn't affect it.
-    writeRegister(ADS1263_REG_MODE1, 0x60);
+    // MODE1 = Sinc3, chop off (FILTER[2:0] = 010b → bits 7:5 = 010).
+    // Sinc3 is the production filter used across the sibling drivers
+    // (LoadCell_PIO, LaserHead_PIO, all ADS1263/Test* boards) and is
+    // what the README "Recommended configuration" table specifies. The
+    // settling penalty vs Sinc4 is small at 400 SPS and the throughput
+    // is the same; FIR is only valid at ≤20 SPS so it's not an option
+    // here. ADC2 is controlled independently by ADC2CFG and is fixed
+    // at Sinc3 internally, so this MODE1 write only affects ADC1.
+    writeRegister(ADS1263_REG_MODE1, 0x40);
     writeRegister(ADS1263_REG_MODE0, 0x00);
 
     DRV_LOG.print(F("ADC1 configured: INPMUX=0x"));

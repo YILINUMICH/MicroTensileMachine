@@ -1,9 +1,16 @@
 /**
  * @file main.cpp  (Portenta H7 dual-core — SensorHub: dual ADC)
  *
- * Runs BOTH ADS1263 ADCs simultaneously on the same chip:
- *   - ADC1 (32-bit, 400 SPS) → AIN0(+) / AIN1(-)   [load cell]
- *   - ADC2 (24-bit, 100 SPS) → AIN2(+) / AIN3(-)   [laser head]
+ * Runs BOTH ADS1263 ADCs simultaneously on the same chip. Production
+ * Phase 4 channel assignment (per README §Recommended configuration,
+ * derived 2026-05-24 after cp7 retired the legacy AIN2/3 saturation
+ * question and cp8 verified ADC2 clean):
+ *
+ *   - ADC1 (32-bit, 400 SPS, Sinc3, PGA=1) → AIN2(+) / AIN3(-)  [LCA-9PC load cell]
+ *   - ADC2 (24-bit, 400 SPS, Sinc3, gain=1) → AIN4(+) / AIN5(-) [Keyence IL-030 laser]
+ *
+ * External REF7050 (+5 V) on AIN0(+)/AIN1(-) is shared by both ADCs
+ * (REFMUX = 0x09 for ADC1, REF2 = 001 for ADC2).
  *
  * Merge of the sibling LoadCell_PIO (ADC1-only) and LaserHead_PIO
  * (ADC2-only) projects. Each ADC read is its own CS-low→CS-high SPI
@@ -61,9 +68,13 @@ ADS1263_Driver adc;
 // individual paths can be temporarily disabled for bring-up diagnostics
 // without touching the loop() code.
 #define ENABLE_ADC1   1
-#define ENABLE_ADC2   0    // disabled: AIN2/AIN3 path is being skipped while
-                           // ADC2 stays in a saturated state. Laser is routed
-                           // through ADC1/AIN0-AIN1 instead.
+#define ENABLE_ADC2   1    // 2026-05-24: re-enabled. cp7 (AIN-pair scan) +
+                           // cp8 (ADC2 cp) PASSED in ADS1263_FirstPowerUp_PIO/
+                           // on the bare TI EVM — the legacy Waveshare-HAT
+                           // AIN2/3 saturation does NOT reproduce here. ADC2
+                           // measured 8.5 µV RMS at 100 SPS Sinc3 gain=1
+                           // (datasheet typical 10.3 µV). Production assignment:
+                           // load cell on ADC1/AIN2-AIN3, laser on ADC2/AIN4-AIN5.
 
 // Checkpoint macro — same convention as the sibling projects.
 #define CP(n, msg)  do { \
@@ -71,10 +82,12 @@ ADS1263_Driver adc;
 } while (0)
 
 // Sample periods for each ADC path (timed polling — no DRDY gating).
-// ADC1 @ 400 SPS → 2.5 ms period; poll every 3 ms.
-// ADC2 @ 100 SPS → 10  ms period; poll every 12 ms.
+// Both ADCs run at 400 SPS (2.5 ms native period). Polling at 3 ms keeps
+// us one sample interval behind the chip without overrunning the data
+// register; matching the SPS on both ADCs also makes host-side timestamp
+// alignment trivial (see README §"Why 400 SPS on both").
 static const uint32_t ADC1_POLL_MS = 3;
-static const uint32_t ADC2_POLL_MS = 12;
+static const uint32_t ADC2_POLL_MS = 3;
 
 void setup() {
     // RPC first so we can report progress to the M7 bridge.
@@ -145,25 +158,27 @@ void setup() {
 #endif
 
     // ── Configure ADC2 ─────────────────────────────────────────────────
-    // DIAGNOSTIC ROUTING: reading AIN6(+)/AIN7(-) instead of the default
-    // AIN2(+)/AIN3(-). If ADC2 now reads correctly (≈0 V floating or the
-    // laser signal if rewired), the AIN2/AIN3 pins/traces are damaged.
-    // If ADC2 still saturates on AIN6/AIN7, the fault is internal to
-    // ADC2, not the input pins.
-    //   ADC2MUX = 0x67 → AIN6(+) / AIN7(-)
-    //   REF2    = AVDD/AVSS (5 V external)
-    //   rate    = 100 SPS
-    //   gain    = 1x
+    // Production routing: Keyence IL-030 laser controller analog output on
+    // AIN4(+) / AIN5(-) (Cable 4 in doc/MEMO_cable_map.md). ADC2 shares the
+    // external REF7050 (+5 V) reference with ADC1 — REF2 = 001b selects
+    // AIN0(+REF) / AIN1(-REF) so both ADCs use the same numerator and
+    // the volts-per-code math is consistent. 400 SPS matches ADC1 for
+    // trivial host-side timestamp alignment (see README §"Why 400 SPS
+    // on both"); ADC2's filter is hardwired Sinc3.
+    //   ADC2MUX = 0x45 → AIN4(+) / AIN5(-)
+    //   REF2    = 001b (external REF7050 on AIN0/AIN1)
+    //   rate    = 400 SPS
+    //   gain    = 1x  (IL-030 already drives the full ±5 V analog range)
 #if ENABLE_ADC2
     adc.configureADC2(
-        /*adc2mux =*/ 0x67,
-        /*ref2    =*/ ADS1263_ADC2_REF_AVDD_AVSS,
+        /*adc2mux =*/ 0x45,                           // AIN4(+) / AIN5(-)
+        /*ref2    =*/ ADS1263_ADC2_REF_AIN01,         // external REF7050 on AIN0/AIN1
         /*vref_V  =*/ 5.0f,
-        /*rate    =*/ ADS1263_ADC2_100SPS,
+        /*rate    =*/ ADS1263_ADC2_400SPS,
         /*gain    =*/ ADS1263_ADC2_GAIN_1
     );
     adc.startADC2();
-    CP(10, "ADC2 started on AIN6/AIN7");
+    CP(10, "ADC2 started on AIN4/AIN5, REF7050 shared with ADC1, 400 SPS gain=1");
 #endif
 
     delay(100);   // one filter-settle interval

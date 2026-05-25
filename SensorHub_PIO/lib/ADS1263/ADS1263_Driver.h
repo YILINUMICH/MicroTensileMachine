@@ -1,16 +1,23 @@
 /**
  * @file ADS1263_Driver.h
- * @brief ADS1263 dual-ADC driver — Portenta H7 (M4 core)
+ * @brief ADS1263 dual-ADC driver — Portenta H7 (M4 core) — Mid Carrier / EVM
  *
- * The ADS1263 has two independent ADCs on one die:
+ * The ADS1263 has two independent ADCs on one die. Production channel
+ * assignment (Phase 4, derived 2026-05-24 — see SensorHub_PIO/README.md
+ * §Recommended configuration):
  *
  *   ADC1 — 32-bit, Sinc1-4 or FIR, up to 38 400 SPS. Used here for the
- *          load cell front end (via an LCA amplifier) on AIN0/AIN1.
+ *          LCA-9PC load cell amp output on **AIN2(+) / AIN3(-)**.
+ *          Operating point: 400 SPS, Sinc3, PGA enabled (gain = 1).
  *
- *   ADC2 — 24-bit, Sinc3 only, up to 800 SPS. Used here for a laser
- *          displacement head on AIN2/AIN3. The sensor already drives a
- *          0–5 V single-ended output, so no external amplifier, ADC2
- *          gain = 1.
+ *   ADC2 — 24-bit, Sinc3 only, up to 800 SPS. Used here for the Keyence
+ *          IL-030 laser controller analog output on **AIN4(+) / AIN5(-)**.
+ *          Operating point: 400 SPS, gain = 1. The controller already
+ *          drives the full ±5 V range, so no external amplifier.
+ *
+ * Both ADCs share an external REF7050 (+5 V) reference wired to
+ * **AIN0(+REF) / AIN1(-REF)** — REFMUX = 0x09 for ADC1, REF2 = 001b for
+ * ADC2. AIN0/AIN1 are therefore off-limits for sensor inputs.
  *
  * Both ADCs share the same SPI bus, CS pin, reset line, and chip-level
  * registers (POWER, INTERFACE), but have disjoint configuration registers
