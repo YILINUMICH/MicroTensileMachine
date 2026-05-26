@@ -1,23 +1,16 @@
 /**
  * @file ADS1263_Driver.h
- * @brief ADS1263 dual-ADC driver — Portenta H7 (M4 core) — Mid Carrier / EVM
+ * @brief ADS1263 dual-ADC driver — Portenta H7 (M4 core)
  *
- * The ADS1263 has two independent ADCs on one die. Production channel
- * assignment (Phase 4, derived 2026-05-24 — see SensorHub_PIO/README.md
- * §Recommended configuration):
+ * The ADS1263 has two independent ADCs on one die:
  *
  *   ADC1 — 32-bit, Sinc1-4 or FIR, up to 38 400 SPS. Used here for the
- *          LCA-9PC load cell amp output on **AIN2(+) / AIN3(-)**.
- *          Operating point: 400 SPS, Sinc3, PGA enabled (gain = 1).
+ *          load cell front end (via an LCA amplifier) on AIN0/AIN1.
  *
- *   ADC2 — 24-bit, Sinc3 only, up to 800 SPS. Used here for the Keyence
- *          IL-030 laser controller analog output on **AIN4(+) / AIN5(-)**.
- *          Operating point: 400 SPS, gain = 1. The controller already
- *          drives the full ±5 V range, so no external amplifier.
- *
- * Both ADCs share an external REF7050 (+5 V) reference wired to
- * **AIN0(+REF) / AIN1(-REF)** — REFMUX = 0x09 for ADC1, REF2 = 001b for
- * ADC2. AIN0/AIN1 are therefore off-limits for sensor inputs.
+ *   ADC2 — 24-bit, Sinc3 only, up to 800 SPS. Used here for a laser
+ *          displacement head on AIN2/AIN3. The sensor already drives a
+ *          0–5 V single-ended output, so no external amplifier, ADC2
+ *          gain = 1.
  *
  * Both ADCs share the same SPI bus, CS pin, reset line, and chip-level
  * registers (POWER, INTERFACE), but have disjoint configuration registers
@@ -28,28 +21,13 @@
  * This driver exposes two parallel APIs — `configureADC1 / startADC1 /
  * readADC1*` and the same for ADC2 — sharing one chip init in `begin()`.
  *
- * Pinout — Portenta H7 + Mid Carrier (ASX00055), breakout header J15:
- *   CS    = PA_8   (J15-25, silkscreen "PWM 0", HD J2-59)
- *   DRDY  = PC_6   (J15-27, silkscreen "PWM 1", HD J2-61) — ADC1
- *                  data-ready line. Not used for gating in this driver
- *                  (timed polling is used for both ADCs; ADC2 has no
- *                  DRDY signal at all). Parked as INPUT_PULLUP so the
- *                  pad doesn't float.
- *   RESET = PC_7   (J15-29, silkscreen "PWM 2", HD J2-63)
- *
- *   SPI bus (SPI1 on the H7 — bound implicitly by the Arduino SPI obj):
- *     SCLK      = J15-20 (silkscreen "SPI1 SCLK") — STM32 PI_1
- *     CIPO/MISO = J15-22 (silkscreen "SPI1 CIPO") — STM32 PC_2
- *     COPI/MOSI = J15-24 (silkscreen "SPI1 COPI") — STM32 PC_3
- *   The SPI1 hardware CS pad (J15-18, PI_0) is intentionally unused —
- *   CS is driven as a GPIO via ADS1263_CS_PIN above.
- *
- *   Power on J15: 3V3 on pads 3/4, GND on pads 1/2.
- *
- * Note: all three control pins are on PWM-bank pads (25/27/29). The
- * adjacent even-numbered pads (26, 28, 30) carry the I2C0/I2C1 buses
- * and are deliberately avoided so we don't conflict with future I2C
- * peripherals on this header.
+ * Pinout — Portenta H7 + Hat Carrier (J5 Pi-compatible header):
+ *   CS    = PE_6   (J2-53, Pi pin 15)
+ *   DRDY  = PJ_11  (J2-50, Pi pin 11) — ADC1 data-ready line, but the
+ *                  onboard LoRa IRQ is wired to the same pad on the H7
+ *                  so it never actually asserts. Timed polling is used
+ *                  for both ADCs. ADC2 has no DRDY signal at all.
+ *   RESET = PI_5   (J1-56, Pi pin 12)
  *
  * Scaling:
  *   ADC1:  V_in = (code32 / 2^31) * (ADC1 VREF) / (ADC1 gain=1 here)
@@ -62,22 +40,10 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-// ── Pin definitions — Portenta H7 + Mid Carrier (ASX00055), header J15 ──
-// All three pads are on the PWM bank (silkscreen "PWM 0/1/2") — chosen
-// over the alternating I2C0/I2C1 pads (26/28/30) so we don't conflict
-// with future I2C peripherals on this header.
-#define ADS1263_CS_PIN    PA_8   // J15-25 (PWM_0, HD J2-59)
-#define ADS1263_DRDY_PIN  PC_6   // J15-27 (PWM_1, HD J2-61)
-#define ADS1263_RESET_PIN PC_7   // J15-29 (PWM_2, HD J2-63)
-
-// ── SPI1 bus pins (used implicitly by the Arduino `SPI` object on H7) ──
-//   SCLK      — J15-20 (silkscreen "SPI1 SCLK") — STM32 PI_1
-//   CIPO/MISO — J15-22 (silkscreen "SPI1 CIPO") — STM32 PC_2
-//   COPI/MOSI — J15-24 (silkscreen "SPI1 COPI") — STM32 PC_3
-// The SPI1 hardware CS pad (J15-18, PI_0) is intentionally NOT used —
-// CS is driven as a GPIO via ADS1263_CS_PIN above so multiple chips
-// could share the bus later if needed. No #define needed for the SPI
-// bus pins themselves; SPI.begin() picks them up automatically.
+// ── Pin definitions — Portenta H7 + Hat Carrier ──────────────────────────
+#define ADS1263_CS_PIN    PE_6   // J2-53, Pi pin 15
+#define ADS1263_DRDY_PIN  PJ_11  // J2-50, Pi pin 11 (LoRa collision; unused)
+#define ADS1263_RESET_PIN PI_5   // J1-56, Pi pin 12
 
 // ── External reference (volts) used by both ADC paths when they select
 //   AVDD/AVSS as the reference source.
@@ -132,7 +98,7 @@
 #define ADS1263_REG_GPIODIR    0x13
 #define ADS1263_REG_GPIODAT    0x14
 // ADC2 config
-#define ADS1263_REG_ADC2CFG    0x15   // DR2[7:6] | REF2[5:3] | GAIN2[2:0]  (datasheet §9.6 Table 9-52)
+#define ADS1263_REG_ADC2CFG    0x15   // DR2[7:6] | GAIN2[5:3] | REF2[2:0]
 #define ADS1263_REG_ADC2MUX    0x16   // MUXP2[7:4] | MUXN2[3:0]
 #define ADS1263_REG_ADC2OFC0   0x17
 #define ADS1263_REG_ADC2OFC1   0x18
@@ -202,15 +168,11 @@ typedef enum {
 //  ADC reading struct (used by both ADC1 and ADC2 reads)
 // ══════════════════════════════════════════════════════════════════════════
 typedef struct {
-    bool valid;             // false if checksum mismatch; raw_code/status still filled for diagnostics
+    bool valid;
     int32_t raw_code;       // ADC1: full 32-bit signed; ADC2: sign-extended 24-bit
     float voltage_V;
     float voltage_uV;
     uint32_t timestamp_us;
-    uint8_t status;         // raw STATUS byte from the RDATAx frame (INTERFACE=0x05).
-                            // Per ADS1263 datasheet: ADC2(7) | ADC1(6) | EXTCLK(5) |
-                            //   REF_ALM(4) | PGAL_ALM(3) | PGAH_ALM(2) | PGAD_ALM(1) | RESET(0).
-                            // Bit 4 (REF_ALM) is the key fault flag for the external REF7050.
 } ADC_Reading;
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -252,8 +214,8 @@ public:
     // continuous). Useful for one-shot reads.
     ADC_Reading readADC1Poll(uint32_t poll_ms = 5);
 
-    // DRDY pin state (for completeness; the driver does not gate reads on
-    // this — timed polling is used for both ADCs).
+    // DRDY pin state (for completeness; on this board the onboard LoRa
+    // chip holds PJ_11 HIGH so this rarely reports LOW).
     bool adc1DataReadyPin() const;
 
     float getADC1VrefV() const   { return _adc1_vref_V; }
@@ -308,23 +270,19 @@ private:
     void sendCommand(uint8_t cmd);
 
     // ADC1 helpers
-    // RDATA1 → 6-byte frame (STATUS, D3..D0, CHK). Returns the 32-bit
-    // signed code; writes STATUS into `status_out` and the checksum
-    // verification result (true = matches datasheet sum+0x9B) into
-    // `chk_ok_out`.
-    int32_t readRawData32(uint8_t &status_out, bool &chk_ok_out);
+    int32_t readRawData32();                   // RDATA1 → 6-byte frame
     float codeToVoltageADC1(int32_t code) const;
     void writeMODE2();                          // packs PGA bypass + rate
 
     // ADC2 helpers
-    // RDATA2 → 6-byte frame (STATUS, D3..D1, 00h zero-pad, CHK) per
-    // ADS1263 datasheet §9.4.7.2 Figure 9-44. The zero-pad is a fixed
-    // 0x00 inserted by the chip between the 24-bit data and the CHK
-    // byte (so ADC2 frames line up with ADC1's 6-byte frames). It must
-    // be clocked out but is excluded from the checksum sum. Same
-    // out-parameter contract as readRawData32().
-    int32_t readRawData24(uint8_t &status_out, bool &chk_ok_out);
+    int32_t readRawData24();                   // RDATA2 → 5-byte frame
     float codeToVoltageADC2(int32_t code) const;
-    void writeADC2CFG();                        // packs DR2[7:6] | REF2[5:3] | GAIN2[2:0]
+    void writeADC2CFG();                        // packs DR2|GAIN2|REF2
 
-    // STATUS-by
+    // Shared
+    bool waitForDRDY(uint32_t timeout_ms = 500);
+    float rateToSPS_ADC1(ADS1263_ADC1_Rate_t rate) const;
+    float rateToSPS_ADC2(ADS1263_ADC2_Rate_t rate) const;
+};
+
+#endif // ADS1263_DRIVER_H

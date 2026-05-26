@@ -1,27 +1,53 @@
 /**
  * @file main.cpp  (Portenta H7 dual-core — laser displacement via ADC2)
  *
- * Goal of this build:
- *   - Prove that M4 can drive the ADS1263's ADC2 path and stream laser
- *     head samples to M7 via RPC.
- *   - ADC1 is wired up in the driver but not started here. When we
- *     merge this project with LoadCell_PIO, uncomment the ADC1 block
- *     below and the two ADCs will run concurrently on the same chip.
+ * Laser-only build for calibration. Runs ADC2 of the ADS1263 against
+ * the Keyence IL-030 analog output. The sibling SensorHub_PIO project
+ * is the production firmware that runs BOTH ADCs (load cell on ADC1,
+ * laser on ADC2); this project exists so that laser-only experiments
+ * — IL-030 calibration via the Zaber stage in Calibrate_LaserHead/,
+ * sensor characterisation, etc. — can be done with a single-purpose
+ * firmware that doesn't drag the load-cell signal chain along.
+ *
+ * Hardware target (post-port 2026-05-26):
+ *   - Portenta H7 on the Mid Carrier (ASX00055)
+ *   - Bare TI ADS1263 EVM
+ *   - External REF7050 (+5 V) on AIN0(+) / AIN1(-)        [Cable 2]
+ *   - Keyence IL-030 analog out  on AIN4(+) / AIN5(-)     [Cable 4]
+ *     (per doc/MEMO_cable_map.md, matching SensorHub_PIO production)
  *
  * Signal chain (this build):
- *   Laser displacement head (0–5 V single-ended) → AIN2 / AIN3
- *   AIN2 = sensor signal, AIN3 = sensor GND.
+ *   Keyence IL-030 (0–5 V single-ended) → AIN4(+) / AIN5(-)
+ *   → ADC2 (24-bit, 400 SPS, Sinc3, gain=1, REF7050)
+ *   → M4 timed polling → RPC → M7 USB-CDC bridge → host serial @ 115200
  *
- * Future (when merged with LoadCell_PIO):
- *   Load cell → LCA amp → AIN0 / AIN1  → ADC1 (32-bit, 400 SPS)
- *   Laser head →           AIN2 / AIN3 → ADC2 (24-bit, 100 SPS)
+ * Driver provenance:
+ *   lib/ADS1263/ was copied wholesale from SensorHub_PIO on 2026-05-26
+ *   to inherit both bug fixes (RDATA2 6-byte frame, ADC2CFG REF2/GAIN2
+ *   field order) and the Mid Carrier pin defines (PA_8/PC_6/PC_7).
+ *   See doc/ADS1263_H7_Integration_Notes.md §4 addenda for the bug
+ *   write-ups. Old driver backed up under lib/ADS1263/.backup_pre_port_*.
+ *
+ * Output stream format (tab-separated, one line per sample):
+ *   <t_ms>\t<raw_code>\t<voltage_V>     (ADC2-only build)
+ * Host parser: Calibrate_LaserHead/portenta_reader.py — handles this
+ * 3-column form natively (no src demux needed).
+ *
+ * To run the dual-ADC cross-compare diagnostic instead, set
+ * ENABLE_ADC1 = 1 below AND copy the ADC2 inpmux into ADC1 (set
+ * INPMUX = 0x45 to match ADC2MUX). Output then becomes the 4-column
+ * form with src=1/src=2 both pointing at AIN4/AIN5. This is a future
+ * follow-on; default off for production calibration runs.
  *
  * Flash order (first time):
  *   pio run -e portenta_m7_bridge -t upload
  *   pio run -e portenta_m4        -t upload
  *   pio device monitor
  *
- * → Power-cycle the Hat Carrier after every upload (see README).
+ * → Power-cycle the rig (USB + EVM supply) after every upload — the
+ *   dfu reset does not cleanly re-power the EVM's analog rails (the
+ *   on-board TPS7A4700 LDO needs a full power-on transient to settle),
+ *   and the ADS1263 will come up with ID=0x00 if you skip it.
  */
 
 #include <Arduino.h>
@@ -69,10 +95,12 @@ ADS1263_Driver adc;
 } while (0)
 
 // Sample periods for each ADC path (timed polling — no DRDY gating).
-// ADC1 @ 400 SPS → 2.5 ms period; poll every 3 ms.
-// ADC2 @ 100 SPS → 10  ms period; poll every 12 ms.
+// Both ADCs run at 400 SPS (2.5 ms native period) when enabled. Polling
+// at 3 ms keeps us one sample interval behind the chip without
+// overrunning the data register; matches SensorHub_PIO so the two
+// projects share register/timing assumptions.
 static const uint32_t ADC1_POLL_MS = 3;
-static const uint32_t ADC2_POLL_MS = 12;
+static const uint32_t ADC2_POLL_MS = 3;
 
 void setup() {
     // RPC first so we can report progress to the M7 bridge.
@@ -83,22 +111,26 @@ void setup() {
     Serial.begin(115200);
     CP(1, "Serial.begin done");
 
-    // ADS1263 power-up settle (see LoadCell_PIO README for why this is
-    // required on every cold boot).
+    // ADS1263 power-up settle — required on every cold boot. The dfu
+    // reset doesn't cleanly re-power the EVM's analog rails (the
+    // on-board TPS7A4700 LDO needs a full power-on transient to
+    // settle), so give the chip time to come out of reset before we
+    // talk SPI to it.
     RPC.println("[M4] waiting 3000 ms for ADS1263 to power up...");
     delay(3000);
     RPC.println("[M4] ADS1263 power-up settle done");
 
     // Drive the ADS1263 pins BEFORE adc.begin() so we can localise any
-    // pinMode/port-clock hang.
+    // pinMode/port-clock hang. Pins per the post-port driver header
+    // (Mid Carrier J15 positions, matching SensorHub_PIO).
     pinMode(ADS1263_CS_PIN, OUTPUT);
-    CP(2, "pinMode CS (PE_6) done");
+    CP(2, "pinMode CS (PA_8 / J15-25 / PWM_0) done");
 
     pinMode(ADS1263_RESET_PIN, OUTPUT);
-    CP(3, "pinMode RESET (PI_5) done");
+    CP(3, "pinMode RESET (PC_7 / J15-29 / PWM_2) done");
 
     pinMode(ADS1263_DRDY_PIN, INPUT_PULLUP);
-    CP(4, "pinMode DRDY (PJ_11) done");
+    CP(4, "pinMode DRDY (PC_6 / J15-27 / PWM_1) done");
 
     digitalWrite(ADS1263_CS_PIN, HIGH);
     digitalWrite(ADS1263_RESET_PIN, HIGH);
@@ -119,35 +151,57 @@ void setup() {
     RPC.print("[M4] ADC ready, ID=0x");
     RPC.println(adc.getDeviceID(), HEX);
 
-    // ── Configure ADC1 (load cell) ─────────────────────────────────────
-    // Disabled in this build; ADC1 stays parked on AINCOM/AINCOM.
-    // To enable: set ENABLE_ADC1 = 1 above. Example wiring:
-    //   INPMUX = 0x01    → AIN0(+) / AIN1(-)
-    //   REFMUX = 0x24    → AVDD / AVSS (5 V)
-    //   rate   = 400 SPS
+    // ── Configure ADC1 (cross-compare diagnostic — disabled by default) ─
+    // In production this firmware is laser-only; ADC1 is parked on
+    // AINCOM/AINCOM by the driver's begin() call. The block below is
+    // here for the future ENABLE_ADC1_XCOMPARE follow-on: both ADCs
+    // sampling AIN4/AIN5 simultaneously gives a digital-path cross-
+    // check on the IL-030 signal chain.
+    //
+    // To do a cross-compare run: flip ENABLE_ADC1 to 1 above and set
+    // INPMUX = 0x45 below so ADC1 sees the same pair as ADC2. The
+    // host parser will then see 4-column rows tagged with src=1/src=2
+    // (both pointing at AIN4/AIN5) and Calibrate_LaserHead can fit
+    // both streams for an agreement metric.
+    //
+    //   INPMUX = 0x45                       → AIN4(+) / AIN5(-)
+    //   REFMUX = ADS1263_REFMUX_EXT_AIN01   → 0x09, REF7050 on AIN0/AIN1
+    //   VREF   = 5.0 V                      → REF7050 nominal
+    //   rate   = 400 SPS                    → match ADC2 for trivial alignment
+    //   PGA    = in path, gain=1 → MODE2 = 0x08
 #if ENABLE_ADC1
     adc.configureADC1(
-        /*inpmux =*/ 0x01,
-        /*refmux =*/ ADS1263_REFMUX_AVDD_AVSS,
-        /*vref_V =*/ 5.0f,
-        /*rate   =*/ ADS1263_400SPS,
-        /*pga_bypass =*/ true
+        /*inpmux     =*/ 0x45,                       // AIN4(+) / AIN5(-) — match ADC2 for x-compare
+        /*refmux     =*/ ADS1263_REFMUX_EXT_AIN01,   // 0x09 — REF7050 on AIN0/AIN1
+        /*vref_V     =*/ 5.0f,
+        /*rate       =*/ ADS1263_400SPS,
+        /*pga_bypass =*/ false                       // PGA in path, gain=1 (matches SensorHub_PIO production)
     );
     adc.startADC1();
-    CP(9, "ADC1 started");
+    CP(9, "ADC1 started on AIN4/AIN5 (cross-compare with ADC2), REF7050, PGA in path gain=1");
 #endif
 
-    // ── Configure ADC2 (laser head) ────────────────────────────────────
+    // ── Configure ADC2 (laser head — primary path) ─────────────────────
+    // Production routing: Keyence IL-030 laser controller analog output on
+    // AIN4(+) / AIN5(-) (Cable 4 in doc/MEMO_cable_map.md), matching the
+    // SensorHub_PIO production firmware so the calibration constants
+    // derived here apply directly to the production rig with no
+    // signal-chain translation.
+    //   ADC2MUX = 0x45 → AIN4(+) / AIN5(-)
+    //   REF2    = 001b (external REF7050 on AIN0/AIN1, shared if ADC1 on)
+    //   rate    = 400 SPS (matches SensorHub_PIO; previously 100)
+    //   gain    = 1x   (IL-030 already drives the full ±5 V analog range;
+    //                   ADC2's PGA cannot be bypassed — runs as unity buffer)
 #if ENABLE_ADC2
     adc.configureADC2(
-        /*adc2mux =*/ 0x23,                             // AIN2(+) / AIN3(-)
-        /*ref2    =*/ ADS1263_ADC2_REF_AVDD_AVSS,       // 5 V external
+        /*adc2mux =*/ 0x45,                           // AIN4(+) / AIN5(-)
+        /*ref2    =*/ ADS1263_ADC2_REF_AIN01,         // external REF7050 on AIN0/AIN1
         /*vref_V  =*/ 5.0f,
-        /*rate    =*/ ADS1263_ADC2_100SPS,
+        /*rate    =*/ ADS1263_ADC2_400SPS,
         /*gain    =*/ ADS1263_ADC2_GAIN_1
     );
     adc.startADC2();
-    CP(9, "ADC2 started");
+    CP(10, "ADC2 started on AIN4/AIN5, REF7050, 400 SPS gain=1");
 #endif
 
     delay(100);   // one filter-settle interval
