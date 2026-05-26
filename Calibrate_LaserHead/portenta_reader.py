@@ -54,6 +54,11 @@ class Sample:
     timestamp_us: int          # microseconds since firmware boot
     voltage_V: float           # already scaled by firmware (0–5 V range)
     raw_code: Optional[int] = None   # only set by the current (TSV) firmware
+    adc_source: Optional[int] = None # 1 or 2 if the firmware emits the
+                                     # 4-col dual-stream form (SensorHub_PIO,
+                                     # or LaserHead_PIO with ENABLE_ADC1=1).
+                                     # None for 3-col single-channel builds
+                                     # or the plan-spec CSV format.
 
     def as_csv_row(self) -> str:
         """Plan §2 canonical serialisation."""
@@ -79,16 +84,23 @@ _TSV_4COL = re.compile(rf"^\s*(\d+)\s+([12])\s+(-?\d+)\s+({_FLOAT_RE})\s*$")
 _CSV_PLAN = re.compile(rf"^\s*(\d+)\s*,\s*({_FLOAT_RE})\s*$")
 
 
-def parse_line(line: str, adc_source: int = 2) -> Optional[Sample]:
+def parse_line(line: str,
+               adc_source: Optional[int] = 2) -> Optional[Sample]:
     """
     Parse one line of serial output into a Sample, or None if the line is
     a log message / garbage / wrong ADC source.
 
     Args:
         line: raw line from the Portenta, newline already stripped.
-        adc_source: which ADC to keep when the firmware emits both (1 = load
-                    cell, 2 = laser head). Only meaningful for the 4-column
-                    TSV form.
+        adc_source: filter for the 4-column dual-stream form.
+                    - 1 → keep only ADC1 samples (load or x-compare)
+                    - 2 → keep only ADC2 samples (laser, primary)
+                    - None → keep ALL samples; caller demuxes via
+                             Sample.adc_source. Use this for the
+                             cross-compare mode where both ADCs read
+                             the same input.
+                    Ignored for the 3-col TSV and CSV-plan formats
+                    (those don't carry a src tag).
     """
     if not line or "[" in line:
         return None
@@ -106,13 +118,14 @@ def parse_line(line: str, adc_source: int = 2) -> Optional[Sample]:
     m = _TSV_4COL.match(line)
     if m:
         src = int(m.group(2))
-        if src != adc_source:
+        if adc_source is not None and src != adc_source:
             return None
         try:
             return Sample(
                 timestamp_us=int(m.group(1)) * 1000,   # ms → µs
                 voltage_V=float(m.group(4)),
                 raw_code=int(m.group(3)),
+                adc_source=src,
             )
         except ValueError:
             return None
@@ -313,6 +326,90 @@ class PortentaReader:
                     len(out), n, skipped_nonsample)
                 last_report = now
         return out
+
+    def read_samples_dual(self, n_per_adc: int,
+                          timeout_s: Optional[float] = None
+                          ) -> "tuple[List[Sample], List[Sample]]":
+        """
+        Block until at least ``n_per_adc`` samples have been collected from
+        BOTH ADC1 and ADC2, or ``timeout_s`` elapses. Returns
+        ``(samples_adc1, samples_adc2)``.
+
+        Use this when the firmware emits the 4-column dual-stream form
+        (``<t_ms>\\t<src>\\t<raw>\\t<V>``), e.g. LaserHead_PIO compiled
+        with ENABLE_ADC1 = ENABLE_ADC2 = 1 for the AIN4/AIN5
+        cross-compare, or SensorHub_PIO in production. The reader's
+        ``adc_source`` filter is bypassed (parse_line is called with
+        ``adc_source=None``) and the two streams are demuxed on
+        ``Sample.adc_source``.
+
+        Both buckets are filled in lockstep — we keep reading until the
+        SLOWER channel reaches ``n_per_adc``. The faster channel will
+        end up with a few extra samples; the caller can trim or use them
+        as-is.
+
+        Raises:
+            RuntimeError if every valid sample so far is missing
+                ``adc_source`` — that means the firmware is in a
+                3-column single-channel mode and cross-compare isn't
+                possible. The message points at the firmware build
+                flag the operator needs to flip.
+            TimeoutError if the slower channel doesn't reach
+                ``n_per_adc`` within ``timeout_s``.
+        """
+        adc1: List[Sample] = []
+        adc2: List[Sample] = []
+        deadline = None if timeout_s is None else time.monotonic() + timeout_s
+        last_report = time.monotonic()
+        skipped_nonsample = 0
+        single_channel_warnings = 0
+        while len(adc1) < n_per_adc or len(adc2) < n_per_adc:
+            if deadline is not None and time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"got ADC1={len(adc1)}/{n_per_adc}  "
+                    f"ADC2={len(adc2)}/{n_per_adc} samples in "
+                    f"{timeout_s:.1f} s (saw {skipped_nonsample} non-sample "
+                    "lines). Check: Portenta flashed with ENABLE_ADC1=1 "
+                    "AND ENABLE_ADC2=1, both ADCs configured for "
+                    "AIN4/AIN5, REF7050 powered."
+                )
+            line = self._readline()
+            if not line:
+                continue
+            # adc_source=None → keep all samples, demux on Sample.adc_source
+            s = parse_line(line, adc_source=None)
+            if s is None:
+                skipped_nonsample += 1
+                continue
+            if s.adc_source is None:
+                # Single-channel firmware (3-col TSV or CSV-plan format).
+                # Track these but don't crash on the first one — the
+                # boot banner might emit a stray pre-config sample.
+                single_channel_warnings += 1
+                if single_channel_warnings >= 5 and not (adc1 or adc2):
+                    raise RuntimeError(
+                        "Portenta is streaming the 3-column single-channel "
+                        "format; dual-ADC cross-compare requires the "
+                        "4-column form. Flash LaserHead_PIO/src/main.cpp "
+                        "with #define ENABLE_ADC1 1 and #define ENABLE_ADC2 1 "
+                        "(both must be set), then power-cycle the rig."
+                    )
+                continue
+            if s.adc_source == 1:
+                adc1.append(s)
+            elif s.adc_source == 2:
+                adc2.append(s)
+            # Other src values are unexpected → silently drop (defensive)
+
+            now = time.monotonic()
+            if now - last_report > 2.0:
+                self.logger.info(
+                    "read_samples_dual progress: ADC1=%d/%d  ADC2=%d/%d  "
+                    "(%d non-sample lines)",
+                    len(adc1), n_per_adc, len(adc2), n_per_adc,
+                    skipped_nonsample)
+                last_report = now
+        return adc1, adc2
 
 
 # ---------------------------------------------------------------------------

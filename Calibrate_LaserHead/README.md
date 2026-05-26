@@ -32,59 +32,124 @@ module separately.
 
 ## Physical setup (plan §1)
 
-**Wiring update** — with the ADC1/AIN0-AIN1 routing above, connect:
+**Wiring (post-port to Mid Carrier + bare TI ADS1263 EVM, 2026-05-26):**
 
-- IL-030 analog signal out → **HAT screw terminal AIN0**
-- IL-030 sensor ground     → **HAT screw terminal AIN1**
-- IL-030 supply ground (0 V) → **HAT AVSS / GND** (separate wire — do
-  not rely on AIN1 alone to define the ground reference)
+- IL-030 analog signal out   → **EVM AIN4(+)**         (Cable 4 in `../doc/MEMO_cable_map.md`)
+- IL-030 sensor ground       → **EVM AIN5(−)**
+- IL-030 supply ground (0 V) → **EVM AVSS / GND**      (separate wire — do
+  not rely on AIN5 alone to define the ground reference)
+- External REF7050 (+5 V)    → **EVM AIN0 / AIN1**     (Cable 2 — should
+  already be in place per SensorHub_PIO production wiring; do not disturb)
+
+The IL-030 sees the ADC2 input directly — no HAT load-cell front-end
+between sensor and ADC. The previous Waveshare-HAT routing through
+AIN0/AIN1 / ADC1 is **retired**; legacy `k = −0.1171 mV/µm` from that
+era is invalid on this signal path (see `STATUS.md` last-run notes).
 
 1. Mount the IL-030 on the fixed frame; mount the diffuse reference plate on
    the Zaber carriage, aligned so the stage axis is parallel to the laser
-   beam.
-2. With the stage at home, mechanically position the sensor so the target
-   sits at **~30 mm standoff**. The IL-030 "reference distance" LED must be
-   lit.
-3. Manually jog ±5 mm and confirm the analog output stays valid at both
-   extremes (no saturation, no "out of range").
-4. The sweep runs ±5 mm around absolute stage position 30 mm (the
-   IL-030 reference distance), i.e. stage positions 25 mm → 35 mm. This
-   is the full IL-030 measurement window. If the edges look nonlinear
-   in the fit, shrink `sweep_range_mm` in `config.yaml` to e.g. ±4 mm.
+   beam. A cosine error from axis misalignment compresses the apparent
+   sensitivity (the fit still looks clean), so check parallelism against
+   the existing fixture marks.
+
+2. **Stage-to-sensor mapping on this rig** (verify before each session —
+   the mounting fixture sets these absolute stage values):
+
+   | Stage position | IL-030 measurement window | Voltage |
+   |---:|:---|:---:|
+   | 5 mm  | high end of the sensor window | **max** reading |
+   | 10 mm | reference distance            | mid reading     |
+   | 15 mm | low end of the sensor window  | **min** reading |
+
+   So as stage position INCREASES (5 → 15), the output voltage
+   DECREASES. The fit slope `k` is therefore NEGATIVE — see "Expected
+   result" below.
+
+3. With the stage at absolute **10 mm**, the IL-030 amplifier's
+   "reference distance" LED must be **lit**. If it isn't, the
+   mounting fixture has shifted — reseat the sensor or re-zero the
+   stage before continuing.
+
+4. Manually jog stage to 5 mm and to 15 mm; confirm the analog output
+   stays valid at both extremes (no saturation, no "out of range"
+   indicator on the IL-030 front panel).
+
+5. The sweep runs ±5 mm around absolute stage position 10 mm, i.e.
+   stage positions 5 mm → 15 mm. This is the full IL-030 measurement
+   window. If the edges look nonlinear in the fit, shrink
+   `sweep_range_mm` in `config.yaml` to e.g. ±4 mm.
+
+6. **Zaber safety_config.json must permit at least [5, 15] mm**. The
+   pre-2026-05-26 limit was [10, 40] which would FORBID the new
+   low-end position at 5 mm and abort the sweep on its first move.
+   Verify (`../ZaberStage/safety_config.json` → `position_limits_mm`)
+   and widen if needed.
+
+7. **30-minute thermal soak** with the laser on before sampling — the
+   baseline-pre vs baseline-post delta is the only way you'll catch
+   thermal drift during the run, and a cold start guarantees you'll
+   see some.
 
 ## Firmware prerequisite
 
-**Current routing (temporary):** the laser head signal is read via
-**ADC1 on AIN0/AIN1** (through the HAT's load-cell front-end). This is
-because the ADC2 path (AIN2/AIN3) saturates under any non-zero input on
-this particular HAT and is being skipped until the root cause is
-resolved. Flash `../SensorHub_PIO/` with `ENABLE_ADC1 = 1` and
-`ENABLE_ADC2 = 0` (the current state of its `src/main.cpp`).
+Flash the dedicated **`./Calibrate_LaserHead_PIO/`** project (created
+2026-05-26 — see [STATUS.md](STATUS.md) and
+[MEMO_session_2026-05-26.md](MEMO_session_2026-05-26.md)). This is the
+dual-ADC cross-compare firmware purpose-built for this calibration
+workflow: ADC2 produces the production k/V₀, ADC1 reads the same
+AIN4/AIN5 pair as an independent digital-path check. The sibling
+`../LaserHead_PIO/` is the production laser-only firmware and isn't
+what you flash for calibration.
 
-The HAT's AIN0/AIN1 front-end applies a scale factor (measured ~4.4×
-attenuation during bring-up with a 1.6 V battery). The calibration fit
-will absorb this into the measured sensitivity `k`, so the analysis
-still produces a valid line — just with a different `mV/µm` than the
-IL-030 datasheet's 0.5 mV/µm nominal. The plan §7 sanity check against
-0.5 mV/µm nominal will FAIL and that's expected for this configuration;
-what matters is that R² is high and residuals are random.
+Configuration baked into `Calibrate_LaserHead_PIO/src/main.cpp`:
 
-Confirm via a serial monitor that you see streaming lines like:
+- `ENABLE_ADC1 = 1`, `ENABLE_ADC2 = 1` (both on AIN4/AIN5)
+- ADC2MUX = `0x45`, INPMUX = `0x45` (both → AIN4(+) / AIN5(−))
+- REF2 = `ADS1263_ADC2_REF_AIN01`, REFMUX = `0x09`
+  (shared external REF7050 on AIN0/AIN1)
+- Rate = 400 SPS on both, Sinc3 filter, gain = 1, PGA in path
+
+Flash order (only first time, or after firmware changes):
+
+```bash
+cd Calibrate_LaserHead_PIO
+pio run -e portenta_m7_bridge -t upload
+pio run -e portenta_m4        -t upload
+# Power-cycle the rig (USB + EVM supply) after EACH upload — dfu reset
+# does not cleanly re-power the EVM analog rails.
+```
+
+At boot you should see a `[M4] *** Calibrate_LaserHead_PIO — dual-ADC
+cross-compare on AIN4/AIN5 ***` banner over USB so you can confirm you
+flashed the right firmware variant.
+
+Confirm via a serial monitor (or our smoke test, below) that you see
+streaming lines like:
 
 ```
-<t_ms>\t<raw_code>\t<voltage_V>
+<t_ms>\t<src>\t<raw_code>\t<voltage_V>     (src=1 ADC1, src=2 ADC2)
 ```
 
-interleaved with a few `[M4]`/`[M7]` banner lines at boot. The
-`portenta_reader.py` parser discards the banner lines and keeps only
-the sample rows.
+at ~400 SPS per ADC (so ~800 lines/s total), interleaved with a few
+`[M4 cp N]` / `[M7]` banner lines at boot. Both `src=1` and `src=2`
+rows should show approximately the same voltage at any static standoff
+since both ADCs are reading the same physical input (AIN4/AIN5). The
+`portenta_reader.py` parser discards the banner lines, and
+`PortentaReader.read_samples_dual()` demuxes the two channels into
+separate sample lists for parallel fitting in `analyze.py`.
 
 > **Format note.** Plan §2 specifies a cleaner CSV format
-> (`<timestamp_us>,<voltage_V>`). The current firmware emits tab-separated
-> milliseconds with an extra `raw_code` column. The parser accepts both,
-> and converts timestamps to µs internally, so the firmware migration is
-> decoupled from the calibration work. When firmware is updated, nothing
-> here needs to change.
+> (`<timestamp_us>,<voltage_V>`). The current firmware still emits
+> tab-separated milliseconds with an extra `raw_code` column. The
+> parser accepts both, and converts timestamps to µs internally, so
+> the firmware migration is decoupled from the calibration work. When
+> firmware is updated, nothing here needs to change.
+>
+> The parser also handles the 4-column dual-stream format
+> (`<t_ms>\t<src>\t<raw_code>\t<voltage_V>`) that SensorHub_PIO emits,
+> selecting by `adc_source` — relevant if you point this calibration
+> tool at SensorHub_PIO instead of LaserHead_PIO. With the current
+> laser-only LaserHead_PIO build the `adc_source` filter is a no-op.
 
 ## Running a calibration
 
@@ -152,10 +217,24 @@ re-analysis and for computing per-point noise floors more carefully.
 
 ## Expected result (plan §6)
 
-IL-030 in 0–5 V mode with 10 mm range ⇒ nominal **0.5 mV/µm**. Measured
-`k` should land within ~5% of this. Larger deviation = something upstream
-(wiring, reference, gain) is off and should be investigated before trusting
-the number.
+IL-030 in 0–5 V mode with 10 mm range ⇒ nominal **|k| ≈ 0.5 mV/µm**.
+Measured `|k|` should land within ~5% of this on the EVM signal path
+(no front-end attenuation between sensor and ADC2). Larger deviation =
+something upstream (wiring, REF7050 voltage, polarity at AIN4/AIN5,
+IL-030 front-panel range setting) is off and should be investigated
+before trusting the number.
+
+**Sign convention on this rig.** Per the stage-to-sensor mapping above
+(stage 5 mm = max V, stage 15 mm = min V), voltage decreases as stage
+position increases → the linear fit slope `k` is **negative** by
+construction. The `analyze.py` sanity check compares `|k|` to the
+0.5 mV/µm nominal; the sign just records which way the geometry +
+sensor output wiring point. When propagating the constants into
+`SMA_CharacterizationV2/`, keep `k` signed so downstream
+displacement = `(V − V₀) / k` recovers the correct physical direction.
+If the fit returns `k > 0` for this setup, the IL-030 output mapping
+is inverted from expected — check the IL-030 front-panel
+"polarity"/"slope" setting before re-running.
 
 ## Troubleshooting
 

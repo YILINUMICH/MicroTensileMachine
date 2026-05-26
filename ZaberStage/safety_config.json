@@ -1,11 +1,9 @@
 {
   "port": "COM5",
-  "position_limits_mm": [
-    10,
-    40
-  ],
+  "position_limits_mm": [5, 15],
   "max_velocity_mm_s": 5.0,
   "reading_rate_hz": 100.0,
+  "_notes": "Tight calibration-only limits [5, 15]. See safety_config_NOTES.md for rationale and how to widen for other workflows.",
   "device_info": {
     "port": "COM5",
     "device_id": 0,

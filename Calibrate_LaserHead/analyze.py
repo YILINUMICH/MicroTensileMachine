@@ -26,7 +26,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -56,10 +56,36 @@ IL030_LINEARITY_SPEC_PCT_FS = 0.1
 class Point:
     target_mm: float
     stage_actual_mm: float
-    mean_V: float
+    mean_V: float                            # PRIMARY channel — ADC2 in xcompare runs
     std_V: float
     n_samples: int
     direction: str
+    pass_index: int = 0     # 0..passes-1 for sweep rows; -1 for baseline
+                            # rows. Defaulted for backward compat with
+                            # points.csv files written before 2026-05-26.
+    # Cross-compare secondary (ADC1 reading the same AIN4/AIN5). Populated
+    # only when the points.csv was written by a run with xcompare:true.
+    mean_V_adc1: Optional[float] = None
+    std_V_adc1: Optional[float] = None
+    n_samples_adc1: Optional[int] = None
+
+
+def _try_float(s: object) -> Optional[float]:
+    if s in (None, ""):
+        return None
+    try:
+        return float(s)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _try_int(s: object) -> Optional[int]:
+    if s in (None, ""):
+        return None
+    try:
+        return int(s)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
 
 
 def load_points(path: Path) -> Tuple[List[Point], List[Point]]:
@@ -69,6 +95,13 @@ def load_points(path: Path) -> Tuple[List[Point], List[Point]]:
     with open(path) as f:
         reader = csv.DictReader(f)
         for row in reader:
+            # pass_index is optional — pre-2026-05-26 runs don't have it.
+            # Fall back to 0 so legacy single-pass files behave as before.
+            raw_pi = row.get("pass_index", "0")
+            try:
+                pi = int(raw_pi) if raw_pi not in (None, "") else 0
+            except ValueError:
+                pi = 0
             p = Point(
                 target_mm=float(row["target_mm"]),
                 stage_actual_mm=float(row["stage_actual_mm"]),
@@ -76,12 +109,47 @@ def load_points(path: Path) -> Tuple[List[Point], List[Point]]:
                 std_V=float(row["std_V"]),
                 n_samples=int(row["n_samples"]),
                 direction=row["direction"],
+                pass_index=pi,
+                # ADC1 cross-compare columns are optional — present only in
+                # xcompare runs. _try_float/_try_int return None for missing
+                # or empty cells so single-channel files load unchanged.
+                mean_V_adc1=_try_float(row.get("mean_V_adc1")),
+                std_V_adc1=_try_float(row.get("std_V_adc1")),
+                n_samples_adc1=_try_int(row.get("n_samples_adc1")),
             )
             if p.direction.startswith("baseline"):
                 baseline.append(p)
             else:
                 sweep.append(p)
     return sweep, baseline
+
+
+def has_xcompare(sweep: List[Point]) -> bool:
+    """True if at least one sweep point carries ADC1 cross-compare data."""
+    return any(p.mean_V_adc1 is not None for p in sweep)
+
+
+def adc1_points(sweep: List[Point]) -> List[Point]:
+    """
+    Build a Point list where mean_V/std_V/n_samples come from ADC1 instead
+    of ADC2, so the existing fit/sanity machinery can run on the ADC1
+    channel unchanged. Only includes points that actually have ADC1 data.
+    """
+    out: List[Point] = []
+    for p in sweep:
+        if p.mean_V_adc1 is None:
+            continue
+        out.append(Point(
+            target_mm=p.target_mm,
+            stage_actual_mm=p.stage_actual_mm,
+            mean_V=p.mean_V_adc1,
+            std_V=p.std_V_adc1 if p.std_V_adc1 is not None else 0.0,
+            n_samples=p.n_samples_adc1 if p.n_samples_adc1 is not None
+                else p.n_samples,
+            direction=p.direction,
+            pass_index=p.pass_index,
+        ))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +199,44 @@ def linear_fit(points: List[Point], use_stage_actual: bool = True) -> FitResult:
 
 
 # ---------------------------------------------------------------------------
+# Multi-pass / multi-direction decompositions
+# ---------------------------------------------------------------------------
+def per_pass_fits(sweep: List[Point], use_stage_actual: bool = True
+                  ) -> Dict[int, FitResult]:
+    """One linear fit per pass_index. Empty dict if no points."""
+    pass_ids = sorted({p.pass_index for p in sweep})
+    out: Dict[int, FitResult] = {}
+    for pid in pass_ids:
+        subset = [p for p in sweep if p.pass_index == pid]
+        if len(subset) >= 3:
+            out[pid] = linear_fit(subset, use_stage_actual=use_stage_actual)
+    return out
+
+
+def per_direction_fits(sweep: List[Point], use_stage_actual: bool = True
+                       ) -> Dict[str, FitResult]:
+    """One linear fit per direction tag (e.g. 'fwd', 'rev')."""
+    tags = sorted({p.direction for p in sweep})
+    out: Dict[str, FitResult] = {}
+    for tag in tags:
+        subset = [p for p in sweep if p.direction == tag]
+        if len(subset) >= 3:
+            out[tag] = linear_fit(subset, use_stage_actual=use_stage_actual)
+    return out
+
+
+def pass_to_pass_spread(fits: Dict[int, FitResult]) -> Tuple[float, float]:
+    """Return (k_spread_mV_per_um, k_spread_pct_of_mean) across passes."""
+    if len(fits) < 2:
+        return (0.0, 0.0)
+    ks = [f.k_mV_per_um for f in fits.values()]
+    spread = max(ks) - min(ks)
+    mean_k = sum(ks) / len(ks)
+    pct = 100.0 * spread / abs(mean_k) if mean_k != 0 else float("nan")
+    return (spread, pct)
+
+
+# ---------------------------------------------------------------------------
 # Sanity checks (plan section 7)
 # ---------------------------------------------------------------------------
 @dataclass
@@ -144,13 +250,17 @@ def sanity_checks(fit: FitResult, baseline: List[Point],
                   points: List[Point]) -> List[Check]:
     checks: List[Check] = []
 
-    # (a) sensitivity within ~5% of 0.5 mV/um
-    pct_dev = 100.0 * abs(fit.k_mV_per_um - IL030_NOMINAL_K_MV_PER_UM) \
+    # (a) sensitivity within ~5% of 0.5 mV/um (magnitude only — sign just
+    # records the geometry convention; on this rig stage 5 mm = max V and
+    # stage 15 mm = min V, so k is negative by construction).
+    abs_k = abs(fit.k_mV_per_um)
+    pct_dev = 100.0 * abs(abs_k - IL030_NOMINAL_K_MV_PER_UM) \
         / IL030_NOMINAL_K_MV_PER_UM
     checks.append(Check(
-        "sensitivity within 5% of 0.5 mV/um",
+        "|sensitivity| within 5% of 0.5 mV/um",
         pct_dev <= 5.0,
-        f"k = {fit.k_mV_per_um:.4f} mV/um  ({pct_dev:+.2f}% vs nominal)"))
+        f"k = {fit.k_mV_per_um:+.4f} mV/um  "
+        f"(|k| = {abs_k:.4f},  {pct_dev:+.2f}% vs nominal)"))
 
     # (b) R^2 > 0.9999
     checks.append(Check(
@@ -293,6 +403,79 @@ def _main() -> None:
         print(f"            {c.detail}")
     print()
 
+    # -- Per-pass decomposition (repeatability) ----------------------------
+    pp_fits = per_pass_fits(sweep, use_stage_actual=not args.use_target)
+    if len(pp_fits) > 1:
+        print("  Per-pass fits (for repeatability):")
+        for pid in sorted(pp_fits):
+            pf = pp_fits[pid]
+            print(f"    pass {pid}: k = {pf.k_mV_per_um:.4f} mV/um   "
+                  f"V0 = {pf.v0_mV:+.3f} mV   R^2 = {pf.r_squared:.6f}   "
+                  f"(n = {len(pf.x_um)})")
+        k_spread, k_spread_pct = pass_to_pass_spread(pp_fits)
+        print(f"    pass-to-pass spread: |max - min| k = "
+              f"{k_spread:.4f} mV/um ({k_spread_pct:.2f}% of mean)")
+        print()
+
+    # -- Per-direction decomposition (hysteresis) --------------------------
+    pd_fits = per_direction_fits(sweep, use_stage_actual=not args.use_target)
+    if len(pd_fits) > 1:
+        print("  Per-direction fits (for hysteresis):")
+        for tag in sorted(pd_fits):
+            df = pd_fits[tag]
+            print(f"    {tag:>3}: k = {df.k_mV_per_um:.4f} mV/um   "
+                  f"V0 = {df.v0_mV:+.3f} mV   R^2 = {df.r_squared:.6f}   "
+                  f"(n = {len(df.x_um)})")
+        if "fwd" in pd_fits and "rev" in pd_fits:
+            dk = pd_fits["fwd"].k_mV_per_um - pd_fits["rev"].k_mV_per_um
+            dv0 = pd_fits["fwd"].v0_mV - pd_fits["rev"].v0_mV
+            # Hysteresis at sweep center: V_fwd(0) - V_rev(0) = ΔV0 (in mV).
+            # Convert to a position equivalent using the overall k for intuition.
+            hyst_um = abs(dv0 / fit.k_mV_per_um) if fit.k_mV_per_um != 0 \
+                else float("nan")
+            print(f"    fwd - rev: Δk = {dk:+.4f} mV/um   "
+                  f"ΔV0 = {dv0:+.3f} mV   "
+                  f"(≈ {hyst_um:.2f} um position equivalent)")
+        print()
+
+    # -- Cross-compare with ADC1 (when present) ----------------------------
+    # Independent linear fit on the ADC1 channel that sampled the SAME
+    # physical signal (AIN4/AIN5) as ADC2. Two ADCs converging on the
+    # same k/V0 is strong evidence the digital path is clean.
+    fit_adc1: Optional[FitResult] = None
+    if has_xcompare(sweep):
+        a1 = adc1_points(sweep)
+        if len(a1) >= 3:
+            fit_adc1 = linear_fit(a1, use_stage_actual=not args.use_target)
+            print("  Cross-compare with ADC1 (both ADCs on AIN4/AIN5):")
+            print(f"    ADC2 (primary): k = {fit.k_mV_per_um:.4f} mV/um   "
+                  f"V0 = {fit.v0_mV:+.3f} mV   R^2 = {fit.r_squared:.6f}")
+            print(f"    ADC1 (xcheck):  k = {fit_adc1.k_mV_per_um:.4f} mV/um   "
+                  f"V0 = {fit_adc1.v0_mV:+.3f} mV   R^2 = {fit_adc1.r_squared:.6f}")
+            dk = fit.k_mV_per_um - fit_adc1.k_mV_per_um
+            dv0 = fit.v0_mV - fit_adc1.v0_mV
+            mean_k = 0.5 * (fit.k_mV_per_um + fit_adc1.k_mV_per_um)
+            k_agree_pct = (100.0 * abs(dk) / abs(mean_k)
+                           if mean_k != 0 else float("nan"))
+            print(f"    ADC2 - ADC1:    Δk = {dk:+.4f} mV/um   "
+                  f"ΔV0 = {dv0:+.3f} mV   "
+                  f"|Δk|/|mean(k)| = {k_agree_pct:.3f}%")
+            # Per-point mean-V agreement: if the two ADCs report the same
+            # voltage at each stage position, the cross-check is also clean
+            # at the sample level, not just at the slope level.
+            diffs = np.array(
+                [(p.mean_V - p.mean_V_adc1) * 1000.0
+                 for p in sweep if p.mean_V_adc1 is not None], dtype=float
+            )
+            if diffs.size:
+                bias_mV = float(diffs.mean())
+                spread_mV = float(diffs.std(ddof=0))
+                print(f"    per-point ΔV (ADC2 - ADC1): "
+                      f"mean = {bias_mV:+.3f} mV   "
+                      f"σ = {spread_mV:.3f} mV   "
+                      f"(over {diffs.size} points)")
+            print()
+
     if not args.no_plot:
         png_path = points_path.with_name(
             points_path.name.replace("_points.csv", "_fit.png"))
@@ -302,16 +485,65 @@ def _main() -> None:
     if args.json_out:
         json_path = points_path.with_name(
             points_path.name.replace("_points.csv", "_fit.json"))
+        out: dict = {
+            "k_mV_per_um": fit.k_mV_per_um,
+            "v0_mV": fit.v0_mV,
+            "r_squared": fit.r_squared,
+            "max_abs_residual_mV": fit.max_abs_residual_mV,
+            "linearity_pct_fs": fit.linearity_pct_fs,
+            "n_points": len(sweep),
+            "source": points_path.name,
+        }
+        if len(pp_fits) > 1:
+            k_spread, k_spread_pct = pass_to_pass_spread(pp_fits)
+            out["per_pass"] = {
+                str(pid): {
+                    "k_mV_per_um": pf.k_mV_per_um,
+                    "v0_mV": pf.v0_mV,
+                    "r_squared": pf.r_squared,
+                    "n_points": len(pf.x_um),
+                }
+                for pid, pf in pp_fits.items()
+            }
+            out["pass_to_pass_k_spread_mV_per_um"] = k_spread
+            out["pass_to_pass_k_spread_pct"] = k_spread_pct
+        if len(pd_fits) > 1:
+            out["per_direction"] = {
+                tag: {
+                    "k_mV_per_um": df.k_mV_per_um,
+                    "v0_mV": df.v0_mV,
+                    "r_squared": df.r_squared,
+                    "n_points": len(df.x_um),
+                }
+                for tag, df in pd_fits.items()
+            }
+            if "fwd" in pd_fits and "rev" in pd_fits:
+                out["fwd_minus_rev_k_mV_per_um"] = (
+                    pd_fits["fwd"].k_mV_per_um - pd_fits["rev"].k_mV_per_um
+                )
+                out["fwd_minus_rev_v0_mV"] = (
+                    pd_fits["fwd"].v0_mV - pd_fits["rev"].v0_mV
+                )
+        if fit_adc1 is not None:
+            out["xcompare"] = {
+                "adc1_fit": {
+                    "k_mV_per_um": fit_adc1.k_mV_per_um,
+                    "v0_mV": fit_adc1.v0_mV,
+                    "r_squared": fit_adc1.r_squared,
+                    "max_abs_residual_mV": fit_adc1.max_abs_residual_mV,
+                    "linearity_pct_fs": fit_adc1.linearity_pct_fs,
+                },
+                "delta_k_mV_per_um": fit.k_mV_per_um - fit_adc1.k_mV_per_um,
+                "delta_v0_mV": fit.v0_mV - fit_adc1.v0_mV,
+                "k_agreement_pct": (
+                    100.0 * abs(fit.k_mV_per_um - fit_adc1.k_mV_per_um) /
+                    abs(0.5 * (fit.k_mV_per_um + fit_adc1.k_mV_per_um))
+                    if (fit.k_mV_per_um + fit_adc1.k_mV_per_um) != 0
+                    else None
+                ),
+            }
         with open(json_path, "w") as f:
-            json.dump({
-                "k_mV_per_um": fit.k_mV_per_um,
-                "v0_mV": fit.v0_mV,
-                "r_squared": fit.r_squared,
-                "max_abs_residual_mV": fit.max_abs_residual_mV,
-                "linearity_pct_fs": fit.linearity_pct_fs,
-                "n_points": len(sweep),
-                "source": points_path.name,
-            }, f, indent=2)
+            json.dump(out, f, indent=2)
         log.info("Wrote %s", json_path)
 
 

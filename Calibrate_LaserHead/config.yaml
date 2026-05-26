@@ -6,19 +6,45 @@
 # do NOT duplicate it here.
 #
 # All distances are in millimeters, all times in seconds.
-# Stage positions are RELATIVE to the calibration home position (= 30 mm
-# standoff from the IL-030 reference face).
+# Stage positions below are ABSOLUTE Zaber-stage positions (not relative to
+# the sensor face). On this rig the mounting fixture maps stage position to
+# the IL-030 measurement window as:
+#     stage  5 mm → IL-030 "high end"   → MAX voltage reading
+#     stage 10 mm → IL-030 reference     → mid voltage  (sweep center)
+#     stage 15 mm → IL-030 "low end"     → MIN voltage reading
+# So voltage DECREASES as stage position INCREASES → the fit slope k is
+# negative. analyze.py reports |k| against the 0.5 mV/µm IL-030 nominal,
+# the sign just tells you which way you wired the geometry.
 # =============================================================================
 
 # --- Stage sweep geometry ----------------------------------------------------
-# The IL-030 reference distance is 30 mm; we sweep the full measurement window
-# (±5 mm around reference). Absolute stage positions visited: 25 mm to 35 mm.
-# The Zaber safety_config.json must permit at least [25, 35] — currently
-# [10, 40] so we're clear.
-sweep_center_mm: 30.0              # absolute stage position at the IL-030 reference distance
-sweep_range_mm: [-5.0, 5.0]        # relative to sweep_center_mm (the sensor's full window)
+# Sweep covers the full IL-030 ±5 mm measurement window: absolute stage
+# positions 5 mm → 15 mm, centered on 10 mm (the IL-030 reference distance
+# under the current mounting fixture). The Zaber safety_config.json must
+# permit at least [5, 15] — verify (`Calibrate_LaserHead/STATUS.md` notes
+# the old [10, 40] window which would FORBID the new low end at 5 mm).
+sweep_center_mm: 10.0              # absolute stage position at the IL-030 reference distance
+sweep_range_mm: [-5.0, 5.0]        # relative to sweep_center_mm — visits [5, 15] mm absolute
 step_size_mm: 0.2                  # 51 points over 10 mm; use 0.1 for finer linearity
-direction: forward_only            # forward_only | bidirectional
+direction: bidirectional           # forward_only | bidirectional
+                                   # bidirectional adds a return sweep so we
+                                   # can separate hysteresis (fwd vs rev within
+                                   # a pass) from repeatability (pass vs pass).
+passes: 2                          # number of full sweeps to run back-to-back.
+                                   # With direction=bidirectional this gives
+                                   # 4 traversals: fwd1 rev1 fwd2 rev2. Each
+                                   # point row is tagged with (pass_index,
+                                   # direction) so analyze.py can fit per-pass
+                                   # and report pass-to-pass repeatability.
+
+# --- Cross-compare -----------------------------------------------------------
+# When true, BOTH ADC1 and ADC2 sample AIN4/AIN5 simultaneously. ADC2 is the
+# primary (its fit becomes the production k/V0); ADC1 is an independent
+# digital-path check. Requires LaserHead_PIO flashed with ENABLE_ADC1=1 and
+# ENABLE_ADC2=1 (both ADCs muxed to AIN4/AIN5 — current default after the
+# 2026-05-26 firmware update). Set to false if running against
+# SensorHub_PIO production firmware or any single-channel laser build.
+xcompare: true
 
 # --- Timing ------------------------------------------------------------------
 settle_time_s: 1.5                 # mechanical ringdown after each move
@@ -31,10 +57,10 @@ drain_timeout_s: 2.0               # max time spent draining the serial buffer
 
 # --- Serial I/O --------------------------------------------------------------
 # Portenta H7 (laser-head ADC stream) — USB-CDC.
-# Current signal chain: IL-030 → HAT AIN0(+)/AIN1(-) → ADC1 → M4 → RPC → M7 → USB.
-# ADC2 / AIN2-3 is disabled in SensorHub_PIO while the saturation fault on
-# that path is unresolved. The HAT's AIN0/AIN1 front-end applies a ~4× scale
-# factor that the calibration fit absorbs into the measured sensitivity.
+# Post-2026-05-26 signal chain: IL-030 → EVM AIN4(+)/AIN5(-) → ADC2 (and ADC1
+# in xcompare mode) → M4 → RPC → M7 → USB. No HAT front-end; the bare TI EVM
+# sees the IL-030 voltage directly, so the calibration k should land near
+# the 0.5 mV/µm datasheet nominal (the old HAT ~4× attenuation is gone).
 portenta_port: "COM8"
 portenta_baud: 115200
 
@@ -53,9 +79,14 @@ notes: ""
 # --- Dry-run override --------------------------------------------------------
 # When run_calibration.py is invoked with --dry-run, these override the sweep
 # above so the full pipeline can be validated in ~1 minute. Still centered on
-# sweep_center_mm (30 mm absolute), just a much narrower window.
+# sweep_center_mm (10 mm absolute), just a much narrower window — visits
+# [9.5, 10.5] mm absolute.
 dry_run:
   sweep_range_mm: [-0.5, 0.5]
   step_size_mm: 0.1                # 11 points over 1 mm per plan Section 9.3
+  direction: forward_only          # keep dry-run minimal — full plan tests
+                                   # the bidirectional + multi-pass path
+  passes: 1                        # single pass — dry-run is for pipeline
+                                   # validation, not statistics
   samples_per_point: 20
   baseline_samples: 50

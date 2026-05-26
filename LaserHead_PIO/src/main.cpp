@@ -1,13 +1,17 @@
 /**
- * @file main.cpp  (Portenta H7 dual-core — laser displacement via ADC2)
+ * @file main.cpp  (Portenta H7 dual-core — laser displacement, dual-ADC x-compare)
  *
- * Laser-only build for calibration. Runs ADC2 of the ADS1263 against
- * the Keyence IL-030 analog output. The sibling SensorHub_PIO project
- * is the production firmware that runs BOTH ADCs (load cell on ADC1,
- * laser on ADC2); this project exists so that laser-only experiments
- * — IL-030 calibration via the Zaber stage in Calibrate_LaserHead/,
- * sensor characterisation, etc. — can be done with a single-purpose
- * firmware that doesn't drag the load-cell signal chain along.
+ * Calibration-purpose firmware. BOTH ADCs of the ADS1263 sample the
+ * Keyence IL-030 analog output simultaneously on AIN4/AIN5 — ADC2 is
+ * the production-path measurement that becomes the calibration k/V₀,
+ * ADC1 is an independent digital-path cross-check. Two ADCs agreeing
+ * on the same physical signal is stronger evidence of a trustworthy
+ * calibration than a single-channel measurement alone.
+ *
+ * The sibling SensorHub_PIO is the production firmware (load cell on
+ * ADC1/AIN2-3, laser on ADC2/AIN4-5). This project exists so the
+ * calibration can run dual-ADC on the SAME input without disturbing
+ * production wiring or SensorHub_PIO's firmware state.
  *
  * Hardware target (post-port 2026-05-26):
  *   - Portenta H7 on the Mid Carrier (ASX00055)
@@ -18,8 +22,10 @@
  *
  * Signal chain (this build):
  *   Keyence IL-030 (0–5 V single-ended) → AIN4(+) / AIN5(-)
- *   → ADC2 (24-bit, 400 SPS, Sinc3, gain=1, REF7050)
- *   → M4 timed polling → RPC → M7 USB-CDC bridge → host serial @ 115200
+ *     → ADC1 (32-bit, 400 SPS, Sinc3, PGA gain=1, REF7050)  [INPMUX = 0x45]
+ *     → ADC2 (24-bit, 400 SPS, Sinc3, gain=1,    REF7050)   [ADC2MUX = 0x45]
+ *   Both ADCs free-run on independent clocks but at the same SPS, so
+ *   timestamp alignment between channels is bounded by jitter only.
  *
  * Driver provenance:
  *   lib/ADS1263/ was copied wholesale from SensorHub_PIO on 2026-05-26
@@ -29,15 +35,22 @@
  *   write-ups. Old driver backed up under lib/ADS1263/.backup_pre_port_*.
  *
  * Output stream format (tab-separated, one line per sample):
- *   <t_ms>\t<raw_code>\t<voltage_V>     (ADC2-only build)
- * Host parser: Calibrate_LaserHead/portenta_reader.py — handles this
- * 3-column form natively (no src demux needed).
+ *   <t_ms>\t<src>\t<raw_code>\t<voltage_V>     (src=1 ADC1, src=2 ADC2)
+ * Host parser: Calibrate_LaserHead/portenta_reader.py handles this
+ * 4-column form; PortentaReader.read_samples_dual() demuxes the two
+ * streams into separate sample lists for parallel fitting.
  *
- * To run the dual-ADC cross-compare diagnostic instead, set
- * ENABLE_ADC1 = 1 below AND copy the ADC2 inpmux into ADC1 (set
- * INPMUX = 0x45 to match ADC2MUX). Output then becomes the 4-column
- * form with src=1/src=2 both pointing at AIN4/AIN5. This is a future
- * follow-on; default off for production calibration runs.
+ * What cross-compare DOES catch: ADC2-specific driver bugs, register-
+ * config errors (wrong DR2, wrong GAIN2, accidentally landing on the
+ * internal 2.5 V ref), any asymmetric handling of the same signal.
+ * What it does NOT catch: REF7050 voltage error (both ADCs share the
+ * same external reference — both drift in lockstep), front-end wiring
+ * errors, beam-axis cosine error, sensor issues. Treat agreement as a
+ * digital-path sanity check, not an end-to-end validation.
+ *
+ * To revert to single-ADC laser-only: flip ENABLE_ADC1 back to 0
+ * below. The stream then becomes the 3-column form
+ * (`<t_ms>\t<raw>\t<V>`) and the host parser handles it transparently.
  *
  * Flash order (first time):
  *   pio run -e portenta_m7_bridge -t upload
@@ -84,9 +97,19 @@ void loop() {
 ADS1263_Driver adc;
 
 // ── Enable/disable each ADC path at build time ─────────────────────────
-// Flip ENABLE_ADC1 to 1 when you're ready to run both ADCs simultaneously
-// (i.e. when merging the load cell front end into this firmware).
-#define ENABLE_ADC1   0
+// Cross-compare configuration (2026-05-26): BOTH ADCs sample AIN4/AIN5
+// simultaneously. ADC2 produces the calibration k/V₀ that propagates to
+// production; ADC1 is the digital-path cross-check — its independent fit
+// catches ADC2-specific driver bugs, register-config errors, or any
+// asymmetric handling of the same physical signal. See
+// Calibrate_LaserHead/MEMO_session_2026-05-26.md for the deferred-→active
+// scope change. ADC1's INPMUX in the configure block below is set to
+// 0x45 to match ADC2MUX = 0x45.
+//
+// To revert to single-ADC laser-only: flip ENABLE_ADC1 back to 0. The
+// stream then becomes the 3-column form (`t_ms\traw\tV`) and the host
+// parser handles it without changes.
+#define ENABLE_ADC1   1
 #define ENABLE_ADC2   1
 
 // Checkpoint macro — same convention as LoadCell_PIO.
