@@ -1,4 +1,4 @@
-> **Status: WIP** — code port from Hat Carrier → Mid Carrier (ASX00055) is done in source; **not yet bench-verified** on the Mid Carrier + bare TI EVM. See [STATUS.md](STATUS.md) for module-level state and TODOs. See [../README.md](../README.md) for project overview.
+> **Status: To-Test** — bench-verified on Mid Carrier + bare TI EVM on 2026-05-25 (dual-stream clean, both channels track multimeter). Flips to Stable once `SMA_CharacterizationV2/` consumes this stream end-to-end. See [STATUS.md](STATUS.md) for module-level state and TODOs. See [../README.md](../README.md) for project overview.
 
 # SensorHub_PIO — dual-ADC firmware (load cell + laser head)
 

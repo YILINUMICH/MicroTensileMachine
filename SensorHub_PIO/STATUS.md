@@ -2,20 +2,32 @@
 
 | Field | Value |
 |---|---|
-| **Status** | **WIP** — **code port from Hat Carrier (ASX00049) → Mid Carrier (ASX00055) is done in source; not yet bench-verified.** Pin defines (`PA_8`/`PC_6`/`PC_7`), REFMUX (`0x09`), POWER (`0x13`, VBIAS on for PGA), ADC1 on AIN2/3 + ADC2 on AIN4/5, REF7050 (+5 V) shared on AIN0/1 — all match `ADS1263_FirstPowerUp_PIO/` cp0–cp10. Flips to **To-Test** after a clean dual-stream run on the Mid Carrier + bare TI EVM, and to **Stable** after the SMA recorder consumes it end-to-end. |
+| **Status** | **To-Test** — **bench-verified on Mid Carrier + bare TI EVM on 2026-05-25.** Dual-stream output is clean: ADC1 on AIN2/AIN3 reads the LCA-9PC load cell within ~3 mV of the bench multimeter; ADC2 on AIN4/AIN5 reads the Keyence IL-030 laser within ~18 mV of the bench multimeter; no status-byte alarms once wiring was confirmed; checksums clean on both ADCs. Flips to **Stable** after `SMA_CharacterizationV2/` consumes this stream end-to-end. |
 | **Role** | Current production firmware target — dual-ADC (load cell on ADC1/AIN2-AIN3 + laser on ADC2/AIN4-AIN5) on Portenta H7 M4 core |
 | **Supersedes** | `LoadCell_PIO/`, `LaserHead_PIO/` (kept as diagnostic reference builds) |
-| **Last verified** | Hat Carrier setup, April 2026 (per parent `README.md`) — **has NOT been verified on Mid Carrier yet** |
+| **Last verified** | 2026-05-25 (dual-stream on Mid Carrier + EVM). Config: ADC1 PGA in path at gain=1 on AIN2/AIN3; ADC2 gain=1 on AIN4/AIN5; REF7050 5.0 V external on AIN0/AIN1 (REFMUX=0x09, REF2=001b); 400 SPS both; Sinc3 filter; INTERFACE=0x05 (STATUS + CHK on); RDATA2 6-byte frame including 00h zero-pad. EVM AVDD ≈ 5.2 V (matters for VBIAS / PGA CM, not for scaling). |
 | **Owner** | Yilin |
-| **Quick test** | `pio run -e portenta_m7_bridge -t upload` then `pio run -e portenta_m4 -t upload`, power-cycle the rig (USB + EVM supply), `pio device monitor` @ 115200 |
+| **Quick test** | `pio run -e portenta_m7_bridge -t upload` then `pio run -e portenta_m4 -t upload`, power-cycle the rig (USB + EVM supply), `pio device monitor` @ 115200. Expected: `ID=0x23`, dual stream with `src=1` (load) and `src=2` (laser) at ~3 ms intervals each, no alarm lines once wiring is settled. |
+
+## Driver bugs caught during 2026-05-25 bring-up
+
+Two independent bugs in `lib/ADS1263/ADS1263_Driver.cpp`, both ADC2-side, both fixed:
+
+1. **RDATA2 frame layout** (`readRawData24`). The driver was clocking out 5 bytes after `CMD_RDATA2` (`STATUS | D3 | D2 | D1 | CHK`). Per datasheet §9.4.7.2 Figure 9-44 and §9.4.7.3, the chip emits **6 bytes** for ADC2 — there's a fixed `0x00` zero-pad byte between the 24-bit data and the CHK byte so the ADC2 frame lines up with the 6-byte ADC1 frame. Symptom: every ADC2 read was flagged invalid because the byte the driver called "CHK" was actually the zero-pad (always `0x00`), and the real CHK byte rolled into the next transaction. Fix: read the extra byte and exclude it from the checksum sum.
+2. **ADC2CFG bit-field swap** (`writeADC2CFG`). The driver packed the register as `DR2 | GAIN2 | REF2`; datasheet §9.6 Table 9-52 specifies `DR2[7:6] | REF2[5:3] | GAIN2[2:0]`. The swap silently ran ADC2 on its **internal 2.5 V reference at 2× gain** while the host code thought it was on REF7050 at 1×. Symptom: ADC2 hard-saturates at `0x7FFFFF` on any input ≥ +1.25 V differential, and the driver's volts-per-code math (using the *intended* 5 V / 1×) reports a clean `+5.000000 V`. Hit the laser channel (+2.5 V actual) exactly. Fix: swap the bit shifts in `writeADC2CFG`.
+
+The two bugs masked each other: with only fix #1 applied you'd get clean checksums but `+5.000000 V` instead of `+2.5 V`; with only fix #2 you'd get the right voltage but every read marked invalid. Diagnosis required hitting both. See [`../ADS1263/ADS1263_H7_Integration_Notes.md`](../ADS1263/ADS1263_H7_Integration_Notes.md) §4 (both 2026-05-25 addenda) for the datasheet refs.
 
 ## Module TODOs
 
-- [x] ~~**Port pin defines to Mid Carrier**~~ — done in source 2026-05-25. `lib/ADS1263/ADS1263_Driver.h` defines `ADS1263_CS_PIN = PA_8` (J15-25), `ADS1263_DRDY_PIN = PC_6` (J15-27), `ADS1263_RESET_PIN = PC_7` (J15-29), matching the Cable 1 row in [`../doc/MEMO_cable_map.md`](../doc/MEMO_cable_map.md) and the cp0–cp10 baseline in `ADS1263_FirstPowerUp_PIO/STATUS.md`. Bench-verify still pending.
-- [x] ~~**Re-verify SPI mapping**~~ — done in source. Driver header documents SPI1 on J15-20 (SCLK / PI_1), J15-22 (CIPO / PC_2), J15-24 (COPI / PC_3); SPI1 hardware CS pad (J15-18 / PI_0) intentionally unused — CS is GPIO-driven via `ADS1263_CS_PIN`. Same arrangement that worked for `ADS1263_FirstPowerUp_PIO/` cp0–cp10. Bench-verify still pending.
-- [x] ~~**Resolve ADC2/AIN2-AIN3 saturation**~~ — **RETIRED 2026-05-24** by cp7 (AIN-pair scan) in `ADS1263_FirstPowerUp_PIO/`: all 8 AIN-pair configs PASS on the bare EVM, no saturation reproduces. Production assignment is now AIN2/3 (load cell, ADC1) + AIN4/5 (laser, ADC2) per README §Recommended configuration.
-- [ ] **Bench-verify both streams concurrently** on Mid Carrier + bare TI EVM — expect `ID=0x23`, `src=1` (load) and `src=2` (laser) lines arriving at 400 SPS each with no cross-talk and no `REF_ALM` in STATUS bytes. This is the one outstanding item before flipping status to To-Test.
-- [x] ~~**Update the `## Wiring` and `## Expected boot output` sections of `README.md`**~~ — done. Wiring block now reflects REF7050 on AIN0/1 + AIN2/3 load + AIN4/5 laser; Expected boot output reflects the dual-ADC code path.
-- [ ] **Remove duplicate datasheets from `doc/`** once `README.md` links back to `../doc/` instead. (No local `doc/` exists yet under `SensorHub_PIO/` — this is a forward-looking hygiene item from the parent TODO.)
+- [x] ~~**Port pin defines to Mid Carrier**~~ — done 2026-05-25, bench-verified.
+- [x] ~~**Re-verify SPI mapping**~~ — done 2026-05-25, bench-verified.
+- [x] ~~**Resolve ADC2/AIN2-AIN3 saturation**~~ — RETIRED 2026-05-24 by cp7 in `ADS1263_FirstPowerUp_PIO/`. Production assignment AIN2/3 (load, ADC1) + AIN4/5 (laser, ADC2) confirmed clean.
+- [x] ~~**Bench-verify both streams concurrently**~~ — done 2026-05-25. Both `src=1` and `src=2` lines arrive at ~333 lines/s each (700 lines/s combined) over the USB CDC bridge with no cross-talk and no checksum errors.
+- [x] ~~**Update the `## Wiring` and `## Expected boot output` sections of `README.md`**~~ — done 2026-05-25; README reflects the bench-derived production config.
+- [ ] **Re-calibrate the laser head** on the bare EVM (deferred from this session). The legacy `k = -0.1171 mV/µm`, `V₀ = 566.957 mV` constants in `SMA_CharacterizationV2/` came through the Waveshare HAT's ~4.4× input attenuator and are invalid on the EVM. Run `Calibrate_LaserHead/` with this firmware, then update the defaults. Tracked in [../TODO.md](../TODO.md).
+- [ ] **Smoke-test `SMA_CharacterizationV2/`** against this stream. When the recorder consumes both `src=1` and `src=2` cleanly across an OPEN→SHORT→RAW session, flip this module's status To-Test → Stable.
+- [ ] **Remove duplicate datasheets from `doc/`** once `README.md` links back to `../doc/` instead. (Forward-looking hygiene item; no local `doc/` exists under `SensorHub_PIO/` yet, but the parent TODO carries this.)
+- [ ] **Port the two ADC2 driver fixes into `LaserHead_PIO/lib/ADS1263/`** when that module is ported to the Mid Carrier. Both bugs live there too — same driver lineage.
 
 See [../TODO.md](../TODO.md) for cross-cutting items.
