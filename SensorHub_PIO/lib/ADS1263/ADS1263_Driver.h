@@ -132,7 +132,7 @@
 #define ADS1263_REG_GPIODIR    0x13
 #define ADS1263_REG_GPIODAT    0x14
 // ADC2 config
-#define ADS1263_REG_ADC2CFG    0x15   // DR2[7:6] | GAIN2[5:3] | REF2[2:0]
+#define ADS1263_REG_ADC2CFG    0x15   // DR2[7:6] | REF2[5:3] | GAIN2[2:0]  (datasheet §9.6 Table 9-52)
 #define ADS1263_REG_ADC2MUX    0x16   // MUXP2[7:4] | MUXN2[3:0]
 #define ADS1263_REG_ADC2OFC0   0x17
 #define ADS1263_REG_ADC2OFC1   0x18
@@ -317,11 +317,15 @@ private:
     void writeMODE2();                          // packs PGA bypass + rate
 
     // ADC2 helpers
-    // RDATA2 → 5-byte frame (STATUS, D3..D1, CHK). Same out-parameter
-    // contract as readRawData32().
+    // RDATA2 → 6-byte frame (STATUS, D3..D1, 00h zero-pad, CHK) per
+    // ADS1263 datasheet §9.4.7.2 Figure 9-44. The zero-pad is a fixed
+    // 0x00 inserted by the chip between the 24-bit data and the CHK
+    // byte (so ADC2 frames line up with ADC1's 6-byte frames). It must
+    // be clocked out but is excluded from the checksum sum. Same
+    // out-parameter contract as readRawData32().
     int32_t readRawData24(uint8_t &status_out, bool &chk_ok_out);
     float codeToVoltageADC2(int32_t code) const;
-    void writeADC2CFG();                        // packs DR2|GAIN2|REF2
+    void writeADC2CFG();                        // packs DR2[7:6] | REF2[5:3] | GAIN2[2:0]
 
     // STATUS-byte alarm logging (one-line DRV_LOG warning when REF_ALM set).
     void logStatusAlarms(uint8_t status, const char *which);

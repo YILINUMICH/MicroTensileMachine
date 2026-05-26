@@ -69,13 +69,28 @@ ADS1263_Driver adc;
 // individual paths can be temporarily disabled for bring-up diagnostics
 // without touching the loop() code.
 #define ENABLE_ADC1   1
-#define ENABLE_ADC2   1    // 2026-05-24: re-enabled. cp7 (AIN-pair scan) +
-                           // cp8 (ADC2 cp) PASSED in ADS1263_FirstPowerUp_PIO/
-                           // on the bare TI EVM — the legacy Waveshare-HAT
-                           // AIN2/3 saturation does NOT reproduce here. ADC2
-                           // measured 8.5 µV RMS at 100 SPS Sinc3 gain=1
-                           // (datasheet typical 10.3 µV). Production assignment:
-                           // load cell on ADC1/AIN2-AIN3, laser on ADC2/AIN4-AIN5.
+#define ENABLE_ADC2   1
+//
+// Bring-up history (2026-05-24 onward):
+//   2026-05-24  ADC2 re-enabled after cp7 + cp8 PASSED in FirstPowerUp
+//               on the bare EVM (legacy Waveshare-HAT AIN2/3 saturation
+//               does NOT reproduce). Production assignment: load cell
+//               on ADC1/AIN2-AIN3, laser on ADC2/AIN4-AIN5.
+//   2026-05-25  First dual-ADC run: every ADC2 read failed checksum.
+//               Root cause = RDATA2 frame-layout bug in the driver
+//               (5-byte read where the chip emits 6 bytes — STATUS +
+//               D3 + D2 + D1 + 00h pad + CHK). Fixed in
+//               lib/ADS1263/ADS1263_Driver.cpp::readRawData24().
+//               See ADS1263_H7_Integration_Notes.md §4 addendum.
+//   2026-05-25  Checksums clean, but ADC2 reported +full-scale (+5.0 V)
+//               on an actual +2.5 V signal at AIN4/AIN5 (multimeter
+//               and ADC1-on-AIN4/AIN5 both confirmed +2.5 V). Root
+//               cause = REF2 / GAIN2 bit-field swap in
+//               writeADC2CFG() — the chip was running on its internal
+//               2.5 V reference at gain 2× instead of the external
+//               REF7050 at gain 1×. Fixed in
+//               lib/ADS1263/ADS1263_Driver.cpp::writeADC2CFG().
+//               See ADS1263_H7_Integration_Notes.md §4 second addendum.
 
 // Checkpoint macro — same convention as the sibling projects.
 #define CP(n, msg)  do { \
@@ -138,26 +153,31 @@ void setup() {
     RPC.println(adc.getDeviceID(), HEX);
 
     // ── Configure ADC1 ─────────────────────────────────────────────────
-    // Post-EVM-modification configuration (see doc/ADS1263EVM_Modifications.md):
-    // the REF7050 external reference now drives AIN0(+)/AIN1(-), so the
-    // signal under test moves to AIN2(+)/AIN3(-). PGA stays in the path
-    // for the low-noise input buffer; MODE1 is Sinc4 (set in the driver)
-    // for best 50/60 Hz mains rejection at 400 SPS.
+    // REF7050 drives AIN0(+)/AIN1(-) as the external reference; the load-
+    // cell signal sits on AIN2(+)/AIN3(-). MODE1 = Sinc3 (set in the
+    // driver) — same filter as the noise-floor characterisation.
+    //
+    // PGA in path at gain=1 (production config). LCA-9PC supplies the
+    // gain; the chip PGA is here for the high-Z input buffer and the
+    // lower noise floor (~1.3 µV vs ~3.5 µV RMS at 400 SPS). VBIAS keeps
+    // AINCOM at AVDD/2 ≈ 2.6 V; the LCA-9PC ground sense on AIN3 sets a
+    // working common-mode safely inside the PGA's [0.3, AVDD-0.3] window
+    // so PGAL_ALM stays clear.
     //   INPMUX = 0x23                       → AIN2(+) / AIN3(-)
     //   REFMUX = ADS1263_REFMUX_EXT_AIN01   → 0x09, REF7050 on AIN0/AIN1
-    //   VREF   = 5.0 V                      → matches the REF7050 output
+    //   VREF   = 5.0 V                      → REF7050 nominal (NOT AVDD)
     //   rate   = 400 SPS                    → load-cell bandwidth
-    //   PGA    = enabled  (pga_bypass=false)
+    //   PGA    = in path, gain=1 (pga_bypass=false) → MODE2 = 0x08
 #if ENABLE_ADC1
     adc.configureADC1(
         /*inpmux     =*/ 0x23,                       // AIN2(+) / AIN3(-)
         /*refmux     =*/ ADS1263_REFMUX_EXT_AIN01,   // 0x09 — REF7050 on AIN0/AIN1
         /*vref_V     =*/ 5.0f,
         /*rate       =*/ ADS1263_400SPS,
-        /*pga_bypass =*/ false                       // PGA enabled (do not rely on default)
+        /*pga_bypass =*/ false                       // PGA in path, gain=1
     );
     adc.startADC1();
-    CP(9, "ADC1 started on AIN2/AIN3, REF7050 on AIN0/AIN1, PGA enabled");
+    CP(9, "ADC1 started on AIN2/AIN3, REF7050 on AIN0/AIN1, PGA in path gain=1");
 #endif
 
     // ── Configure ADC2 ─────────────────────────────────────────────────

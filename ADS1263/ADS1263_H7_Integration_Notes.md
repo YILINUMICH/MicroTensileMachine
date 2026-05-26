@@ -72,11 +72,30 @@ SPI.begin();
 The Waveshare HAT ships with `INTERFACE = 0x05` as its power-on default, meaning the chip **always prepends a STATUS byte and appends a CRC byte** to every conversion result. Every SPI read must account for this:
 
 ```
-Transaction: CMD_RDATA1 → STATUS (1 byte) → DATA (4 bytes) → CRC (1 byte)
-Total: 6 bytes read after sending CMD_RDATA1
+RDATA1 frame: CMD_RDATA1 → STATUS (1 B) → D3 D2 D1 D0 (4 B, 32-bit) → CHK (1 B)
+              Total: 6 bytes read after sending CMD_RDATA1
 ```
 
 Attempting to disable the STATUS/CRC bytes by writing `INTERFACE = 0x00` causes the chip to reset to defaults after calibration (`SFOCAL1`), silently re-enabling them. The correct approach is to keep `INTERFACE = 0x05` and always read 6 bytes.
+
+> **Addendum 2026-05-25 — RDATA2 has a zero-pad byte; clock out 6 bytes, not 5.** ADC2's RDATA2 frame is the SAME length as RDATA1 (6 bytes), even though ADC2's data word is only 24-bit. Per datasheet §9.4.7.2 Figure 9-44 and §9.4.7.3, the chip inserts a fixed `0x00` zero-pad byte between the 24-bit data and the CHK byte so the ADC2 frame lines up with the ADC1 pipeline:
+>
+> ```
+> RDATA2 frame: CMD_RDATA2 → STATUS (1 B) → D3 D2 D1 (3 B, 24-bit) → 00h pad (1 B) → CHK (1 B)
+>               Total: 6 bytes read after sending CMD_RDATA2
+> ```
+>
+> The zero-pad byte must be clocked out but is **excluded** from the checksum sum (§9.4.7.3.3.1: "ADC2 sums three data bytes" + 0x9B → CHK). If you only read 5 bytes after `CMD_RDATA2`, the byte you call "CHK" is actually the zero-pad (always 0x00), and the real CHK byte rolls into the start of the next transaction. The SensorHub driver hit exactly this — every ADC2 read failed checksum until the extra byte was added. `ADS1263_FirstPowerUp_PIO/`'s cp8 had the same 5-byte read but happened to "pass" because it never verified the checksum.
+
+> **Addendum 2026-05-25 (2) — ADC2CFG field order is `DR2 | REF2 | GAIN2`, not `DR2 | GAIN2 | REF2`.** Datasheet §9.6 Table 9-52 lays the register out as:
+>
+> ```
+> Bit 7:6 = DR2[1:0]    (data rate)
+> Bit 5:3 = REF2[2:0]   (reference input select)
+> Bit 2:0 = GAIN2[2:0]  (gain)
+> ```
+>
+> The early SensorHub driver inverted the middle and low nibble (REF2 at [2:0], GAIN2 at [5:3]), so configuring `REF2 = AIN0/AIN1 (001b)` and `GAIN2 = 1× (000b)` actually wrote `REF2 = 000b → internal 2.5 V` and `GAIN2 = 001b → 2×` to the chip. Symptom: ADC2 hard-saturates at `0x7FFFFF` on any input ≥ +1.25 V differential, and the driver's volts-per-code math (based on the *intended* 5 V ref + 1× gain) reports `+5.000 V`. Fixed in `SensorHub_PIO/lib/ADS1263/ADS1263_Driver.cpp::writeADC2CFG()`. `LaserHead_PIO/lib/ADS1263/ADS1263_Driver.cpp` still has the swap — apply the same fix when porting that module to the Mid Carrier.
 
 ### Working Register Configuration (400 SPS, PGA bypass, internal 2.5V ref)
 

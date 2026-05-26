@@ -11,10 +11,14 @@ This supersedes the legacy Hat-Carrier channel assignment (AIN0/AIN1 + AIN2/AIN3
 
 | Path | AIN pair | Sensor               | SPS     | Gain | Filter | Resolution |
 |------|----------|----------------------|---------|------|--------|------------|
-| **ADC1** | **AIN2 (+) / AIN3 (−)** | **Load cell (LCA-9PC)** | **400 SPS** | **PGA = 1** | **Sinc3** (MODE1 default) | 32-bit |
-| **ADC2** | **AIN4 (+) / AIN5 (−)** | **Keyence IL-030**       | **400 SPS** | **gain = 1** | Sinc3 (ADC2's only option) | 24-bit |
+| **ADC1** | **AIN2 (+) / AIN3 (−)** | **Load cell (LCA-9PC)** | **400 SPS** | **PGA in path, gain = 1** | **Sinc3** (MODE1 default) | 32-bit |
+| **ADC2** | **AIN4 (+) / AIN5 (−)** | **Keyence IL-030**       | **400 SPS** | **gain = 1** (PGA always in path) | Sinc3 (ADC2's only option) | 24-bit |
 
-**Why this assignment.** Load cell goes to ADC1 because (a) ADC1 has the 32-bit core and the programmable PGA, preserving flexibility if you ever drop the amp gain or move to a lower-output load cell, and (b) force is the primary measurement — its precision drives the quality of the extracted material properties. The laser controller already conditions its output and outputs at the full ADC input range, so ADC2's 8.5 µV RMS floor (cp8 result, *below* the 10.3 µV datasheet typical) is comfortably under the IL-030's own ~0.3 µm repeatability.
+**Why this assignment.** Load cell goes to ADC1 because (a) ADC1 has the 32-bit core, and (b) force is the primary measurement — its precision drives the quality of the extracted material properties. The laser controller already conditions its output and outputs at the full ADC input range, so ADC2's 8.5 µV RMS floor (cp8 result, *below* the 10.3 µV datasheet typical) is comfortably under the IL-030's own ~0.3 µm repeatability.
+
+**Why PGA in path at gain = 1.** Gain > 1 isn't needed (the LCA-9PC already supplies the gain, the IL-030 already drives the full ±5 V range), but keeping the PGA in the signal path gives the high-input-impedance buffer and the lower noise floor (~1.3 µV vs ~3.5 µV input-referred RMS at 400 SPS with PGA bypassed). The trade-off is an input-common-mode constraint that the chip enforces in PGA-enabled mode — at gain = 1 with VREF = 5 V and AVDD ≈ 5.2 V, V_IN_CM must be in `[0.3 V, AVDD − 0.3 V] ≈ [0.3 V, 4.9 V]` (datasheet §9.3.3.3). VBIAS = ON (POWER bit 1) keeps AINCOM at AVDD/2 ≈ 2.6 V so floating inputs settle to a happy common-mode; the LCA-9PC's local ground sense on AIN3 sets the load-cell channel's working CM to a value comfortably inside the window. ADC2's PGA can *not* be bypassed in this chip (datasheet §9.3 — only ADC1 has the bypass bit MODE2[7]); ADC2 runs at gain = 1 with the PGA acting as a unity-gain buffer.
+
+> **PGA bypass mode is available** (set `pga_bypass = true` in `configureADC1`) for situations where the load-cell wiring puts V_IN_CM outside the PGA window — e.g. early bring-up before the LCA-9PC ground sense is connected, or if you ever drive AIN2/AIN3 directly from a source whose CM sits near a rail. Bypass mode extends the absolute input range to `[AVSS−0.1, AVDD+0.1]` and `PGAH_ALM`/`PGAL_ALM` become informational only (their comparators still latch on the disconnected PGA outputs, but the bits don't reflect the signal path). Re-enable PGA once the production wiring is in place to recover the noise spec.
 
 **Why 400 SPS on both.** Mechanical content in tensile work is well under 100 Hz, and 400 SPS sits at the noise-floor sweet spot we characterized in Phase 1.2: 1.29 µV input-referred RMS on ADC1, 19.96 noise-free bits, offset rock-stable across SPS. Matching SPS on both ADCs makes timestamp alignment trivial — the two ADCs free-run on independent clocks but at the same rate, so phase drift between conversions is bounded by their individual jitter (a few hundred µs, → ~0.05° phase error at 1 Hz mechanical).
 
@@ -27,7 +31,7 @@ MODE1          = 0x40   Sinc3 (FILTER[2:0] = 010b → bits 7:5 = 010), chop off
 
 [ADC1 — load cell]
 INPMUX         = 0x23   AIN2 (+), AIN3 (−)
-MODE2          = 0x08   PGA enabled, gain = 1, 400 SPS
+MODE2          = 0x08   PGA in path (bit 7 = 0), gain = 1, 400 SPS (bits 3:0 = 1000b)
 
 [ADC2 — laser]
 ADC2MUX        = 0x45   AIN4 (+), AIN5 (−)
@@ -165,7 +169,7 @@ ID            : 0x23
   REFMUX      : 0x09      ← external REF7050 on AIN0/AIN1
   VREF        : 5.000 V
   Rate        : 400 SPS
-  PGA         : gain=1 (enabled)
+  PGA         : in path (gain=1)
   Running     : YES
 [ADC2]
   ADC2MUX     : 0x45      ← AIN4 (+), AIN5 (-)

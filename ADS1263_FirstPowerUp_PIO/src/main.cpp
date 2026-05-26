@@ -231,21 +231,35 @@ static bool ads_read_conversion(int32_t *out_code) {
 }
 
 // Read one ADC2 conversion (cp8). ADC2 is the chip's 24-bit secondary
-// ADC, with its own input mux and command set. With INTERFACE = 0x05
-// (chip default — STATUS + CRC bytes wrap each conversion), the RDATA2
-// transaction returns 5 bytes total: STATUS + 3 data + CRC.
+// ADC, with its own input mux and command set.
+//
+// Datasheet §9.4.7.2 (Figure 9-44) + §9.4.7.3: with INTERFACE = 0x05
+// (STATUS + CHK both enabled), RDATA2 returns SIX bytes — NOT five:
+//     frame[0] = STATUS
+//     frame[1] = D3 (MSB of 24-bit data)
+//     frame[2] = D2
+//     frame[3] = D1 (LSB of 24-bit data)
+//     frame[4] = 00h zero-pad (fixed value inserted by the chip so the
+//                ADC2 frame lines up with the 6-byte ADC1 frame; not
+//                included in the CHK sum per §9.4.7.3.3.1)
+//     frame[5] = CHK
+//
+// Earlier versions of this function read only 5 bytes and treated
+// frame[4] as CRC. cp8 did not verify CRC so it "worked" — but the
+// shared SensorHub driver does verify, and it failed every read for
+// exactly this reason. The fix is to clock out the full 6 bytes.
 // Returns the signed 32-bit sign-extended code in *out_code.
 static bool ads_read_conversion_adc2(int32_t *out_code) {
-    uint8_t frame[5];
+    uint8_t frame[6];
     SPI.beginTransaction(SPI_CFG);
     digitalWrite(PIN_CS, LOW);
     SPI.transfer(ADS1263_CMD_RDATA2);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         frame[i] = SPI.transfer(0x00);
     }
     digitalWrite(PIN_CS, HIGH);
     SPI.endTransaction();
-    // frame[0] = STATUS, frame[1..3] = 24-bit data (MSB first), frame[4] = CRC
+    // frame layout in the comment above; data is in frame[1..3]
     uint32_t raw = ((uint32_t)frame[1] << 16)
                  | ((uint32_t)frame[2] << 8)
                  |  (uint32_t)frame[3];
