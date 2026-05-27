@@ -51,7 +51,7 @@ settle_time_s: 1.5                 # mechanical ringdown after each move
 stage_velocity_mm_s: 0.5           # slow enough that settle_time is comfortable
 
 # --- Sampling ----------------------------------------------------------------
-samples_per_point: 500             # ~1 s at 100 SPS (ADC2 default in firmware)
+samples_per_point: 500             # ~1.25 s at 400 SPS per ADC (2 ms poll in firmware)
 baseline_samples: 500              # before and after sweep, at home position
 drain_timeout_s: 2.0               # max time spent draining the serial buffer
 

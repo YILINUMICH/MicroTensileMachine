@@ -61,10 +61,34 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
-# Defaults (from Calibrate_LaserHead/ 2026-04-24 run07)
+# Laser calibration defaults — loaded from Calibrate_LaserHead/calibration.json
+# when available, otherwise fall back to the last-known-good hardcoded values.
 # ---------------------------------------------------------------------------
-DEFAULT_LASER_K_MV_PER_UM = -0.1171
-DEFAULT_LASER_V0_MV = 566.957
+_HARDCODED_LASER_K_MV_PER_UM = -0.1171      # legacy fallback (2026-04-24 run07)
+_HARDCODED_LASER_V0_MV = 566.957             # legacy fallback
+
+_SMA_DIR = Path(__file__).resolve().parent
+_CAL_JSON = _SMA_DIR.parent / "Calibrate_LaserHead" / "calibration.json"
+
+def _load_laser_defaults() -> tuple:
+    """Try calibration.json, fall back to hardcoded legacy values."""
+    try:
+        with open(_CAL_JSON) as f:
+            cal = json.load(f)
+        k = float(cal["k_mV_per_um"])
+        v0 = float(cal["V0_mV"])
+        logging.getLogger("analyze_sma").info(
+            "Loaded laser cal from %s  (k=%.4f, V0=%.3f, source=%s)",
+            _CAL_JSON.name, k, v0, cal.get("source", "?"))
+        return k, v0
+    except (FileNotFoundError, KeyError, json.JSONDecodeError, ValueError):
+        logging.getLogger("analyze_sma").warning(
+            "calibration.json not found or unreadable — "
+            "using hardcoded fallback (k=%.4f, V0=%.3f)",
+            _HARDCODED_LASER_K_MV_PER_UM, _HARDCODED_LASER_V0_MV)
+        return _HARDCODED_LASER_K_MV_PER_UM, _HARDCODED_LASER_V0_MV
+
+DEFAULT_LASER_K_MV_PER_UM, DEFAULT_LASER_V0_MV = _load_laser_defaults()
 DEFAULT_FREQUENCY_HZ = 1.0e6
 
 

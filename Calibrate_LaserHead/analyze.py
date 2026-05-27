@@ -4,7 +4,7 @@ analyze.py - offline fit + plot for a calibration run.
 
 Reads one points.csv produced by run_calibration.py, fits a line
 V(x) = k*x + V0 in mV vs um, reports the sanity checks from
-Calibrate_LaserHead_Plan.md section 7, and writes <prefix>_fit.png next
+Calibrate_LaserHead_Plan.md section 7, and writes <prefix>_fit.svg next
 to the input.
 
 Developed against already-saved data so it can be iterated without the
@@ -12,7 +12,12 @@ hardware present (plan section 9.5).
 
 Usage:
 
-    python analyze.py data/2026-04-23_run01_points.csv
+    python analyze.py                                  # auto-detect latest
+    python analyze.py data/2026-04-23_run01_points.csv  # explicit path
+
+After every run, writes (or overwrites) calibration.json next to this
+script so downstream modules can ``from analyze import load_calibration``
+or just read the JSON directly.
 
 Author: Yilin Ma - HDR Lab, University of Michigan
 """
@@ -25,6 +30,7 @@ import json
 import logging
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -47,6 +53,82 @@ except ImportError:
 IL030_NOMINAL_K_MV_PER_UM = 0.5        # 0-5 V mode
 IL030_FS_MV = 5000.0                   # 10 mm range * 0.5 mV/um = 5000 mV
 IL030_LINEARITY_SPEC_PCT_FS = 0.1
+
+_THIS_DIR = Path(__file__).resolve().parent
+_DEFAULT_DATA_DIR = _THIS_DIR / "data"
+_CALIBRATION_JSON = _THIS_DIR / "calibration.json"
+
+
+# ---------------------------------------------------------------------------
+# Auto-discovery: find the latest *_points.csv
+# ---------------------------------------------------------------------------
+def find_latest_points_csv(data_dir: Path = _DEFAULT_DATA_DIR) -> Optional[Path]:
+    """
+    Glob for ``*_points.csv`` under *data_dir* and return the one with the
+    lexicographically greatest name. Because run_calibration.py names files
+    ``YYYY-MM-DD_runNN_points.csv``, the sort order is chronological.
+
+    Returns ``None`` if no points files exist.
+    """
+    candidates = sorted(data_dir.glob("*_points.csv"))
+    return candidates[-1] if candidates else None
+
+
+# ---------------------------------------------------------------------------
+# Calibration persistence
+# ---------------------------------------------------------------------------
+def save_calibration(fit: "FitResult",
+                     checks_passed: bool,
+                     source_csv: Path,
+                     out_path: Path = _CALIBRATION_JSON) -> Path:
+    """
+    Write (or overwrite) the canonical calibration.json used by downstream
+    modules (e.g. SMA_CharacterizationV2).
+
+    Fields
+    ------
+    k_mV_per_um     : fitted sensitivity (slope).
+    V0_mV           : fitted intercept at x = 0.
+    r_squared       : goodness of fit.
+    max_abs_residual_mV, linearity_pct_fs : worst-case residual stats.
+    all_checks_passed : True iff every sanity check from §7 passed.
+    source          : basename of the points.csv that produced this fit.
+    updated_utc     : ISO-8601 timestamp of this write.
+    conversion      : human-readable formula reminder.
+    """
+    payload = {
+        "k_mV_per_um": fit.k_mV_per_um,
+        "V0_mV": fit.v0_mV,
+        "r_squared": fit.r_squared,
+        "max_abs_residual_mV": fit.max_abs_residual_mV,
+        "linearity_pct_fs": fit.linearity_pct_fs,
+        "all_checks_passed": checks_passed,
+        "source": source_csv.name,
+        "updated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "conversion": "displacement_um = (V_mV - V0_mV) / k_mV_per_um",
+    }
+    with open(out_path, "w") as f:
+        json.dump(payload, f, indent=2)
+    return out_path
+
+
+def load_calibration(cal_path: Path = _CALIBRATION_JSON) -> dict:
+    """
+    Load the canonical calibration.json.
+
+    Returns a dict with at least ``k_mV_per_um`` and ``V0_mV``.
+    Raises FileNotFoundError if the file does not exist (i.e. no calibration
+    has been run yet).
+
+    Importable by other modules::
+
+        from Calibrate_LaserHead.analyze import load_calibration
+        cal = load_calibration()
+        k   = cal["k_mV_per_um"]
+        v0  = cal["V0_mV"]
+    """
+    with open(cal_path) as f:
+        return json.load(f)
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +431,7 @@ def plot_fit(fit: FitResult, out_path: Path, title: str) -> None:
                  va="top", fontsize=9,
                  bbox=dict(facecolor="white", alpha=0.8, edgecolor="gray"))
 
-    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    fig.savefig(out_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -358,20 +440,35 @@ def plot_fit(fit: FitResult, out_path: Path, title: str) -> None:
 # ---------------------------------------------------------------------------
 def _main() -> None:
     p = argparse.ArgumentParser(description="analyze a calibration run")
-    p.add_argument("points_csv", help="path to <prefix>_points.csv")
+    p.add_argument("points_csv", nargs="?", default=None,
+                   help="path to <prefix>_points.csv  "
+                        "(default: latest file in data/)")
     p.add_argument("--use-target", action="store_true",
                    help="fit using commanded target_mm instead of "
                         "stage_actual_mm (default: stage_actual_mm)")
     p.add_argument("--no-plot", action="store_true",
-                   help="skip the PNG output")
+                   help="skip the SVG output")
     p.add_argument("--json-out", action="store_true",
                    help="also emit <prefix>_fit.json with numeric results")
+    p.add_argument("--no-save-cal", action="store_true",
+                   help="skip writing/updating calibration.json")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     log = logging.getLogger("analyze")
 
-    points_path = Path(args.points_csv)
+    # Resolve the points file — explicit arg or latest auto-discovery.
+    if args.points_csv is not None:
+        points_path = Path(args.points_csv)
+    else:
+        points_path = find_latest_points_csv()
+        if points_path is None:
+            log.error("No *_points.csv files found in %s. "
+                      "Run a calibration sweep first or supply a path.",
+                      _DEFAULT_DATA_DIR)
+            sys.exit(1)
+        log.info("Auto-selected latest: %s", points_path)
+
     if not points_path.exists():
         log.error("File not found: %s", points_path)
         sys.exit(1)
@@ -397,11 +494,18 @@ def _main() -> None:
     print(f"  points used         : {len(sweep)}")
     print()
     print("  Sanity checks (plan section 7):")
-    for c in sanity_checks(fit, baseline, sweep):
+    checks = sanity_checks(fit, baseline, sweep)
+    all_passed = all(c.passed for c in checks)
+    for c in checks:
         mark = "PASS" if c.passed else "FAIL"
         print(f"    [{mark}]  {c.name}")
         print(f"            {c.detail}")
     print()
+
+    # -- Save calibration.json ---------------------------------------------
+    if not args.no_save_cal:
+        cal_path = save_calibration(fit, all_passed, points_path)
+        log.info("Wrote %s  (all_checks_passed=%s)", cal_path, all_passed)
 
     # -- Per-pass decomposition (repeatability) ----------------------------
     pp_fits = per_pass_fits(sweep, use_stage_actual=not args.use_target)
@@ -477,10 +581,10 @@ def _main() -> None:
             print()
 
     if not args.no_plot:
-        png_path = points_path.with_name(
-            points_path.name.replace("_points.csv", "_fit.png"))
-        plot_fit(fit, png_path, title=points_path.stem)
-        log.info("Wrote %s", png_path)
+        svg_path = points_path.with_name(
+            points_path.name.replace("_points.csv", "_fit.svg"))
+        plot_fit(fit, svg_path, title=points_path.stem)
+        log.info("Wrote %s", svg_path)
 
     if args.json_out:
         json_path = points_path.with_name(

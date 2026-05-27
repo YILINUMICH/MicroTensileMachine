@@ -1,5 +1,5 @@
 /**
- * @file main.cpp  (Calibrate_LaserHead — dedicated dual-ADC calibration firmware)
+ * @file main.cpp  (Calibrate_LaserHead — dual-ADC calibration firmware)
  *
  * Purpose-built firmware for the IL-030 → ADS1263 calibration workflow in
  * Calibrate_LaserHead/. BOTH ADC1 and ADC2 sample the Keyence IL-030 analog
@@ -8,6 +8,26 @@
  * and session.py. ADC1 is an independent digital-path cross-check; two ADCs
  * converging on the same fit catches ADC2-specific driver bugs and register-
  * config errors that a single-channel measurement cannot.
+ *
+ *
+ * IPC architecture (2026-05-27 — ring buffer):
+ *
+ *   Previous: M4 → RPC.print() → M7 → Serial.write() → USB
+ *     Problem: RPC.print() is synchronous. At ~660 msg/s (dual ADC, 3 ms
+ *     poll) M4 blocks waiting for M7 to acknowledge each message. If M7
+ *     stalls briefly on a USB interrupt, the back-pressure cascades and
+ *     crashes M4 mid-run.
+ *
+ *   Current:  M4 → ring buffer (SRAM4) → M7 → Serial.print() → USB
+ *     M4 writes ADC samples into a lock-free ring buffer in shared SRAM4.
+ *     M7 drains the ring at its own pace and formats TSV for USB Serial.
+ *     Neither core ever blocks on the other — USB back-pressure on M7
+ *     is absorbed by the 1024-slot ring (~1.3 s at 800 SPS combined).
+ *     RPC is retained for boot-time checkpoint messages only (infrequent,
+ *     no throughput concern).
+ *
+ *   See sample_ring.h for the ring buffer implementation and SRAM4
+ *   placement rationale.
  *
  *
  * Where this fits in the project firmware family (2026-05-26):
@@ -25,8 +45,9 @@
  *   ┌──────────────────────────────┐
  *   │ Calibrate_LaserHead/         │  ⟵ THIS PROJECT
  *   │   Calibrate_LaserHead_PIO/   │  Calibration-purpose firmware. Dual-ADC
- *   │   src/main.cpp               │  on AIN4/5. Designed to be consumed by
- *   │                              │  run_calibration.py with xcompare=true.
+ *   │   src/main.cpp               │  on AIN4/5. Ring-buffer IPC (M4→M7).
+ *   │                              │  Consumed by run_calibration.py with
+ *   │                              │  xcompare=true.
  *   └──────────────────────────────┘
  *
  *
@@ -99,40 +120,10 @@
 
 #include <Arduino.h>
 #include "RPC.h"
-
-// ══════════════════════════════════════════════════════════════════════
-//  M7 CORE — bridge RPC ↔ USB Serial
-// ══════════════════════════════════════════════════════════════════════
-#if defined(CORE_CM7)
-
-void setup() {
-    Serial.begin(115200);
-    uint32_t t0 = millis();
-    while (!Serial && (millis() - t0) < 2000) {}
-    RPC.begin();
-    // Banner identifies this as the calibration build so the operator knows
-    // they didn't flash LaserHead_PIO or SensorHub_PIO by mistake.
-    Serial.println("[M7] bridge up — forwarding RPC to USB Serial (Calibrate_LaserHead)");
-}
-
-void loop() {
-    while (RPC.available()) {
-        Serial.write(RPC.read());
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════
-//  M4 CORE — drive the ADS1263 (both ADCs on AIN4/AIN5) and stream
-//            to M7 via RPC
-// ══════════════════════════════════════════════════════════════════════
-#elif defined(CORE_CM4)
-
-#include <SPI.h>
-#include "ADS1263_Driver.h"
-
-ADS1263_Driver adc;
+#include "sample_ring.h"
 
 // ── Enable/disable each ADC path at build time ─────────────────────────
+// Shared between M7 (output formatting) and M4 (ADC control).
 // Calibration default: BOTH ADCs sample AIN4/AIN5 simultaneously. ADC2
 // produces the calibration k/V₀ that propagates to production; ADC1 is
 // the independent digital-path cross-check.
@@ -143,18 +134,110 @@ ADS1263_Driver adc;
 #define ENABLE_ADC1   1
 #define ENABLE_ADC2   1
 
+
+// ══════════════════════════════════════════════════════════════════════
+//  M7 CORE — drain ring buffer + RPC boot messages → USB Serial
+// ══════════════════════════════════════════════════════════════════════
+#if defined(CORE_CM7)
+
+void setup() {
+    // Zero the ring buffer BEFORE booting M4 (RPC.begin() starts the
+    // M4 core). SRAM4 may contain garbage from a previous run; clearing
+    // the header ensures M4 starts with write_idx == read_idx == 0.
+    SAMPLE_RING->write_idx = 0;
+    SAMPLE_RING->read_idx  = 0;
+    SAMPLE_RING->dropped   = 0;
+    __DMB();
+
+    Serial.begin(115200);
+    uint32_t t0 = millis();
+    while (!Serial && (millis() - t0) < 2000) {}
+
+    RPC.begin();     // boots M4 core
+
+    // Banner identifies this as the calibration build so the operator
+    // knows they didn't flash LaserHead_PIO or SensorHub_PIO by mistake.
+    Serial.println("[M7] bridge up — ring-buffer IPC, forwarding to USB Serial (Calibrate_LaserHead)");
+}
+
+static uint32_t last_drop_report = 0;
+
+void loop() {
+    // ── 1. Drain boot / diagnostic text from M4 via RPC ───────────────
+    //    Once M4 enters its main loop, RPC traffic drops to zero —
+    //    all sample data flows through the ring buffer instead.
+    while (RPC.available()) {
+        Serial.write(RPC.read());
+    }
+
+    // ── 2. Drain ADC samples from the shared-memory ring buffer ───────
+    //    Format each sample as TSV, identical to the legacy RPC output
+    //    so portenta_reader.py needs no changes:
+    //      <t_ms>\t<src>\t<raw_code>\t<voltage_V>   (dual-ADC)
+    //      <t_ms>\t<raw_code>\t<voltage_V>           (single-ADC)
+    AdcSample s;
+    int batch = 0;
+    while (ring_pop(SAMPLE_RING, s) && batch < 64) {
+        Serial.print(s.timestamp_ms);
+        Serial.print('\t');
+#if ENABLE_ADC1 && ENABLE_ADC2
+        Serial.print((int)s.src);
+        Serial.print('\t');
+#endif
+        Serial.print(s.raw_code);
+        Serial.print('\t');
+        Serial.println(s.voltage_V, 6);
+        batch++;
+    }
+
+    // ── 3. Periodic overflow diagnostic ───────────────────────────────
+    //    If M4 had to drop samples because M7 fell behind, report it.
+    //    Checked every 10 s to avoid spamming the stream.
+    uint32_t now = millis();
+    if (now - last_drop_report > 10000) {
+        last_drop_report = now;
+        uint32_t d = SAMPLE_RING->dropped;
+        if (d > 0) {
+            Serial.print("[M7] WARNING: ring overflow — ");
+            Serial.print(d);
+            Serial.println(" samples dropped since boot");
+        }
+    }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════
+//  M4 CORE — drive the ADS1263 (both ADCs on AIN4/AIN5) and stream
+//            to M7 via shared-memory ring buffer
+// ══════════════════════════════════════════════════════════════════════
+#elif defined(CORE_CM4)
+
+#include <SPI.h>
+#include "ADS1263_Driver.h"
+
+ADS1263_Driver adc;
+
 // Checkpoint macro — same convention as the sibling *_PIO projects.
+// Boot diagnostics still go through RPC (infrequent, no throughput
+// concern). Only the ADC sample stream uses the ring buffer.
 #define CP(n, msg)  do { \
     RPC.print("[M4 cp "); RPC.print(n); RPC.print("] "); RPC.println(msg); \
 } while (0)
 
 // Sample periods for each ADC path (timed polling — no DRDY gating).
-// Both ADCs run at 400 SPS (2.5 ms native period). Polling at 3 ms keeps
-// us one sample interval behind the chip without overrunning the data
-// register; matches SensorHub_PIO and LaserHead_PIO so the three projects
-// share register/timing assumptions.
-static const uint32_t ADC1_POLL_MS = 3;
-static const uint32_t ADC2_POLL_MS = 3;
+// Both ADCs run at 400 SPS (2.5 ms native period). Polling at 2 ms
+// is faster than the conversion period, so every conversion is
+// captured. Some polls re-read the previous data register value
+// (no new conversion yet) — those are still valid and get pushed to
+// the ring. The duplicates are harmless for calibration averaging
+// and contribute to stress-testing the ring buffer at ~1000 msg/s
+// combined (the rate that previously crashed the RPC path at 660).
+//
+// Without DRDY gating, this is the only way to guarantee the full
+// 400 unique SPS per ADC. The ~25% duplicate overhead washes out
+// in the per-point mean (identical values don't shift the average).
+static const uint32_t ADC1_POLL_MS = 2;
+static const uint32_t ADC2_POLL_MS = 2;
 
 void setup() {
     // RPC first so we can report progress to the M7 bridge.
@@ -169,6 +252,7 @@ void setup() {
     // power-up settle delay below so they know they flashed the right
     // firmware variant.
     RPC.println("[M4] *** Calibrate_LaserHead_PIO — dual-ADC cross-compare on AIN4/AIN5 ***");
+    RPC.println("[M4] IPC: shared-memory ring buffer (sample_ring.h)");
     RPC.println("[M4] consumed by Calibrate_LaserHead/run_calibration.py (xcompare:true)");
 
     // ADS1263 power-up settle — required on every cold boot. The dfu
@@ -267,11 +351,11 @@ void setup() {
     // src column so the host can demultiplex the two streams via
     // PortentaReader.read_samples_dual().
 #if ENABLE_ADC1 && ENABLE_ADC2
-    RPC.println("[M4] streaming. format: t_ms\\tsrc\\traw_code\\tvoltage_V   (src=1 ADC1, src=2 ADC2 — both AIN4/5)");
+    RPC.println("[M4] streaming via ring buffer. format: t_ms\\tsrc\\traw_code\\tvoltage_V   (src=1 ADC1, src=2 ADC2 — both AIN4/5)");
 #elif ENABLE_ADC1
-    RPC.println("[M4] streaming. format: t_ms\\traw_code\\tvoltage_V   (ADC1 only on AIN4/5)");
+    RPC.println("[M4] streaming via ring buffer. format: t_ms\\traw_code\\tvoltage_V   (ADC1 only on AIN4/5)");
 #elif ENABLE_ADC2
-    RPC.println("[M4] streaming. format: t_ms\\traw_code\\tvoltage_V   (ADC2 only on AIN4/5)");
+    RPC.println("[M4] streaming via ring buffer. format: t_ms\\traw_code\\tvoltage_V   (ADC2 only on AIN4/5)");
 #else
     #error "Neither ENABLE_ADC1 nor ENABLE_ADC2 is set — nothing to do."
 #endif
@@ -279,8 +363,12 @@ void setup() {
 
 void loop() {
     // Independent timed polling for each enabled ADC. With both enabled
-    // they interleave on the SPI bus; each read is its own CS-low → CS-high
-    // SPI transaction so there is no arbitration to worry about.
+    // they interleave on the SPI bus; each read is its own CS-low →
+    // CS-high SPI transaction so there is no arbitration to worry about.
+    //
+    // ring_push() never blocks — if the ring is full (M7 fell behind),
+    // the sample is dropped and the overflow counter incremented. M7
+    // reports the count periodically so the operator can see it.
 
 #if ENABLE_ADC1
     static uint32_t t1_last = 0;
@@ -288,15 +376,7 @@ void loop() {
         t1_last = millis();
         ADC_Reading r = adc.readADC1Direct();
         if (r.valid) {
-  #if ENABLE_ADC2
-            RPC.print(millis()); RPC.print('\t');
-            RPC.print(1);        RPC.print('\t');       // src = 1 (ADC1)
-  #else
-            RPC.print(millis()); RPC.print('\t');
-  #endif
-            RPC.print(r.raw_code);
-            RPC.print('\t');
-            RPC.println(r.voltage_V, 6);
+            ring_push(SAMPLE_RING, millis(), 1, r.raw_code, r.voltage_V);
         }
     }
 #endif
@@ -307,15 +387,7 @@ void loop() {
         t2_last = millis();
         ADC_Reading r = adc.readADC2Direct();
         if (r.valid) {
-  #if ENABLE_ADC1
-            RPC.print(millis()); RPC.print('\t');
-            RPC.print(2);        RPC.print('\t');       // src = 2 (ADC2)
-  #else
-            RPC.print(millis()); RPC.print('\t');
-  #endif
-            RPC.print(r.raw_code);
-            RPC.print('\t');
-            RPC.println(r.voltage_V, 6);
+            ring_push(SAMPLE_RING, millis(), 2, r.raw_code, r.voltage_V);
         }
     }
 #endif

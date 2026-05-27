@@ -1,0 +1,72 @@
+{
+  "run_prefix": "2026-05-27_run08",
+  "created_at_utc": "2026-05-27T17:38:08Z",
+  "dry_run": false,
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  },
+  "firmware": {
+    "repo_git_hash": "0be1edd5063346ceacca38c8a9e524d65526886d",
+    "firmware_path": "Calibrate_LaserHead/Calibrate_LaserHead_PIO/src/main.cpp",
+    "firmware_build": "dual-ADC xcompare (ENABLE_ADC1=1, ENABLE_ADC2=1) \u2014 Calibrate_LaserHead_PIO",
+    "xcompare_mode": true,
+    "adc_source": 2,
+    "nominal_sps": 400,
+    "filter": "Sinc3",
+    "adc2mux_hex": "0x45",
+    "ref2": "external REF7050 on AIN0/AIN1",
+    "reference_V": 5.0,
+    "refmux_hex_adc1": "0x09",
+    "gain": 1,
+    "pga_bypass": false,
+    "signal_chain": "Keyence IL-030 (0-5 V single-ended) \u2192 EVM AIN4(+) / AIN5(-) \u2192 ADC2 (24-bit, 400 SPS, Sinc3, REF7050 5V, gain=1) \u2192 M4 polling (3 ms period) \u2192 RPC \u2192 M7 USB-CDC bridge \u2192 host @ 115200",
+    "xcompare_adc1": {
+      "inpmux_hex": "0x45",
+      "refmux_hex": "0x09",
+      "nominal_sps": 400,
+      "filter": "Sinc3",
+      "gain": 1,
+      "pga_bypass": false,
+      "purpose": "cross-compare digital-path check on IL-030 signal"
+    }
+  },
+  "stage": {
+    "name": "X-LSQ300A-E01",
+    "serial_number": "143153",
+    "firmware_version": "7.48.24004",
+    "port": "COM5"
+  },
+  "config": {
+    "sweep_center_mm": 10.0,
+    "sweep_range_mm": [
+      -5.0,
+      5.0
+    ],
+    "step_size_mm": 0.2,
+    "direction": "bidirectional",
+    "settle_time_s": 1.5,
+    "stage_velocity_mm_s": 0.5,
+    "samples_per_point": 500,
+    "baseline_samples": 500,
+    "drain_timeout_s": 2.0,
+    "portenta_port": "COM8",
+    "portenta_baud": 115200,
+    "zaber_config_path": "../ZaberStage/safety_config.json",
+    "zaber_port": "COM5",
+    "operator": "",
+    "notes": "",
+    "passes": 2,
+    "xcompare": true
+  },
+  "outputs": {
+    "raw_csv": "2026-05-27_run08_raw.csv",
+    "points_csv": "2026-05-27_run08_points.csv"
+  },
+  "baseline_drift_V": -0.00032519400000019516,
+  "baseline_noise_V_pre": 0.00019855017385034525,
+  "baseline_noise_V_post": 0.000297324502179005,
+  "baseline_drift_V_adc1": -0.0003499819999999154,
+  "baseline_noise_V_pre_adc1": 0.0005231305687875595,
+  "baseline_noise_V_post_adc1": 0.00046125452244503713
+}

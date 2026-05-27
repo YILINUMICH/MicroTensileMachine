@@ -557,6 +557,46 @@ class SessionController:
                                 WORKER_JOIN_TIMEOUT_S)
 
     # ------------------------------------------------------------------
+    # Laser calibration loader
+    # ------------------------------------------------------------------
+    _CAL_JSON = Path(__file__).resolve().parent.parent \
+                / "Calibrate_LaserHead" / "calibration.json"
+
+    def _load_laser_cal_meta(self) -> dict[str, Any]:
+        """
+        Build the ``laser_calibration_reference`` block for meta.json.
+
+        Reads ``Calibrate_LaserHead/calibration.json`` if present;
+        otherwise falls back to the legacy hardcoded values so older
+        setups keep working.
+        """
+        try:
+            with open(self._CAL_JSON) as f:
+                cal = json.load(f)
+            return {
+                "k_mV_per_um": cal["k_mV_per_um"],
+                "V0_mV": cal["V0_mV"],
+                "source": cal.get("source", "calibration.json"),
+                "all_checks_passed": cal.get("all_checks_passed"),
+                "conversion": cal.get("conversion",
+                                      "displacement_um = (V_mV - V0_mV) / k"),
+                "note": ("Loaded from Calibrate_LaserHead/calibration.json. "
+                         "Override with --k / --v0 in analyze_sma.py."),
+            }
+        except (FileNotFoundError, KeyError, json.JSONDecodeError) as e:
+            self.logger.warning(
+                "Could not load %s (%s); using hardcoded fallback.",
+                self._CAL_JSON, e)
+            return {
+                "k_mV_per_um": -0.1171,
+                "V0_mV": 566.957,
+                "source": "Calibrate_LaserHead/data/2026-04-24_run07_* (hardcoded fallback)",
+                "conversion": "displacement_um = (V_mV - V0_mV) / k",
+                "note": ("calibration.json missing — using legacy hardcoded values. "
+                         "Run analyze.py in Calibrate_LaserHead/ to generate it."),
+            }
+
+    # ------------------------------------------------------------------
     # meta.json writer
     # ------------------------------------------------------------------
     def _write_meta(self) -> None:
@@ -587,14 +627,7 @@ class SessionController:
                 "platform": platform.platform(),
                 "python": sys.version.split()[0],
             },
-            "laser_calibration_reference": {
-                "k_mV_per_um": -0.1171,
-                "V0_mV": 566.957,
-                "source": "Calibrate_LaserHead/data/2026-04-24_run07_*",
-                "conversion": "displacement_um = (V_mV - V0_mV) / k",
-                "note": ("Applied in analyze_sma.py, not at record time. "
-                         "Override with --k / --v0 if recalibrated."),
-            },
+            "laser_calibration_reference": self._load_laser_cal_meta(),
         }
         with open(self.paths.meta_json, "w") as f:
             json.dump(meta, f, indent=2)
