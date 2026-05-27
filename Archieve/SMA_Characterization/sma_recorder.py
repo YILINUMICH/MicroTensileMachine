@@ -44,7 +44,7 @@ from typing import Optional
 
 import yaml
 
-from lcr_reader import LCRReader, LcrMeasurement
+from Archieve.SMA_Characterization.lcr_reader import LCRReader, LcrMeasurement
 
 # Re-use the PortentaReader from the sibling Calibrate_LaserHead package.
 _THIS_DIR = Path(__file__).resolve().parent

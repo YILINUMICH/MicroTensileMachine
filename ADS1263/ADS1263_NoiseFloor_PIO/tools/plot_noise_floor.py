@@ -37,7 +37,7 @@ from matplotlib.colors import LogNorm
 # Reuse the datasheet typicals so the plots can overlay them without a
 # second source of truth.
 sys.path.insert(0, str(Path(__file__).parent))
-from analyze_noise_floor import DATASHEET_TYPICAL_UV   # noqa: E402
+from ADS1263.ADS1263_NoiseFloor_PIO.tools.analyze_noise_floor import DATASHEET_TYPICAL_UV   # noqa: E402
 
 
 # Tableau-10 palette, picked so adjacent gains are visually distinct.
