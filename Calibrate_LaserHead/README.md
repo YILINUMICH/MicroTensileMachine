@@ -42,7 +42,7 @@ errors that a single-channel measurement cannot.
 ### 2.1 Components
 
 - **Laser head:** Keyence IL-030, fixed-mounted on the rig frame.
-- **Target:** Diffuse reference plate on the Zaber X-LRM200A carriage, beam
+- **Target:** Diffuse reference plate on the Zaber X-LSQ300A-E01 carriage, beam
   axis parallel to stage motion axis.
 - **ADC:** Bare TI ADS1263 EVM, connected to the Portenta H7 on the Mid
   Carrier (ASX00055) via SPI (Cable 1 in `doc/MEMO_cable_map.md`).
@@ -91,7 +91,7 @@ direction.
 | Device | Port | Notes |
 |---|---|---|
 | Portenta H7 | COM8 | Arduino CDC, VID:PID = 2341:025B |
-| Zaber X-LRM200A | COM5 | FTDI bridge, VID:PID = 0403:6001 |
+| Zaber X-LSQ300A-E01 | COM5 | FTDI bridge, VID:PID = 0403:6001; serial 143153 |
 
 Pre-filled in `config.yaml` and `platformio.ini`. If ports change after
 replugging, check `pio device list` and update both files.

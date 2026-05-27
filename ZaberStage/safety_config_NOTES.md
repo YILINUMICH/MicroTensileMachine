@@ -3,13 +3,13 @@
 These notes live alongside `safety_config.json` because JSON itself can't
 carry comments. Read this before widening / narrowing the limits.
 
-## Current state (2026-05-26)
+## Current state (2026-05-27)
 
 ```
-position_limits_mm: [5, 15]   ← TIGHT (calibration-only)
+position_limits_mm: [5, 15]              ← TIGHT (calibration-only)
 max_velocity_mm_s:  5.0
 reading_rate_hz:    100.0
-device_info:        Mock      ← stale; regenerate when real Zaber is wired
+device_info:        X-LSQ300A-E01        ← LIVE (serial 143153, fw 7.48.24004)
 ```
 
 ## Why `position_limits_mm = [5, 15]`
@@ -50,19 +50,32 @@ Or, if regenerating from the real connected hardware:
 "position_limits_mm": [0, <stage_max_travel_mm>]
 ```
 
-Check the Zaber X-LRM200A datasheet for the real maximum (likely
-200 mm, but verify against the connected unit).
+The stage on the bench is a Zaber **X-LSQ300A-E01** (serial 143153) with
+**300 mm** travel and a built-in encoder — confirmed from the live
+device on 2026-05-27. So the absolute maximum envelope is:
 
-## ⚠ device_info is stale (Mock)
+```json
+"position_limits_mm": [0, 300]
+```
 
-`device_info` still says `serial_number: MOCK`, `device_type: Mock`,
-timestamp 2026-04-23. If the real Zaber X-LRM200A is now connected,
-regenerate `safety_config.json` from the live device (e.g. via the
-`save_discovered_devices()` helper in `zaber_stage.py`) so the
-`device_info` block matches the actual unit, and re-derive
-`position_limits_mm` from the real travel envelope before widening.
+## device_info — verified live (2026-05-27)
 
-The runner doesn't actually use `device_info` for safety enforcement
-(that's purely `position_limits_mm` + `max_velocity_mm_s`), so a stale
-`Mock` block won't break anything during calibration — it just records
-the wrong identity in `meta.json`.
+`safety_config.json` now carries the real device identity:
+
+```
+name:             X-LSQ300A-E01
+serial_number:    143153
+device_id:        50138
+firmware_version: 7.48.24004
+device_type:      Linear Stage
+axis_count:       1
+```
+
+The runner doesn't use `device_info` for safety enforcement (that's
+purely `position_limits_mm` + `max_velocity_mm_s`) — it's recorded into
+`meta.json` for traceability. If you ever see this block say
+`serial_number: MOCK` again, that means `_get_device_info()` in
+`zaber_stage.py` failed to read identity (logger warning will say why
+since we replaced the bare `except:` with `except Exception as e` on
+2026-05-27). Common cause: stage controller power off while the FTDI
+bridge is up.

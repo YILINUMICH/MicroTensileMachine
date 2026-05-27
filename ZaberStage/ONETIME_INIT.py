@@ -195,69 +195,14 @@ def test_saved_configuration():
     return stage
 
 
-def demonstrate_multi_config():
-    """Demonstrate managing multiple configuration files"""
-    
-    print("\n" + "="*60)
-    print("MULTIPLE CONFIGURATION MANAGEMENT")
-    print("="*60)
-    
-    # Example: Different configurations for different tests
-    configs = {
-        "high_speed_config.json": {
-            "description": "High-speed testing configuration",
-            "position_limits": (0, 50),
-            "max_velocity": 20.0,
-            "reading_rate": 100.0
-        },
-        "precision_config.json": {
-            "description": "Precision positioning configuration",
-            "position_limits": (0, 200),
-            "max_velocity": 1.0,
-            "reading_rate": 50.0
-        },
-        "safety_config.json": {
-            "description": "Safety-limited configuration",
-            "position_limits": (10, 40),
-            "max_velocity": 5.0,
-            "reading_rate": 100.0
-        }
-    }
-    
-    print("\nCreating multiple configuration profiles...")
-    
-    for filename, settings in configs.items():
-        print(f"\n{filename}:")
-        print(f"  {settings['description']}")
-        
-        # Create stage with specific settings
-        stage = ZaberStage(
-            port="auto",
-            position_limit_mm=settings['position_limits'],
-            max_velocity_mm_s=settings['max_velocity'],
-            reading_rate_hz=settings['reading_rate']
-        )
-        
-        # Save configuration
-        if stage.connect():
-            stage.save_config(filename)
-            print(f"  ✅ Configuration saved")
-            stage.disconnect()
-        else:
-            # Save configuration even without connection
-            config = {
-                "port": "auto",
-                "position_limits_mm": list(settings['position_limits']),
-                "max_velocity_mm_s": settings['max_velocity'],
-                "reading_rate_hz": settings['reading_rate'],
-                "description": settings['description'],
-                "device_info": None,
-                "timestamp": time.time(),
-                "timestamp_readable": time.strftime("%Y-%m-%d %H:%M:%S")
-            }
-            with open(filename, 'w') as f:
-                json.dump(config, f, indent=2)
-            print(f"  ✅ Template configuration saved")
+# NOTE: The earlier `demonstrate_multi_config()` helper that auto-generated
+# `high_speed_config.json`, `precision_config.json`, and `safety_config.json`
+# was removed on 2026-05-27. Workflow-specific configs are now the
+# responsibility of the calling module (e.g. `Calibrate_LaserHead/` carries
+# its own pointer to `safety_config.json` via its `config.yaml`). ONETIME_INIT
+# only produces a live-device template (`zaber_config.json`) and the device
+# scan record (`discovered_devices.json`); downstream modules pass their own
+# config files when they instantiate `ZaberStage`.
 
 
 def view_configuration_file(filename="zaber_config.json"):
@@ -314,23 +259,21 @@ def main():
         test_stage = test_saved_configuration()
         if test_stage:
             test_stage.disconnect()
-    
-    # Step 4: Demonstrate multiple configurations
-    demonstrate_multi_config()
-    
-    # Step 5: View saved configuration
+
+    # Step 4: View saved configuration
     view_configuration_file("zaber_config.json")
-    
+
     print("\n" + "="*60)
-    print("DEMONSTRATION COMPLETE")
+    print("INITIALIZATION COMPLETE")
     print("="*60)
     print("\nCreated files:")
     print("  - discovered_devices.json (device scan results)")
-    print("  - zaber_config.json (main configuration)")
-    print("  - high_speed_config.json (high-speed profile)")
-    print("  - precision_config.json (precision profile)")
-    print("  - safety_config.json (safety-limited profile)")
-    print("\nYou can now use these configurations to quickly connect to your device:")
+    print("  - zaber_config.json          (live-device template)")
+    print("\nWorkflow-specific configs (limits, velocity, etc.) are not")
+    print("generated here — they live with each calling module. Examples:")
+    print("  - Calibrate_LaserHead/ points at ../ZaberStage/safety_config.json")
+    print("    via its own config.yaml.")
+    print("\nTo use the live-device template directly:")
     print("  stage = load_stage_from_config('zaber_config.json')")
 
 

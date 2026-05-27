@@ -19,7 +19,7 @@ A benchtop micro tensile rig for characterizing **Shape Memory Alloy (SMA / Flex
             ┌──────────────────────────┐  ┌──────────┐ ┌──────────────┐
             │   Portenta H7 (ABX00042) │  │ Keysight │ │ Zaber linear │
             │   + Mid Carrier (ASX00055)│  │ E4980AL  │ │   stage      │
-            │   + ADS1263 24/32-bit ADC│  │ LCR meter│ │  (X-LRM200A) │
+            │   + ADS1263 24/32-bit ADC│  │ LCR meter│ │(X-LSQ300A-E01)│
             └──┬──────────────────┬────┘  └────┬─────┘ └──────────────┘
         ADC1  │ AIN0/AIN1         │ AIN2/AIN3  │
               ▼                   ▼            ▼
@@ -100,7 +100,7 @@ Every module below carries a status. Same vocabulary in every README and in the 
 | Displacement sensor | Keyence IL-030 laser, 30 mm reference, ±5 mm range | [doc/KeyenceIL_LaserSensor_Manual.pdf](doc/KeyenceIL_LaserSensor_Manual.pdf) |
 | Load cell amplifier | LCA-9PC / LCA-RTC | [doc/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf](doc/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf) |
 | LCR meter | Keysight E4980AL | (vendor site) |
-| Linear stage | Zaber X-LRM200A | (vendor site) |
+| Linear stage | Zaber X-LSQ300A-E01 (300 mm travel, encoder, serial 143153) | (vendor site) |
 | Bias-tee | Double bias-tee, 0.22 µF C0G + 47 µH | (custom) |
 
 See [doc/README.md](doc/README.md) for the per-PDF index with one-line descriptions and the Memo section (cable diagram, configuration notes) — to be filled in by the operator.

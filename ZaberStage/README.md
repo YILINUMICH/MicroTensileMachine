@@ -40,9 +40,13 @@ python ONETIME_INIT.py
 
 This script will:
 1. Check and install `zaber-motion` if not present
-2. Discover all connected Zaber devices
-3. Create configuration files for quick setup
-4. Generate multiple configuration profiles (high-speed, precision, safety)
+2. Discover all connected Zaber devices and write `discovered_devices.json`
+3. Create a live-device template config (`zaber_config.json`) you can copy/edit
+
+It does **not** generate workflow-specific profiles. Each calling module
+(e.g. `Calibrate_LaserHead/`) carries its own config file with its own
+position limits, velocity caps, and notes — see the "Configuration
+Ownership" section below.
 
 ### Module Files
 
@@ -241,7 +245,7 @@ The module saves configurations in JSON format:
     "port": "COM3",
     "device_id": 1,
     "serial_number": "12345",
-    "name": "X-LRM200A",
+    "name": "X-LSQ300A-E01",
     "firmware_version": "7.15",
     "device_type": "Linear Stage",
     "axis_count": 1
@@ -262,7 +266,7 @@ Device discovery results are saved as:
       "port": "COM3",
       "device_id": 1,
       "serial_number": "12345",
-      "name": "X-LRM200A",
+      "name": "X-LSQ300A-E01",
       "firmware_version": "7.15",
       "device_type": "Linear Stage",
       "axis_count": 1
@@ -365,12 +369,12 @@ logger = logging.getLogger("ZaberStage")
 ### Common Issues
 
 1. **Import Error: "cannot import name 'Connection'"**
-   - Run `python first_run_initialization.py` to install dependencies
+   - Run `python ONETIME_INIT.py` to install dependencies
    - Or manually: `pip install zaber-motion`
 
 2. **Device Not Found**
    - Check USB/serial connection
-   - Run device discovery: `python first_run_initialization.py`
+   - Run device discovery: `python ONETIME_INIT.py`
    - Check device power
    - Verify drivers are installed
 
@@ -456,7 +460,7 @@ for target in target_positions:
 
 ### Step 1: First-Time Setup
 ```bash
-python first_run_initialization.py
+python ONETIME_INIT.py
 ```
 
 ### Step 2: Run Tests
@@ -475,13 +479,30 @@ stage.move_to(50.0)
 
 ## Configuration Files Created
 
-After running `first_run_initialization.py`, you'll have:
+After running `ONETIME_INIT.py`, you'll have:
 
-- **`zaber_config.json`** - Default configuration
-- **`high_speed_config.json`** - High-speed testing (0-50mm, 20mm/s)
-- **`precision_config.json`** - Precision positioning (0-200mm, 1mm/s)
-- **`safety_config.json`** - Safety-limited (10-40mm, 5mm/s)
-- **`discovered_devices.json`** - List of all found devices
+- **`zaber_config.json`** — live-device template (port, identity, default limits/velocity)
+- **`discovered_devices.json`** — record of every device the scan saw
+
+## Configuration Ownership
+
+Workflow-specific configs are **owned by the calling module**, not by
+`ZaberStage/`. The pattern is: the calling module carries a config file
+(JSON or YAML) that points at — or includes — the position limits,
+velocity caps, and any notes it needs. It then constructs `ZaberStage`
+with that config.
+
+Current configs that live in `ZaberStage/` for historical reasons:
+
+- **`safety_config.json`** — used by `../Calibrate_LaserHead/` via its
+  `config.yaml: zaber_config_path`. Tight `[5, 15]` mm calibration
+  envelope; see [safety_config_NOTES.md](safety_config_NOTES.md) for the
+  rationale. Conceptually owned by `Calibrate_LaserHead/`, but lives here
+  for now.
+
+If you need a new workflow profile, **create it inside your workflow's
+own folder** and point at it from there — don't extend `ONETIME_INIT.py`
+to generate it here.
 
 ## License
 
@@ -490,7 +511,7 @@ This module is part of the University of Michigan Robotics HDR Lab project.
 ## Support
 
 For issues or questions:
-1. Run `first_run_initialization.py` for device discovery
+1. Run `ONETIME_INIT.py` for device discovery
 2. Check test output: `python test_zaber_stage.py`
 3. Enable debug logging for detailed trace
 4. Use `scan_devices()` to verify device connectivity

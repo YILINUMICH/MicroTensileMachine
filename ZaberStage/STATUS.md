@@ -7,7 +7,7 @@
 | **Used by** | `Calibrate_LaserHead/` (imports `zaber_stage.py` via `sys.path` shim). Will be the stage-control layer for any future closed-loop tensile test runner. |
 | **Owner** | Yilin |
 | **Quick test** | `python ONETIME_INIT.py` (first time) → `python test_zaber_stage.py` for the full test suite. |
-| **Devices supported** | Tested with Zaber X-LRM200A linear stage. Should work with any zaber-motion 7.x compatible device. |
+| **Devices supported** | In use on this rig: **Zaber X-LSQ300A-E01** (serial 143153, device_id 50138, firmware 7.48.24004) on COM5 — 300 mm travel, built-in encoder. Should work with any zaber-motion 7.x compatible device. |
 
 ## Module TODOs
 

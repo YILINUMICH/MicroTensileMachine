@@ -519,20 +519,43 @@ class ZaberStage:
     # Private methods
     
     def _get_device_info(self, device, port: Optional[str] = None) -> DeviceInfo:
-        """Extract device information from a Zaber device"""
+        """Extract device information from a Zaber device.
+
+        Notes:
+            - In zaber-motion 7.x, `Identity` does NOT expose `device_type`.
+              We synthesize a label from the device name (e.g. "X-LSQ300A-E01"
+              → "Linear Stage") via `getattr` with a safe default. Reading
+              `identity.device_type` directly used to throw AttributeError,
+              which the previous bare `except:` silently swallowed and replaced
+              with a Mock placeholder — see safety_config_NOTES.md.
+            - On any genuine failure we now log a warning before falling back,
+              so future "why is device_info Mock?" mysteries are visible in
+              the logs instead of silent.
+        """
         try:
             identity = device.identity
+            # FirmwareVersion has major/minor/build fields; str() on it yields
+            # an ugly Python repr ("FirmwareVersion(major=7, minor=48, build=24004)"),
+            # so format it as the conventional "major.minor.build" string.
+            fw = identity.firmware_version
+            try:
+                fw_str = f"{fw.major}.{fw.minor}.{fw.build}"
+            except AttributeError:
+                fw_str = str(fw)
             return DeviceInfo(
                 port=port or self.port,
                 device_id=device.device_id,
                 serial_number=str(identity.serial_number),
                 name=identity.name,
-                firmware_version=str(identity.firmware_version),
-                device_type=identity.device_type,
+                firmware_version=fw_str,
+                device_type=getattr(identity, "device_type", "Linear Stage"),
                 axis_count=device.axis_count
             )
-        except:
-            # Fallback for mock or limited info
+        except Exception as e:
+            self.logger.warning(
+                f"_get_device_info: live identity read failed ({type(e).__name__}: {e}); "
+                f"falling back to Mock placeholder."
+            )
             return DeviceInfo(
                 port=port or self.port,
                 device_id=0,
