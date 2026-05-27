@@ -1,29 +1,28 @@
 #!/usr/bin/env python3
 """
-portenta_reader.py — USB-CDC serial reader for the Portenta H7 laser-head stream.
+portenta_reader.py — USB-CDC serial reader for the Portenta H7 ADC stream.
 
-The firmware in ``LaserHead_PIO/src/main.cpp`` currently emits ADC2 samples
-with this per-sample format (tab-separated)::
+Used by the load cell calibration workflow in Calibrate_LoadCell/. The
+firmware in ``Calibrate_Loadcell_PIO/src/main.cpp`` emits dual-ADC samples
+(both ADC1 and ADC2 on AIN2/AIN3) with this per-sample format (TSV)::
 
-    <t_ms>\t<raw_code>\t<voltage_V>\n
+    <t_ms>\t<src>\t<raw_code>\t<voltage_V>\n     (dual-ADC, src=1 or 2)
+    <t_ms>\t<raw_code>\t<voltage_V>\n             (single-ADC fallback)
 
 with interleaved status/log lines that begin with ``[M4]``, ``[M7]``, or
 ``[M4 cp N]``. Those lines MUST be ignored by the calibration host.
 
-The calibration plan (Calibrate_LaserHead_Plan.md §2) specifies a cleaner
-CSV-in-µs format::
+A cleaner CSV-in-µs format is also accepted::
 
     <timestamp_us>,<voltage_V>\n
 
-This reader parses the *current* firmware output and normalises each sample
-to the plan's canonical shape: ``(timestamp_us: int, voltage_V: float)``.
-Once the firmware is updated to emit the cleaner CSV format, the parser
-below also accepts it directly — both paths are kept live so we can switch
-without touching the calibration script.
+This reader parses the firmware output and normalises each sample to the
+canonical shape: ``(timestamp_us: int, voltage_V: float)``. The parser is
+format-agnostic — it handles 3-col TSV, 4-col TSV, and CSV transparently.
 
-Run standalone for a 30-second smoke test (plan §9.1)::
+Run standalone for a 30-second smoke test::
 
-    python portenta_reader.py --port COM5 --duration 30
+    python portenta_reader.py --port COM8 --duration 30
 
 Author: Yilin Ma — HDR Lab, University of Michigan
 """
@@ -55,8 +54,9 @@ class Sample:
     voltage_V: float           # already scaled by firmware (0–5 V range)
     raw_code: Optional[int] = None   # only set by the current (TSV) firmware
     adc_source: Optional[int] = None # 1 or 2 if the firmware emits the
-                                     # 4-col dual-stream form (SensorHub_PIO,
-                                     # or LaserHead_PIO with ENABLE_ADC1=1).
+                                     # 4-col dual-stream form (e.g.
+                                     # Calibrate_Loadcell_PIO with both
+                                     # ADCs enabled, or SensorHub_PIO).
                                      # None for 3-col single-channel builds
                                      # or the plan-spec CSV format.
 
@@ -93,8 +93,8 @@ def parse_line(line: str,
     Args:
         line: raw line from the Portenta, newline already stripped.
         adc_source: filter for the 4-column dual-stream form.
-                    - 1 → keep only ADC1 samples (load or x-compare)
-                    - 2 → keep only ADC2 samples (laser, primary)
+                    - 1 → keep only ADC1 samples (primary for load cell)
+                    - 2 → keep only ADC2 samples (cross-compare)
                     - None → keep ALL samples; caller demuxes via
                              Sample.adc_source. Use this for the
                              cross-compare mode where both ADCs read
@@ -336,8 +336,8 @@ class PortentaReader:
         ``(samples_adc1, samples_adc2)``.
 
         Use this when the firmware emits the 4-column dual-stream form
-        (``<t_ms>\\t<src>\\t<raw>\\t<V>``), e.g. LaserHead_PIO compiled
-        with ENABLE_ADC1 = ENABLE_ADC2 = 1 for the AIN4/AIN5
+        (``<t_ms>\\t<src>\\t<raw>\\t<V>``), e.g. Calibrate_Loadcell_PIO
+        with ENABLE_ADC1 = ENABLE_ADC2 = 1 for the AIN2/AIN3
         cross-compare, or SensorHub_PIO in production. The reader's
         ``adc_source`` filter is bypassed (parse_line is called with
         ``adc_source=None``) and the two streams are demuxed on
@@ -390,7 +390,7 @@ class PortentaReader:
                     raise RuntimeError(
                         "Portenta is streaming the 3-column single-channel "
                         "format; dual-ADC cross-compare requires the "
-                        "4-column form. Flash LaserHead_PIO/src/main.cpp "
+                        "4-column form. Flash Calibrate_Loadcell_PIO/src/main.cpp "
                         "with #define ENABLE_ADC1 1 and #define ENABLE_ADC2 1 "
                         "(both must be set), then power-cycle the rig."
                     )
@@ -485,7 +485,7 @@ def _raw_dump(port: str, baud: int, duration: float) -> None:
     ser.close()
     print(f"\n--- total bytes: {total} ---")
     if total == 0:
-        print("Port is SILENT. See LaserHead_PIO/README.md 'ID=0x0 triage'.")
+        print("Port is SILENT. Power-cycle the rig, check COM port assignment.")
 
 
 def _main() -> None:
