@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| **Status** | **To-Test** — **bench-verified on Mid Carrier + bare TI EVM on 2026-05-25.** Dual-stream output is clean: ADC1 on AIN2/AIN3 reads the LCA-9PC load cell within ~3 mV of the bench multimeter; ADC2 on AIN4/AIN5 reads the Keyence IL-030 laser within ~18 mV of the bench multimeter; no status-byte alarms once wiring was confirmed; checksums clean on both ADCs. Flips to **Stable** after `SMA_CharacterizationV2/` consumes this stream end-to-end. |
-| **Role** | Current production firmware target — dual-ADC (load cell on ADC1/AIN2-AIN3 + laser on ADC2/AIN4-AIN5) on Portenta H7 M4 core |
+| **Status** | **To-Test (post-swap)** — bench-verified on Mid Carrier + bare TI EVM on 2026-05-25 with the previous ADC↔sensor pairing; ADC roles swapped on **2026-05-28** after `Calibrate_LaserHead/` and `Calibrate_LoadCell/` cross-compare results. Re-verification on the bench with the swapped firmware is pending. Flips to **Stable** after `SMA_CharacterizationV2/` consumes this stream end-to-end. |
+| **Role** | Current production firmware target — dual-ADC (laser on **ADC1/AIN4-AIN5** + load cell on **ADC2/AIN2-AIN3**) on Portenta H7 M4 core |
 | **Supersedes** | `LoadCell_PIO/`, `LaserHead_PIO/` (kept as diagnostic reference builds) |
-| **Last verified** | 2026-05-25 (dual-stream on Mid Carrier + EVM). Config: ADC1 PGA in path at gain=1 on AIN2/AIN3; ADC2 gain=1 on AIN4/AIN5; REF7050 5.0 V external on AIN0/AIN1 (REFMUX=0x09, REF2=001b); 400 SPS both; Sinc3 filter; INTERFACE=0x05 (STATUS + CHK on); RDATA2 6-byte frame including 00h zero-pad. EVM AVDD ≈ 5.2 V (matters for VBIAS / PGA CM, not for scaling). |
+| **Last verified** | 2026-05-25 (dual-stream on Mid Carrier + EVM, **pre-swap** pairing). Config: REF7050 5.0 V external on AIN0/AIN1 (REFMUX=0x09, REF2=001b); 400 SPS both; Sinc3 filter; INTERFACE=0x05 (STATUS + CHK on); RDATA2 6-byte frame including 00h zero-pad. EVM AVDD ≈ 5.2 V. Current production code now runs ADC1 PGA-in-path gain=1 on AIN4/AIN5 (laser), ADC2 gain=1 on AIN2/AIN3 (load) — re-verify before flipping to Stable. |
 | **Owner** | Yilin |
-| **Quick test** | `pio run -e portenta_m7_bridge -t upload` then `pio run -e portenta_m4 -t upload`, power-cycle the rig (USB + EVM supply), `pio device monitor` @ 115200. Expected: `ID=0x23`, dual stream with `src=1` (load) and `src=2` (laser) at ~3 ms intervals each, no alarm lines once wiring is settled. |
+| **Quick test** | `pio run -e portenta_m7_bridge -t upload` then `pio run -e portenta_m4 -t upload`, power-cycle the rig (USB + EVM supply), `pio device monitor` @ 115200. Expected: `ID=0x23`, dual stream with `src=1` (**laser**) and `src=2` (**load**) at ~3 ms intervals each, no alarm lines once wiring is settled. |
 
 ## Driver bugs caught during 2026-05-25 bring-up
 
@@ -22,8 +22,9 @@ The two bugs masked each other: with only fix #1 applied you'd get clean checksu
 
 - [x] ~~**Port pin defines to Mid Carrier**~~ — done 2026-05-25, bench-verified.
 - [x] ~~**Re-verify SPI mapping**~~ — done 2026-05-25, bench-verified.
-- [x] ~~**Resolve ADC2/AIN2-AIN3 saturation**~~ — RETIRED 2026-05-24 by cp7 in `ADS1263_FirstPowerUp_PIO/`. Production assignment AIN2/3 (load, ADC1) + AIN4/5 (laser, ADC2) confirmed clean.
-- [x] ~~**Bench-verify both streams concurrently**~~ — done 2026-05-25. Both `src=1` and `src=2` lines arrive at ~333 lines/s each (700 lines/s combined) over the USB CDC bridge with no cross-talk and no checksum errors.
+- [x] ~~**Resolve ADC2/AIN2-AIN3 saturation**~~ — RETIRED 2026-05-24 by cp7 in `ADS1263_FirstPowerUp_PIO/`. Production assignment **post-swap (2026-05-28)**: AIN4/5 (laser, ADC1) + AIN2/3 (load, ADC2), both pin pairs confirmed clean.
+- [x] ~~**Bench-verify both streams concurrently**~~ — done 2026-05-25 with pre-swap pairing. Both `src=1` and `src=2` lines arrive at ~333 lines/s each (700 lines/s combined) over the USB CDC bridge with no cross-talk and no checksum errors.
+- [ ] **Re-verify both streams after the 2026-05-28 ADC↔sensor swap.** Same expected line rate; confirm `src=1` now tracks the laser (AIN4/5) and `src=2` tracks the load cell (AIN2/3).
 - [x] ~~**Update the `## Wiring` and `## Expected boot output` sections of `README.md`**~~ — done 2026-05-25; README reflects the bench-derived production config.
 - [ ] **Re-calibrate the laser head** on the bare EVM (deferred from this session). The legacy `k = -0.1171 mV/µm`, `V₀ = 566.957 mV` constants in `SMA_CharacterizationV2/` came through the Waveshare HAT's ~4.4× input attenuator and are invalid on the EVM. Run `Calibrate_LaserHead/` with this firmware, then update the defaults. Tracked in [../TODO.md](../TODO.md).
 - [ ] **Smoke-test `SMA_CharacterizationV2/`** against this stream. When the recorder consumes both `src=1` and `src=2` cleanly across an OPEN→SHORT→RAW session, flip this module's status To-Test → Stable.

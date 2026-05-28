@@ -5,16 +5,18 @@
 PlatformIO project that runs **both** ADS1263 ADCs simultaneously on the
 Portenta H7's M4 co-processor.
 
-## Recommended configuration (Phase 4 production — bench-derived 2026-05-24)
+## Recommended configuration (post-2026-05-28 swap — current production)
 
 This supersedes the legacy Hat-Carrier channel assignment (AIN0/AIN1 + AIN2/AIN3). On the bare TI EVM, AIN0/AIN1 are now consumed by the external REF7050 reference (Cable 2 in [`../doc/MEMO_cable_map.md`](../doc/MEMO_cable_map.md)), and cp7 in `ADS1263_FirstPowerUp_PIO/` retired the legacy AIN2/AIN3 saturation question — all eight AIN-pair configs PASS on the EVM.
 
+ADC roles were swapped on 2026-05-28 after the `Calibrate_LaserHead/` and `Calibrate_LoadCell/` cross-compare runs settled the mapping:
+
 | Path | AIN pair | Sensor               | SPS     | Gain | Filter | Resolution |
 |------|----------|----------------------|---------|------|--------|------------|
-| **ADC1** | **AIN2 (+) / AIN3 (−)** | **Load cell (LCA-9PC)** | **400 SPS** | **PGA in path, gain = 1** | **Sinc3** (MODE1 default) | 32-bit |
-| **ADC2** | **AIN4 (+) / AIN5 (−)** | **Keyence IL-030**       | **400 SPS** | **gain = 1** (PGA always in path) | Sinc3 (ADC2's only option) | 24-bit |
+| **ADC1** | **AIN4 (+) / AIN5 (−)** | **Keyence IL-030 (laser)** | **400 SPS** | **PGA in path, gain = 1** | **Sinc3** (MODE1 default) | 32-bit |
+| **ADC2** | **AIN2 (+) / AIN3 (−)** | **Load cell (LCA-9PC)**    | **400 SPS** | **gain = 1** (PGA always in path) | Sinc3 (ADC2's only option) | 24-bit |
 
-**Why this assignment.** Load cell goes to ADC1 because (a) ADC1 has the 32-bit core, and (b) force is the primary measurement — its precision drives the quality of the extracted material properties. The laser controller already conditions its output and outputs at the full ADC input range, so ADC2's 8.5 µV RMS floor (cp8 result, *below* the 10.3 µV datasheet typical) is comfortably under the IL-030's own ~0.3 µm repeatability.
+**Why this assignment.** The two calibration modules (`Calibrate_LaserHead/`, `Calibrate_LoadCell/`) ran dual-ADC cross-compare on each pin pair to characterize per-channel noise and linearity on the bare EVM; the production assignment above is the outcome of those runs. Cabling stays exactly where the calibration modules tested it — laser on AIN4/AIN5, load cell on AIN2/AIN3 — only the ADC↔sensor pairing flipped relative to the earlier draft.
 
 **Why PGA in path at gain = 1.** Gain > 1 isn't needed (the LCA-9PC already supplies the gain, the IL-030 already drives the full ±5 V range), but keeping the PGA in the signal path gives the high-input-impedance buffer and the lower noise floor (~1.3 µV vs ~3.5 µV input-referred RMS at 400 SPS with PGA bypassed). The trade-off is an input-common-mode constraint that the chip enforces in PGA-enabled mode — at gain = 1 with VREF = 5 V and AVDD ≈ 5.2 V, V_IN_CM must be in `[0.3 V, AVDD − 0.3 V] ≈ [0.3 V, 4.9 V]` (datasheet §9.3.3.3). VBIAS = ON (POWER bit 1) keeps AINCOM at AVDD/2 ≈ 2.6 V so floating inputs settle to a happy common-mode; the LCA-9PC's local ground sense on AIN3 sets the load-cell channel's working CM to a value comfortably inside the window. ADC2's PGA can *not* be bypassed in this chip (datasheet §9.3 — only ADC1 has the bypass bit MODE2[7]); ADC2 runs at gain = 1 with the PGA acting as a unity-gain buffer.
 
@@ -29,12 +31,12 @@ REFMUX         = 0x09   external REF7050 on AIN0 (+REF), AIN1 (-REF)
 POWER          = 0x13   INTREF on, VBIAS on (AINCOM @ +2.5 V)
 MODE1          = 0x40   Sinc3 (FILTER[2:0] = 010b → bits 7:5 = 010), chop off
 
-[ADC1 — load cell]
-INPMUX         = 0x23   AIN2 (+), AIN3 (−)
+[ADC1 — laser]
+INPMUX         = 0x45   AIN4 (+), AIN5 (−)
 MODE2          = 0x08   PGA in path (bit 7 = 0), gain = 1, 400 SPS (bits 3:0 = 1000b)
 
-[ADC2 — laser]
-ADC2MUX        = 0x45   AIN4 (+), AIN5 (−)
+[ADC2 — load cell]
+ADC2MUX        = 0x23   AIN2 (+), AIN3 (−)
 ADC2CFG        = 0x81   DR2 = 400 SPS, GAIN2 = 1, REF2 = external (shares AIN0/AIN1 ref)
 ```
 
@@ -67,8 +69,8 @@ ADC2CFG        = 0x81   DR2 = 400 SPS, GAIN2 = 1, REF2 = external (shares AIN0/A
 
 | Path | Channels     | Role               | Rate    | Resolution |
 |------|--------------|--------------------|---------|------------|
-| ADC1 | AIN2 / AIN3  | Load cell (LCA Vo) | 400 SPS | 32-bit     |
-| ADC2 | AIN4 / AIN5  | Laser head (IL-030)| 400 SPS | 24-bit     |
+| ADC1 | AIN4 / AIN5  | Laser head (IL-030)| 400 SPS | 32-bit     |
+| ADC2 | AIN2 / AIN3  | Load cell (LCA Vo) | 400 SPS | 24-bit     |
 
 This is the merge of the sibling single-ADC projects:
 - `../LoadCell_PIO/`   — ADC1 only
@@ -119,9 +121,9 @@ can demultiplex:
 
 ```
 <t_ms>\t<src>\t<raw_code>\t<voltage_V>
-   12    1      26214400     1.525000    ← load cell (src=1)
-   15    2       4220760     2.515000    ← laser    (src=2)
-   18    1      26214337     1.525003
+   12    1      26214400     2.515000    ← laser     (src=1, ADC1, AIN4/5)
+   15    2       4220760     1.525000    ← load cell (src=2, ADC2, AIN2/3)
+   18    1      26214337     2.515003
    ...
 ```
 
@@ -164,15 +166,15 @@ ADS1263 ready (dual-ADC; both paths parked until configureADCx)
 [M4 cp 10] ADC2 started
 --- ADS1263 Config (dual-ADC) ---
 ID            : 0x23
-[ADC1]
-  INPMUX      : 0x23      ← AIN2 (+), AIN3 (-)
+[ADC1 — laser]
+  INPMUX      : 0x45      ← AIN4 (+), AIN5 (-)
   REFMUX      : 0x09      ← external REF7050 on AIN0/AIN1
   VREF        : 5.000 V
   Rate        : 400 SPS
   PGA         : in path (gain=1)
   Running     : YES
-[ADC2]
-  ADC2MUX     : 0x45      ← AIN4 (+), AIN5 (-)
+[ADC2 — load cell]
+  ADC2MUX     : 0x23      ← AIN2 (+), AIN3 (-)
   REF2        : 0x1       ← external (shares ADC1 ref on AIN0/AIN1)
   VREF        : 5.000 V
   Rate        : 400 SPS
@@ -181,7 +183,7 @@ ID            : 0x23
   ADC2CFG rb  : 0x81
 Frame INTERFACE=0x05 → RDATA1=6B, RDATA2=5B
 ---------------------------------
-[M4] streaming. format: t_ms\tsrc\traw_code\tvoltage_V   (src=1 load, src=2 laser)
+[M4] streaming. format: t_ms\tsrc\traw_code\tvoltage_V   (src=1 laser, src=2 load)
 12   1   <raw1>   <v1>
 15   2   <raw2>   <v2>
 ...
