@@ -3,16 +3,24 @@
 These notes live alongside `safety_config.json` because JSON itself can't
 carry comments. Read this before widening / narrowing the limits.
 
-## Current state (2026-05-27)
+## Current state (2026-05-28)
 
 ```
-position_limits_mm: [5, 15]              ← TIGHT (calibration-only)
+position_limits_mm: [10, 40]             ← GENERAL envelope (load-cell calibration)
 max_velocity_mm_s:  5.0
 reading_rate_hz:    100.0
 device_info:        X-LSQ300A-E01        ← LIVE (serial 143153, fw 7.48.24004)
 ```
 
-## Why `position_limits_mm = [5, 15]`
+**2026-05-28 update:** widened from `[5, 15]` to `[10, 40]` for the
+load-cell calibration sweep (`../Calibrate_LoadCell/`), which runs from
+absolute position **10 → 24.5 mm** (sweep_start_mm = 10.0, max_force_gf
+= 45, spring k = 30.86 mN/mm → ~14.5 mm of travel after step rounding).
+The original tight `[5, 15]` envelope below was for the laser-head
+calibration only — to re-enable it, restore the prior values before
+running `../Calibrate_LaserHead/`.
+
+## Why `position_limits_mm = [5, 15]` (historical — laser-head only)
 
 Set tight for the IL-030 laser-head calibration in
 `../Calibrate_LaserHead/`. The mounting fixture on this rig maps Zaber

@@ -1,0 +1,62 @@
+{
+  "sensitivity_mV_per_mN": 10.200865238052671,
+  "sensitivity_V_per_N": 10.200865238052671,
+  "V0_mV": -34.185523054186675,
+  "r_squared": 0.9998629224254649,
+  "max_abs_residual_mV": 29.669318692117486,
+  "n_points_used": 116,
+  "n_points_trimmed": 4,
+  "spring_k_mN_per_mm": 30.86,
+  "all_checks_passed": true,
+  "source": "2026-05-28_run07_points.csv",
+  "updated_utc": "2026-05-28T16:07:59Z",
+  "conversion": "force_mN = (V_mV - V0_mV) / sensitivity_mV_per_mN",
+  "per_direction": {
+    "fwd": {
+      "sensitivity_mV_per_mN": 10.253814859408168,
+      "V0_mV": -59.7332194076656,
+      "r_squared": 0.9999939169502758,
+      "n_points": 60
+    },
+    "rev": {
+      "sensitivity_mV_per_mN": 10.149823186248897,
+      "V0_mV": -8.93216468253976,
+      "r_squared": 0.9999893365323379,
+      "n_points": 56
+    },
+    "delta_sensitivity_mV_per_mN": 0.10399167315927116,
+    "delta_V0_mV": -50.80105472512584,
+    "hysteresis_mN_equivalent": 4.980073115329546,
+    "interpretation": "|delta_V0| / sensitivity. Bounds the force-error a single voltage reading carries due to fwd/rev hysteresis: a downstream reading converted via the headline sensitivity may be off by up to this much depending on whether the spring/fixture was last loaded or unloaded."
+  },
+  "per_pass": {
+    "0": {
+      "sensitivity_mV_per_mN": 10.19822483853666,
+      "V0_mV": -34.34170560344809,
+      "r_squared": 0.9998578819890407,
+      "n_points": 58
+    },
+    "1": {
+      "sensitivity_mV_per_mN": 10.203505637568679,
+      "V0_mV": -34.02934050492611,
+      "r_squared": 0.9998687700620051,
+      "n_points": 58
+    }
+  },
+  "per_pass_spread_pct": 0.05176814817942225,
+  "adc2_xcompare": {
+    "sensitivity_mV_per_mN": 10.262388195537449,
+    "V0_mV": -30.68871846059062,
+    "r_squared": 0.9998629149968539,
+    "slope_mismatch_pct_vs_adc1": 0.6013018182513321
+  },
+  "override": {
+    "accepted_by": "Yilin Ma",
+    "accepted_at_utc": "2026-05-28T16:07:59Z",
+    "reason": "Hysteresis-limited combined R-squared 0.999863 just under 0.9999 threshold. Per-direction R-squared 0.99999 each (fwd and rev). ~5 mN of mechanical hysteresis between fwd and rev legs is the spring/fixture, not the amp (LCA-RTC nonlinearity spec is 0.005%-FS = 0.25 mV, 120x smaller than the 29.7 mV max residual we observe). Per-pass spread 0.05% and baseline drift within noise confirm the rig is stable. Cross-compare 0.6% ADC1-vs-ADC2 slope mismatch is an ADC2 PGA artifact, not the amp. Accepted for production use; downstream code should propagate hysteresis_mN_equivalent as a known uncertainty.",
+    "failed_checks": [
+      "R\u00b2 > 0.9999"
+    ]
+  },
+  "all_checks_passed_raw": false
+}

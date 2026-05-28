@@ -26,7 +26,7 @@ spring_k_uncertainty_pct: 0.4        # run-to-run CV from Instron (0.26%) + cell
 # The stage moves from sweep_start_mm in the POSITIVE direction (increasing
 # position = increasing spring deflection = increasing force). If your rig
 # geometry is reversed, swap sweep_start_mm and direction.
-sweep_start_mm: 10.0                 # TBD — operator sets after bench test
+sweep_start_mm: 10.0                 # bench-verified — spring just relaxed at this absolute position
 max_force_gf: 45                     # target ceiling (~441 mN, ~14.3 mm travel)
 step_size_mm: 0.5                    # ~29 points across the force range
 direction: bidirectional             # forward_only | bidirectional

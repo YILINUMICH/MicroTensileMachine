@@ -487,15 +487,20 @@ def run(cfg: SweepConfig, dry_run: bool) -> None:
 
                 for i, disp_mm in enumerate(targets):
                     abs_mm = start_abs + disp_mm
+                    # Expected force is computed from the spring k × disp.
+                    # It is recorded in raw.csv / points.csv for the fit but
+                    # NOT shown in the operator log line — it's purely a
+                    # theoretical target and has misled bench operators into
+                    # thinking the rig is actually measuring that force.
+                    # The post-capture line below shows the real ADC reading.
                     force_mN = cfg.spring_k_mN_per_mm * disp_mm
                     tag = "fwd" if (not is_bidirectional or i < n_fwd) else "rev"
                     global_idx = pass_idx * len(targets) + i + 1
-                    log.info("[%3d/%3d  p%d %s] → disp %+.2f mm  "
-                             "(abs %.3f mm, F ≈ %.1f mN / %.1f gf)",
+                    log.info("[%3d/%3d  p%d %s] → moving to disp %+.2f mm  "
+                             "(abs %.3f mm)",
                              global_idx, total_points,
                              pass_idx + 1, tag,
-                             disp_mm, abs_mm,
-                             force_mN, force_mN / GF_TO_MN)
+                             disp_mm, abs_mm)
 
                     if not stage.move_to(abs_mm):
                         log.error("stage.move_to(%.4f) failed", abs_mm)
@@ -522,6 +527,22 @@ def run(cfg: SweepConfig, dry_run: bool) -> None:
                     aggregates.append(agg)
                     raw_f.flush()
                     points_f.flush()
+
+                    # Operator-visible result of THIS step: actual ADC
+                    # reading(s), so the bench operator can see whether the
+                    # signal is moving in the expected direction during the
+                    # run. mV is used because LCA-9PC at zero-ish load sits
+                    # in single-digit mV territory.
+                    if cfg.xcompare and agg.mean_V_adc2 is not None:
+                        log.info("            captured: ADC1 = %+8.3f mV (σ %.4f mV)   "
+                                 "ADC2 = %+8.3f mV (σ %.4f mV)   n=%d",
+                                 agg.mean_V * 1000.0, agg.std_V * 1000.0,
+                                 agg.mean_V_adc2 * 1000.0, agg.std_V_adc2 * 1000.0,
+                                 agg.n_samples)
+                    else:
+                        log.info("            captured: ADC1 = %+8.3f mV (σ %.4f mV)   n=%d",
+                                 agg.mean_V * 1000.0, agg.std_V * 1000.0,
+                                 agg.n_samples)
 
             # ---- Return to start and post-baseline --------------------------
             log.info("Returning to start (%.3f mm)...", start_abs)

@@ -61,11 +61,32 @@ def find_latest_points_csv(data_dir: Path = _DEFAULT_DATA_DIR) -> Optional[Path]
 def save_calibration(fit: "FitResult", checks_passed: bool,
                      source_csv: Path, trimmed_count: int,
                      spring_k_mN_per_mm: float,
-                     out_path: Path = _CALIBRATION_JSON) -> Path:
+                     out_path: Path = _CALIBRATION_JSON,
+                     *,
+                     per_direction: Optional[Dict[str, "FitResult"]] = None,
+                     per_pass: Optional[Dict[int, "FitResult"]] = None,
+                     adc2_fit: Optional["FitResult"] = None,
+                     override: Optional[dict] = None) -> Path:
     """
     Write calibration.json. This is the canonical file that downstream
     modules (SMA_CharacterizationV2, SensorHub_PIO host scripts) read
     to convert load cell voltages to force.
+
+    Extended payload (added 2026-05-28):
+
+    - ``per_direction``: forward/reverse fits — quantifies hysteresis when
+      the sweep is bidirectional. ``hysteresis_mN_equivalent`` is derived
+      from |ΔV₀| / sensitivity, which is the force step that would shift
+      the reverse-leg fit on top of the forward-leg fit.
+    - ``per_pass``: per-pass repeatability data — typically tiny if the
+      rig is stable.
+    - ``adc2_fit``: cross-compare sanity check. ``adc2_slope_mismatch_pct``
+      is the conservative agreement metric.
+    - ``override``: when the operator forces ``all_checks_passed=True``
+      despite a sanity-check failure (typically R² just under 0.9999
+      because of measurable hysteresis), this block records who/when/why
+      so downstream consumers and future-you can see the calibration was
+      manually accepted.
     """
     payload = {
         "sensitivity_mV_per_mN": fit.sensitivity_mV_per_mN,
@@ -81,6 +102,79 @@ def save_calibration(fit: "FitResult", checks_passed: bool,
         "updated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "conversion": "force_mN = (V_mV - V0_mV) / sensitivity_mV_per_mN",
     }
+
+    # ---- Per-direction (hysteresis) ----------------------------------------
+    if per_direction and "fwd" in per_direction and "rev" in per_direction:
+        fwd = per_direction["fwd"]
+        rev = per_direction["rev"]
+        d_v0_mV = fwd.v0_mV - rev.v0_mV
+        d_sens = fwd.sensitivity_mV_per_mN - rev.sensitivity_mV_per_mN
+        hyst_mN = (abs(d_v0_mV) / fit.sensitivity_mV_per_mN
+                   if fit.sensitivity_mV_per_mN != 0 else float("nan"))
+        payload["per_direction"] = {
+            "fwd": {
+                "sensitivity_mV_per_mN": fwd.sensitivity_mV_per_mN,
+                "V0_mV": fwd.v0_mV,
+                "r_squared": fwd.r_squared,
+                "n_points": fwd.n_points,
+            },
+            "rev": {
+                "sensitivity_mV_per_mN": rev.sensitivity_mV_per_mN,
+                "V0_mV": rev.v0_mV,
+                "r_squared": rev.r_squared,
+                "n_points": rev.n_points,
+            },
+            "delta_sensitivity_mV_per_mN": d_sens,
+            "delta_V0_mV": d_v0_mV,
+            "hysteresis_mN_equivalent": hyst_mN,
+            "interpretation": (
+                "|delta_V0| / sensitivity. Bounds the force-error a single "
+                "voltage reading carries due to fwd/rev hysteresis: a "
+                "downstream reading converted via the headline sensitivity "
+                "may be off by up to this much depending on whether the "
+                "spring/fixture was last loaded or unloaded."
+            ),
+        }
+
+    # ---- Per-pass (repeatability) ------------------------------------------
+    if per_pass and len(per_pass) > 1:
+        sens_values = [pf.sensitivity_mV_per_mN for pf in per_pass.values()]
+        spread = max(sens_values) - min(sens_values)
+        mean_sens = sum(sens_values) / len(sens_values)
+        pct = (100.0 * spread / abs(mean_sens)
+               if mean_sens != 0 else float("nan"))
+        payload["per_pass"] = {
+            str(pid): {
+                "sensitivity_mV_per_mN": pf.sensitivity_mV_per_mN,
+                "V0_mV": pf.v0_mV,
+                "r_squared": pf.r_squared,
+                "n_points": pf.n_points,
+            }
+            for pid, pf in per_pass.items()
+        }
+        payload["per_pass_spread_pct"] = pct
+
+    # ---- ADC2 cross-compare ------------------------------------------------
+    if adc2_fit is not None:
+        adc1_sens = fit.sensitivity_mV_per_mN
+        adc2_sens = adc2_fit.sensitivity_mV_per_mN
+        mean_sens = 0.5 * (adc1_sens + adc2_sens)
+        mismatch_pct = (100.0 * abs(adc1_sens - adc2_sens) / abs(mean_sens)
+                        if mean_sens != 0 else float("nan"))
+        payload["adc2_xcompare"] = {
+            "sensitivity_mV_per_mN": adc2_sens,
+            "V0_mV": adc2_fit.v0_mV,
+            "r_squared": adc2_fit.r_squared,
+            "slope_mismatch_pct_vs_adc1": mismatch_pct,
+        }
+
+    # ---- Operator override -------------------------------------------------
+    if override is not None:
+        payload["override"] = override
+        # If overridden, the public flag reflects operator approval.
+        payload["all_checks_passed"] = True
+        payload["all_checks_passed_raw"] = checks_passed
+
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2)
     return out_path
@@ -473,6 +567,17 @@ def _main() -> None:
                    help="skip writing calibration.json")
     p.add_argument("--r2-target", type=float, default=0.9999,
                    help="R² threshold for linear region detection (default 0.9999)")
+    p.add_argument("--accept", metavar="REASON",
+                   help="Operator override: force all_checks_passed=True even if "
+                        "some sanity checks failed. REASON is required and is "
+                        "recorded verbatim in calibration.json under "
+                        "override.reason for auditability. Typical use case: a "
+                        "calibration where R² fails the 0.9999 threshold because "
+                        "of measurable but real mechanical hysteresis, and the "
+                        "operator has reviewed the per-direction fits and "
+                        "accepted the result.")
+    p.add_argument("--accept-by", metavar="NAME", default="",
+                   help="Operator name recorded alongside --accept (default: empty)")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -535,12 +640,6 @@ def _main() -> None:
         print(f"    [{mark}]  {c.name}")
         print(f"            {c.detail}")
     print()
-
-    # ---- Save calibration.json ---------------------------------------------
-    if not args.no_save_cal:
-        cal_path = save_calibration(fit, all_passed, points_path,
-                                    len(trimmed_pts), spring_k)
-        log.info("Wrote %s  (all_checks_passed=%s)", cal_path, all_passed)
 
     # ---- Per-pass decomposition --------------------------------------------
     pp_fits = per_pass_fits(linear_pts)
@@ -613,6 +712,35 @@ def _main() -> None:
                       f"σ = {diffs.std(ddof=0):.3f} mV   "
                       f"(over {len(diffs)} points)")
             print()
+
+    # ---- Save calibration.json (after all decompositions computed) ---------
+    if not args.no_save_cal:
+        override = None
+        if args.accept:
+            override = {
+                "accepted_by": args.accept_by,
+                "accepted_at_utc": datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"),
+                "reason": args.accept,
+                "failed_checks": [c.name for c in checks if not c.passed],
+            }
+            print("  OPERATOR OVERRIDE applied")
+            print(f"    accepted by : {args.accept_by or '(unspecified)'}")
+            print(f"    reason      : {args.accept}")
+            print(f"    failed checks overridden: "
+                  f"{', '.join(c.name for c in checks if not c.passed) or 'none'}")
+            print()
+        cal_path = save_calibration(
+            fit, all_passed, points_path, len(trimmed_pts), spring_k,
+            per_direction=pd_fits if len(pd_fits) > 1 else None,
+            per_pass=pp_fits if len(pp_fits) > 1 else None,
+            adc2_fit=fit_adc2,
+            override=override,
+        )
+        effective_pass = all_passed or override is not None
+        log.info("Wrote %s  (all_checks_passed=%s%s)",
+                 cal_path, effective_pass,
+                 " — operator override" if override else "")
 
     # ---- SVG plot ----------------------------------------------------------
     if not args.no_plot:

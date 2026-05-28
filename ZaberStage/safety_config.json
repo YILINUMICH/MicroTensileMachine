@@ -1,9 +1,9 @@
 {
   "port": "COM5",
-  "position_limits_mm": [5, 15],
+  "position_limits_mm": [10, 40],
   "max_velocity_mm_s": 5.0,
   "reading_rate_hz": 100.0,
-  "_notes": "Tight calibration-only limits [5, 15]. See safety_config_NOTES.md for rationale and how to widen for other workflows.",
+  "_notes": "General travel envelope [10, 40] — covers the load-cell calibration sweep (10 → 24.5 mm). Was [5, 15] for laser-head calibration; widened 2026-05-28 for Calibrate_LoadCell. See safety_config_NOTES.md for the rationale.",
   "device_info": {
     "port": "COM5",
     "device_id": 50138,

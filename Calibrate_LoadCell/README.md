@@ -283,7 +283,7 @@ v0 = cal["V0_mV"]
 
 | Parameter | Default | Notes |
 |---|---|---|
-| `sweep_start_mm` | 10.0 (TBD) | Absolute Zaber position, a few mm before spring engagement |
+| `sweep_start_mm` | 10.0 | Absolute Zaber position, a few mm before spring engagement (bench-verified) |
 | `max_force_gf` | 45 | Target ceiling (~441 mN, ~14.3 mm travel) |
 | `step_size_mm` | 0.5 | ~29 points over the range |
 | `direction` | bidirectional | Forward + return for hysteresis |
@@ -477,9 +477,27 @@ Once a good run is obtained:
   Instron propagates directly into the load cell sensitivity. There is no
   independent weight-check step because the load cell is mounted sideways.
 - **REF7050 verification:** Cross-compare doesn't catch reference voltage
-  errors. The reference was measured at 5.2056 V in
-  `ADS1263_FirstPowerUp_PIO/` cp10. Re-verify with a bench multimeter if
-  that measurement is older than a month.
+  errors — both ADCs share the same external reference and drift together.
+  REF7050 is a precision 5.000 V reference (M-grade, 0.05% initial
+  accuracy per `doc/MEMO_cable_map.md` Cable 2), so the firmware uses
+  `vref_V = 5.0f` in `main.cpp` and `analyze.py` math derives volts from
+  that. Re-verify with a bench multimeter across AIN0(+) and AIN1(−) on
+  the EVM screw terminals — it should read **+5.000 V ± a few mV**. If it
+  doesn't, the REF7050 is faulty or the bias resistors (100 nF cap + 100
+  kΩ pull, see Cable 2) are missing/shorted.
+
+- **Do NOT confuse REF7050 with AVDD.** `ADS1263_FirstPowerUp_PIO/` cp10
+  measured the EVM's **AVDD analog supply rail** at **5.2056 V** (via the
+  ratiometric TDAC method — see `ADS1263_FirstPowerUp_PIO/STATUS.md` and
+  the `ads1263_tdac_ratiometric` memory note). AVDD comes from the EVM's
+  on-board TPS7A4700 LDO and is independent of REF7050. **AVDD does not
+  enter this calibration's volts-per-code math** — that math is purely
+  `V_in = (code / 2^31) × VREF` with VREF = REF7050 = 5.000 V. AVDD only
+  matters for: (a) confirming the PGA input common-mode window
+  `[0.3, AVDD−0.3]` is satisfied, and (b) any future ratiometric TDAC
+  diagnostic. **Never substitute 5.2056 V for VREF in firmware or
+  analysis** — doing so introduces a ~4.1% systematic error into the
+  load cell sensitivity.
 - **Driver sync:** The ADS1263 driver in `Calibrate_Loadcell_PIO/lib/ADS1263/`
   is a copy from `Calibrate_LaserHead_PIO/lib/ADS1263/` as of 2026-05-27.
   If new fixes land in SensorHub_PIO, copy them here too.
