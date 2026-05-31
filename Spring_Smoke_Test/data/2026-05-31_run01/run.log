@@ -1,0 +1,15 @@
+2026-05-31 14:16:26,107  INFO   run_spring_smoke_test  Run prefix: 2026-05-31_run01
+2026-05-31 14:16:26,107  INFO   run_spring_smoke_test  Steps to run: [1, 2, 3, 4, 5]
+2026-05-31 14:16:26,108  INFO   run_spring_smoke_test  Connecting Zaber stage (config: ../ZaberStage/safety_config.json)
+2026-05-31 14:16:26,115  INFO   ZaberStage  Configuration loaded from ../ZaberStage/safety_config.json
+2026-05-31 14:16:26,116  INFO   ZaberStage  Configuration loaded from ../ZaberStage/safety_config.json
+2026-05-31 14:16:27,420  INFO   ZaberStage  Connected to X-LSQ300A-E01 on COM5
+2026-05-31 14:16:27,420  INFO   run_spring_smoke_test  Opening Portenta on COM8 @ 115200 (adc_source=None — keep all)
+2026-05-31 14:16:27,424  INFO   PortentaReader  Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-05-31 14:16:31,429  WARNING  PortentaReader  Opened COM8 but no sample lines seen in 4.0s boot window. Power-cycle Mid Carrier or check COM port.
+2026-05-31 14:16:31,456  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:16:38,179  INFO   run_spring_smoke_test    [step 1 static] 5.6s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:16:43,206  INFO   run_spring_smoke_test    [step 1 static] 10.7s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:16:48,530  INFO   run_spring_smoke_test    [step 1 static] 16.0s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:16:53,570  INFO   run_spring_smoke_test    [step 1 static] 21.0s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:16:56,765  INFO   ZaberStage  Disconnected

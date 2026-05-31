@@ -1,0 +1,133 @@
+{
+  "run": "2026-05-31_run06",
+  "results": [
+    {
+      "step": 1,
+      "name": "static_noise",
+      "per_src": {
+        "laser": {
+          "n": 29647,
+          "mean_V": 4.957711926872871,
+          "std_V": 0.00044312671191177477,
+          "ptp_V": 0.002304000000000528
+        },
+        "load": {
+          "n": 29670,
+          "mean_V": 0.04090045635321874,
+          "std_V": 0.00040894608669023733,
+          "ptp_V": 0.002675999999999998
+        }
+      },
+      "checks": [
+        {
+          "name": "laser \u03c3 within 2\u00d7 cal ref",
+          "passed": false,
+          "detail": "meas=4.431e-04 V  ref=4.000e-05 V  ratio=11.08"
+        },
+        {
+          "name": "load \u03c3 within 2\u00d7 cal ref",
+          "passed": false,
+          "detail": "meas=4.089e-04 V  ref=6.000e-05 V  ratio=6.82"
+        }
+      ],
+      "status": "warn"
+    },
+    {
+      "step": 2,
+      "name": "quasi_static_ramp",
+      "force_units": "mN",
+      "disp_units": "um",
+      "fit_F_vs_x": {
+        "slope_mN_per_mm": 31.37673291966947,
+        "intercept_mN": 0.1648743948590456,
+        "r_squared": 0.9999892005964952,
+        "n_points": 27118,
+        "engagement_index": 2900
+      },
+      "fit_laser_vs_zaber": {
+        "slope_mm_per_mm": 0.9937561620898464,
+        "intercept_mm": -0.012806689359773419,
+        "r_squared": 0.9998876972823445,
+        "n_points": 27118
+      },
+      "checks": [
+        {
+          "name": "F-vs-x slope within 5% of spring k_cal",
+          "passed": true,
+          "detail": "meas=31.377 mN/mm  cal=30.860  \u0394=1.67%"
+        },
+        {
+          "name": "F-vs-x R\u00b2 > 0.999",
+          "passed": true,
+          "detail": "R\u00b2 = 0.999989"
+        },
+        {
+          "name": "laser-vs-Zaber slope \u2248 1.0 (\u00b15%)",
+          "passed": true,
+          "detail": "slope = 0.9938  R\u00b2 = 0.999888"
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "step": 3,
+      "name": "step_and_hold",
+      "per_src": {
+        "laser": {
+          "initial_V": 4.955994031531532,
+          "final_V": 2.9872636216216213,
+          "step_change_V": -1.9687304099099103,
+          "final_sigma_V": 0.0004927656539499135,
+          "settling_time_us": null
+        },
+        "load": {
+          "initial_V": 0.042534630630630635,
+          "final_V": 1.3103057056179777,
+          "step_change_V": 1.267771074987347,
+          "final_sigma_V": 0.0005075248118935054,
+          "settling_time_us": null
+        }
+      },
+      "step_idx": 2073,
+      "status": "ok"
+    },
+    {
+      "step": 4,
+      "name": "fast_pull_slow_return",
+      "have_cal": true,
+      "hysteresis_median_mN": 0.39851403021795306,
+      "checks": [
+        {
+          "name": "F-vs-x pull/return hysteresis < 10% of range",
+          "passed": true,
+          "detail": "median |\u0394F| = 0.40 mN  range = 191.5 mN"
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "step": 5,
+      "name": "pipeline_endurance",
+      "per_src_seq": {
+        "laser": {
+          "seq_present": false,
+          "note": "firmware did not emit seq column"
+        },
+        "load": {
+          "seq_present": false,
+          "note": "firmware did not emit seq column"
+        }
+      },
+      "total_gap_events": 0,
+      "status_frames": 0,
+      "checks": [
+        {
+          "name": "zero seq gaps",
+          "passed": true,
+          "detail": "no missing samples per src"
+        }
+      ],
+      "status": "ok"
+    }
+  ]
+}

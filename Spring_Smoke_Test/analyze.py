@@ -866,14 +866,39 @@ def print_summary(results: List[Dict]) -> None:
             mark = "PASS" if c["passed"] else "FAIL"
             print(f"    [{mark}]  {c['name']}")
             print(f"            {c['detail']}")
-        # Key numbers per step type
+        # Key numbers per step type.
+        # Two schemas live under "per_src":
+        #   Step 1 (static):  {n, mean_V, std_V, ptp_V}
+        #   Step 3 (step):    {initial_V, final_V, step_change_V,
+        #                      final_sigma_V, settling_time_us}
+        # Format whichever fields are present instead of assuming one shape.
         if "per_src" in r:
             for src_name, st in r["per_src"].items():
-                line = f"    {src_name}: "
-                line += f"mean={st['mean_V']:.4f} V  σ={st['std_V']:.2e} V"
-                if "settling_time_us" in st and st["settling_time_us"] is not None:
-                    line += f"  settle={st['settling_time_us']/1000:.1f} ms"
-                print(line)
+                parts = [f"    {src_name}:"]
+                if "mean_V" in st:
+                    parts.append(f"mean={st['mean_V']:.4f} V")
+                if "std_V" in st:
+                    parts.append(f"σ={st['std_V']:.2e} V")
+                if "ptp_V" in st:
+                    parts.append(f"ptp={st['ptp_V']:.2e} V")
+                if "initial_V" in st and "final_V" in st:
+                    parts.append(
+                        f"Δ={st.get('step_change_V', st['final_V'] - st['initial_V']):+.4f} V "
+                        f"({st['initial_V']:.4f} → {st['final_V']:.4f})")
+                if "final_sigma_V" in st:
+                    parts.append(f"σ_final={st['final_sigma_V']:.2e} V")
+                if st.get("settling_time_us") is not None:
+                    parts.append(f"settle={st['settling_time_us']/1000:.1f} ms")
+                print("  ".join(parts))
+        if "per_src_seq" in r:
+            for src_name, st in r["per_src_seq"].items():
+                if not st.get("seq_present"):
+                    print(f"    {src_name}: seq not emitted by firmware")
+                    continue
+                print(f"    {src_name}: n={st['n_samples']}  "
+                      f"first={st['first']}  last={st['last']}  "
+                      f"gaps={st['gap_count']}  "
+                      f"missing={st['missing_samples']}")
         if "fit_F_vs_x" in r and r.get("fit_F_vs_x"):
             fit = r["fit_F_vs_x"]
             print(f"    F-vs-x fit: slope={fit['slope_mN_per_mm']:.3f} mN/mm  "
@@ -944,12 +969,18 @@ def _main() -> None:
             r = {"step": step, "status": "exception"}
         results.append(r)
 
-    print_summary(results)
-
+    # Write JSON FIRST so a print-formatting bug can never lose the
+    # analysis results.
     summary_path = run_dir / "summary.json"
     with open(summary_path, "w") as f:
         json.dump({"run": str(run_dir.name), "results": results}, f, indent=2)
     log.info("Wrote %s", summary_path)
+
+    try:
+        print_summary(results)
+    except Exception:
+        log.exception("print_summary failed (results still saved to %s)",
+                      summary_path)
 
 
 if __name__ == "__main__":

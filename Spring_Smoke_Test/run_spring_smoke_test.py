@@ -705,7 +705,7 @@ def parse_steps(arg: str) -> List[int]:
 def run(cfg: RunConfig, steps: List[int]) -> None:
     paths = next_run_paths(_THIS_DIR / "data")
     # File log alongside the console log
-    fh = logging.FileHandler(paths.run_log)
+    fh = logging.FileHandler(paths.run_log, encoding="utf-8")
     fh.setFormatter(logging.Formatter(
         "%(asctime)s  %(levelname)-5s  %(name)s  %(message)s"))
     logging.getLogger().addHandler(fh)
@@ -738,6 +738,26 @@ def run(cfg: RunConfig, steps: List[int]) -> None:
                  cfg.portenta_port, cfg.portenta_baud)
         with PortentaReader(port=cfg.portenta_port, baud=cfg.portenta_baud,
                             adc_source=None) as reader:
+
+            # Match _quick_probe: drain stale boot bytes, then verify the
+            # stream is alive BEFORE step 1 starts. If the firmware paused
+            # on a prior DTR drop (e.g. you ran portenta_reader.py first),
+            # we want to fail fast with an actionable message instead of
+            # spending 60 s reading silence.
+            reader.drain()
+            warmup_samples, _ = reader.read_streaming(
+                duration_s=2.0, progress_every_s=10.0)
+            if not warmup_samples:
+                log.error("Portenta opened but produced 0 samples in 2.0 s "
+                          "warmup. Power-cycle the Mid Carrier and retry. "
+                          "(Closing/reopening COM%s without a power-cycle "
+                          "can pause the firmware stream if the sketch "
+                          "gates on USB-CDC connect state.)",
+                          cfg.portenta_port)
+                sys.exit(5)
+            log.info("Portenta warmup OK: %d samples in 2.0 s "
+                     "(%.0f SPS combined)",
+                     len(warmup_samples), len(warmup_samples) / 2.0)
 
             step_results: List[Dict] = []
             steps_run: List[str] = []
@@ -792,6 +812,14 @@ def _main() -> None:
                         "firmware rate (overrides config)")
     p.add_argument("-v", "--verbose", action="store_true")
     args = p.parse_args()
+
+    # Force UTF-8 on console so box-drawing chars (────, →, —) don't
+    # blow up the cp1252 default on Windows.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

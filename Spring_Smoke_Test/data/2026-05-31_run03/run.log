@@ -1,0 +1,187 @@
+2026-05-31 14:28:10,427  INFO   run_spring_smoke_test  Run prefix: 2026-05-31_run03
+2026-05-31 14:28:10,427  INFO   run_spring_smoke_test  Steps to run: [1, 2, 3, 4, 5, 6]
+2026-05-31 14:28:10,427  INFO   run_spring_smoke_test  Connecting Zaber stage (config: ../ZaberStage/safety_config.json)
+2026-05-31 14:28:10,428  INFO   ZaberStage  Configuration loaded from ../ZaberStage/safety_config.json
+2026-05-31 14:28:10,429  INFO   ZaberStage  Configuration loaded from ../ZaberStage/safety_config.json
+2026-05-31 14:28:11,715  INFO   ZaberStage  Connected to X-LSQ300A-E01 on COM5
+2026-05-31 14:28:11,715  INFO   run_spring_smoke_test  Opening Portenta on COM8 @ 115200 (adc_source=None — keep all)
+2026-05-31 14:28:11,719  INFO   PortentaReader  Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-05-31 14:28:15,733  WARNING  PortentaReader  Opened COM8 but no sample lines seen in 4.0s boot window. Power-cycle Mid Carrier or check COM port.
+2026-05-31 14:28:15,734  INFO   run_spring_smoke_test  ──── STEP 1: static noise floor at 10.000 mm for 60s ────
+2026-05-31 14:28:15,734  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:28:21,826  INFO   run_spring_smoke_test    [step 1 static] 5.0s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:28:26,863  INFO   run_spring_smoke_test    [step 1 static] 10.1s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:28:31,897  INFO   run_spring_smoke_test    [step 1 static] 15.1s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:28:36,928  INFO   run_spring_smoke_test    [step 1 static] 20.1s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:28:41,954  INFO   run_spring_smoke_test    [step 1 static] 25.2s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:28:46,978  INFO   run_spring_smoke_test    [step 1 static] 30.2s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:28:52,008  INFO   run_spring_smoke_test    [step 1 static] 35.2s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:28:57,036  INFO   run_spring_smoke_test    [step 1 static] 40.2s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:29:02,061  INFO   run_spring_smoke_test    [step 1 static] 45.3s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:29:07,092  INFO   run_spring_smoke_test    [step 1 static] 50.3s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:29:12,111  INFO   run_spring_smoke_test    [step 1 static] 55.3s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:29:17,151  INFO   run_spring_smoke_test    [step 1 static] 60.4s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:29:17,152  INFO   run_spring_smoke_test  step 1 done — 61.4s elapsed
+2026-05-31 14:29:17,152  INFO   run_spring_smoke_test  ──── STEP 2: quasi-static ramp 10.000 → 16.000 mm @ 0.100 mm/s ────
+2026-05-31 14:29:17,152  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:29:20,255  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=10.198 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:22,264  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=10.400 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:24,278  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=10.599 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:26,288  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=10.800 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:28,301  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=11.002 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:30,315  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=11.203 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:32,330  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=11.404 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:34,336  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=11.606 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:36,351  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=11.807 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:38,356  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=12.008 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:40,369  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=12.210 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:42,371  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=12.409 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:44,375  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=12.611 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:46,386  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=12.810 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:48,398  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=13.011 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:50,410  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=13.213 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:52,420  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=13.414 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:54,430  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=13.615 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:56,443  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=13.817 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:29:58,454  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=14.018 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:00,469  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=14.219 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:02,484  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=14.420 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:04,506  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=14.622 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:06,515  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=14.823 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:08,528  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=15.024 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:10,539  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=15.226 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:12,557  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=15.427 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:14,570  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=15.628 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:16,581  INFO   run_spring_smoke_test    [step 2 ramp_fwd] pos=15.829 → 16.000 mm  v=+0.100 mm/s  samples=0
+2026-05-31 14:30:19,653  INFO   run_spring_smoke_test  step 2 done — 62.5s elapsed
+2026-05-31 14:30:19,653  INFO   run_spring_smoke_test  ──── STEP 3: step 10.000 → 14.000 mm, hold pre=2.0s post=5.0s ────
+2026-05-31 14:30:19,653  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:30:22,735  INFO   run_spring_smoke_test    commanding step to 14.000 mm
+2026-05-31 14:30:27,779  INFO   run_spring_smoke_test    [step 3 post_hold] 5.0s elapsed  samples=0  status=0  pos=14.000 mm
+2026-05-31 14:30:29,790  INFO   run_spring_smoke_test  step 3 done — 10.1s elapsed
+2026-05-31 14:30:29,790  INFO   run_spring_smoke_test  ──── STEP 4: fast pull / slow return  10.000 → 16.000 mm @ 3.00 mm/s, → 10.000 mm @ 0.10 mm/s ────
+2026-05-31 14:30:29,791  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:30:33,892  INFO   run_spring_smoke_test    [step 4 pull] pos=15.887 → 16.000 mm  v=+3.000 mm/s  samples=0
+2026-05-31 14:30:38,997  INFO   run_spring_smoke_test    [step 4 return] pos=18.899 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:41,005  INFO   run_spring_smoke_test    [step 4 return] pos=18.698 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:43,012  INFO   run_spring_smoke_test    [step 4 return] pos=18.497 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:45,023  INFO   run_spring_smoke_test    [step 4 return] pos=18.295 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:47,038  INFO   run_spring_smoke_test    [step 4 return] pos=18.094 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:49,050  INFO   run_spring_smoke_test    [step 4 return] pos=17.893 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:51,060  INFO   run_spring_smoke_test    [step 4 return] pos=17.691 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:53,078  INFO   run_spring_smoke_test    [step 4 return] pos=17.490 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:55,088  INFO   run_spring_smoke_test    [step 4 return] pos=17.289 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:57,103  INFO   run_spring_smoke_test    [step 4 return] pos=17.088 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:30:59,110  INFO   run_spring_smoke_test    [step 4 return] pos=16.886 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:01,123  INFO   run_spring_smoke_test    [step 4 return] pos=16.685 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:03,137  INFO   run_spring_smoke_test    [step 4 return] pos=16.484 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:05,150  INFO   run_spring_smoke_test    [step 4 return] pos=16.282 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:07,160  INFO   run_spring_smoke_test    [step 4 return] pos=16.081 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:09,174  INFO   run_spring_smoke_test    [step 4 return] pos=15.880 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:11,188  INFO   run_spring_smoke_test    [step 4 return] pos=15.679 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:13,199  INFO   run_spring_smoke_test    [step 4 return] pos=15.477 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:15,212  INFO   run_spring_smoke_test    [step 4 return] pos=15.276 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:17,220  INFO   run_spring_smoke_test    [step 4 return] pos=15.078 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:19,225  INFO   run_spring_smoke_test    [step 4 return] pos=14.877 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:21,238  INFO   run_spring_smoke_test    [step 4 return] pos=14.675 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:23,250  INFO   run_spring_smoke_test    [step 4 return] pos=14.474 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:25,260  INFO   run_spring_smoke_test    [step 4 return] pos=14.273 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:27,273  INFO   run_spring_smoke_test    [step 4 return] pos=14.070 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:29,286  INFO   run_spring_smoke_test    [step 4 return] pos=13.869 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:31,291  INFO   run_spring_smoke_test    [step 4 return] pos=13.671 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:33,299  INFO   run_spring_smoke_test    [step 4 return] pos=13.469 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:35,307  INFO   run_spring_smoke_test    [step 4 return] pos=13.268 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:37,317  INFO   run_spring_smoke_test    [step 4 return] pos=13.068 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:39,328  INFO   run_spring_smoke_test    [step 4 return] pos=12.867 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:41,341  INFO   run_spring_smoke_test    [step 4 return] pos=12.666 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:43,353  INFO   run_spring_smoke_test    [step 4 return] pos=12.465 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:45,367  INFO   run_spring_smoke_test    [step 4 return] pos=12.263 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:47,376  INFO   run_spring_smoke_test    [step 4 return] pos=12.062 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:49,386  INFO   run_spring_smoke_test    [step 4 return] pos=11.861 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:51,397  INFO   run_spring_smoke_test    [step 4 return] pos=11.660 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:53,402  INFO   run_spring_smoke_test    [step 4 return] pos=11.458 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:55,413  INFO   run_spring_smoke_test    [step 4 return] pos=11.257 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:57,421  INFO   run_spring_smoke_test    [step 4 return] pos=11.056 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:31:59,432  INFO   run_spring_smoke_test    [step 4 return] pos=10.854 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:32:01,438  INFO   run_spring_smoke_test    [step 4 return] pos=10.656 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:32:03,447  INFO   run_spring_smoke_test    [step 4 return] pos=10.455 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:32:05,456  INFO   run_spring_smoke_test    [step 4 return] pos=10.252 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:32:07,463  INFO   run_spring_smoke_test    [step 4 return] pos=10.054 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:32:10,547  INFO   run_spring_smoke_test  step 4 done — 100.8s elapsed
+2026-05-31 14:32:10,547  INFO   run_spring_smoke_test  ──── STEP 5: pipeline endurance — stage idle, 600s ────
+2026-05-31 14:32:10,547  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:32:41,898  INFO   run_spring_smoke_test    [step 5 endurance] 30.2s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:33:12,090  INFO   run_spring_smoke_test    [step 5 endurance] 60.4s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:33:42,279  INFO   run_spring_smoke_test    [step 5 endurance] 90.6s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:34:12,447  INFO   run_spring_smoke_test    [step 5 endurance] 120.8s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:34:42,616  INFO   run_spring_smoke_test    [step 5 endurance] 150.9s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:35:12,798  INFO   run_spring_smoke_test    [step 5 endurance] 181.1s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:35:42,983  INFO   run_spring_smoke_test    [step 5 endurance] 211.3s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:36:13,177  INFO   run_spring_smoke_test    [step 5 endurance] 241.5s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:36:43,364  INFO   run_spring_smoke_test    [step 5 endurance] 271.7s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:37:13,555  INFO   run_spring_smoke_test    [step 5 endurance] 301.8s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:37:43,753  INFO   run_spring_smoke_test    [step 5 endurance] 332.0s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:38:13,936  INFO   run_spring_smoke_test    [step 5 endurance] 362.2s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:38:44,130  INFO   run_spring_smoke_test    [step 5 endurance] 392.4s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:39:14,312  INFO   run_spring_smoke_test    [step 5 endurance] 422.6s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:39:44,522  INFO   run_spring_smoke_test    [step 5 endurance] 452.8s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:40:14,698  INFO   run_spring_smoke_test    [step 5 endurance] 483.0s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:40:44,896  INFO   run_spring_smoke_test    [step 5 endurance] 513.2s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:41:15,071  INFO   run_spring_smoke_test    [step 5 endurance] 543.4s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:41:45,261  INFO   run_spring_smoke_test    [step 5 endurance] 573.6s elapsed  samples=0  status=0  pos=10.000 mm
+2026-05-31 14:42:12,443  INFO   run_spring_smoke_test  step 5 done — 601.9s elapsed
+2026-05-31 14:42:12,443  INFO   run_spring_smoke_test  ──── STEP 6: profile + concurrent Zaber comms (= step 4) ────
+2026-05-31 14:42:12,443  INFO   run_spring_smoke_test         Note: ensure 1 kSPS firmware build is loaded before running this step.
+2026-05-31 14:42:12,444  INFO   run_spring_smoke_test  ──── STEP 6: fast pull / slow return  10.000 → 16.000 mm @ 3.00 mm/s, → 10.000 mm @ 0.10 mm/s ────
+2026-05-31 14:42:12,444  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:42:16,550  INFO   run_spring_smoke_test    [step 6 pull] pos=15.928 → 16.000 mm  v=+3.000 mm/s  samples=0
+2026-05-31 14:42:21,667  INFO   run_spring_smoke_test    [step 6 return] pos=18.908 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:23,672  INFO   run_spring_smoke_test    [step 6 return] pos=18.707 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:25,686  INFO   run_spring_smoke_test    [step 6 return] pos=18.506 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:27,697  INFO   run_spring_smoke_test    [step 6 return] pos=18.304 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:29,706  INFO   run_spring_smoke_test    [step 6 return] pos=18.103 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:31,718  INFO   run_spring_smoke_test    [step 6 return] pos=17.902 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:33,728  INFO   run_spring_smoke_test    [step 6 return] pos=17.701 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:35,741  INFO   run_spring_smoke_test    [step 6 return] pos=17.499 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:37,752  INFO   run_spring_smoke_test    [step 6 return] pos=17.300 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:39,762  INFO   run_spring_smoke_test    [step 6 return] pos=17.098 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:41,777  INFO   run_spring_smoke_test    [step 6 return] pos=16.897 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:43,784  INFO   run_spring_smoke_test    [step 6 return] pos=16.696 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:45,794  INFO   run_spring_smoke_test    [step 6 return] pos=16.495 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:47,806  INFO   run_spring_smoke_test    [step 6 return] pos=16.293 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:49,819  INFO   run_spring_smoke_test    [step 6 return] pos=16.092 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:51,828  INFO   run_spring_smoke_test    [step 6 return] pos=15.891 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:53,838  INFO   run_spring_smoke_test    [step 6 return] pos=15.693 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:55,847  INFO   run_spring_smoke_test    [step 6 return] pos=15.491 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:57,851  INFO   run_spring_smoke_test    [step 6 return] pos=15.290 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:42:59,863  INFO   run_spring_smoke_test    [step 6 return] pos=15.089 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:01,869  INFO   run_spring_smoke_test    [step 6 return] pos=14.888 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:03,880  INFO   run_spring_smoke_test    [step 6 return] pos=14.686 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:05,890  INFO   run_spring_smoke_test    [step 6 return] pos=14.485 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:07,899  INFO   run_spring_smoke_test    [step 6 return] pos=14.285 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:09,909  INFO   run_spring_smoke_test    [step 6 return] pos=14.084 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:11,922  INFO   run_spring_smoke_test    [step 6 return] pos=13.883 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:13,928  INFO   run_spring_smoke_test    [step 6 return] pos=13.682 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:15,939  INFO   run_spring_smoke_test    [step 6 return] pos=13.480 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:17,956  INFO   run_spring_smoke_test    [step 6 return] pos=13.281 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:19,969  INFO   run_spring_smoke_test    [step 6 return] pos=13.079 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:21,980  INFO   run_spring_smoke_test    [step 6 return] pos=12.878 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:23,994  INFO   run_spring_smoke_test    [step 6 return] pos=12.677 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:26,003  INFO   run_spring_smoke_test    [step 6 return] pos=12.476 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:28,017  INFO   run_spring_smoke_test    [step 6 return] pos=12.274 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:30,034  INFO   run_spring_smoke_test    [step 6 return] pos=12.073 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:32,045  INFO   run_spring_smoke_test    [step 6 return] pos=11.872 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:34,056  INFO   run_spring_smoke_test    [step 6 return] pos=11.671 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:36,064  INFO   run_spring_smoke_test    [step 6 return] pos=11.469 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:38,077  INFO   run_spring_smoke_test    [step 6 return] pos=11.268 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:40,092  INFO   run_spring_smoke_test    [step 6 return] pos=11.067 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:42,103  INFO   run_spring_smoke_test    [step 6 return] pos=10.865 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:44,115  INFO   run_spring_smoke_test    [step 6 return] pos=10.664 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:46,130  INFO   run_spring_smoke_test    [step 6 return] pos=10.463 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:48,144  INFO   run_spring_smoke_test    [step 6 return] pos=10.260 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:50,159  INFO   run_spring_smoke_test    [step 6 return] pos=10.059 → 10.000 mm  v=-0.100 mm/s  samples=0
+2026-05-31 14:43:53,230  INFO   run_spring_smoke_test  step 6 done — 100.8s elapsed
+2026-05-31 14:43:53,230  INFO   run_spring_smoke_test  Moving stage to 10.000 mm...
+2026-05-31 14:43:53,498  INFO   run_spring_smoke_test  Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Spring_Smoke_Test\data\2026-05-31_run03\meta.json
+2026-05-31 14:43:53,499  INFO   run_spring_smoke_test  Done. Next: python analyze.py C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Spring_Smoke_Test\data\2026-05-31_run03
+2026-05-31 14:43:53,665  INFO   ZaberStage  Disconnected
