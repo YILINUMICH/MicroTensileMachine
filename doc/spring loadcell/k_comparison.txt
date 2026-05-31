@@ -1,0 +1,17 @@
+Instron 100N-cell (4 runs, in-spec: F > 400 mN)
+  BMXSpring_1_1: k=30.7377 mN/mm  R2=0.999998  rms=0.287 mN  n=1042
+  BMXSpring_2_1: k=30.8908 mN/mm  R2=0.999998  rms=0.260 mN  n=1054
+  BMXSpring_3_1: k=30.8997 mN/mm  R2=0.999998  rms=0.250 mN  n=1054
+  BMXSpring_4_1: k=30.9085 mN/mm  R2=0.999998  rms=0.242 mN  n=1048
+  pooled k = 30.8592 +/- 0.0813 mN/mm (run scatter)
+
+GSO-50 (run07, step-averaged)
+  k_all  = 31.0204 mN/mm  R2=0.999990  rms=0.417 mN  n=60
+  k_fwd  = 31.1538 mN/mm  R2=0.999966  rms=0.792 mN  n=60
+  k_rev  = 30.8928 mN/mm  R2=0.999990  rms=0.401 mN  n=58
+  raw voltage slope = 316.3435 mV/mm  (independent of calibration)
+  implied k via cal = 31.0114 mN/mm
+
+Difference: k_GSO - k_Instron = +0.1612 mN/mm (+0.52%)
+
+IMPORTANT: GSO-50 calibration sensitivity was derived FROM this same run using expected_force_mN = 30.86*displacement (i.e. Instron k as anchor). So k_GSO ~= k_Instron is partially by construction. The independent quantities are linearity (R^2, residuals) and hysteresis.
