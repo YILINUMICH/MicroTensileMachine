@@ -71,6 +71,33 @@
  */
 
 #include <Arduino.h>
+
+// ══════════════════════════════════════════════════════════════════════
+//  M4 IDLE STUB
+//
+//  Compiled by the [env:portenta_m4_idle] PIO env. Flashing this to
+//  the M4 partition wipes whatever was there (e.g. leftover
+//  SensorHub_PIO M4) and replaces it with a do-nothing image: empty
+//  setup(), __WFI() loop. M4 boots, sleeps, never touches SPI / I2C
+//  / RPC. Lets the M7 run alone without M4 fighting for resources.
+// ══════════════════════════════════════════════════════════════════════
+#if defined(CORE_CM4)
+
+void setup() {
+    // Intentionally empty. No RPC.begin() — we deliberately do NOT
+    // initialise the OpenAMP IPC channel so any stale M7 code calling
+    // RPC.begin() later can't desync with us.
+}
+
+void loop() {
+    // Wait-for-interrupt → core sleeps until an IRQ fires. No IRQs
+    // are configured, so M4 effectively halts. SysTick may wake it
+    // briefly but no handler runs.
+    __WFI();
+}
+
+#elif defined(CORE_CM7)
+
 #include <Wire.h>
 #include <Adafruit_MCP4728.h>
 
@@ -480,3 +507,7 @@ void loop() {
     }
     cmdSetVoltage(target);
 }
+
+#else
+  #error "Unknown core — build with CORE_CM7 or CORE_CM4"
+#endif
