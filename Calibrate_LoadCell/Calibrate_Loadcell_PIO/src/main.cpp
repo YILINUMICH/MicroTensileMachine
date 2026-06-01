@@ -173,10 +173,10 @@ void loop() {
     }
 
     // ── 2. Drain ADC samples from the shared-memory ring buffer ───────
-    //    Format each sample as TSV, identical to the legacy RPC output
-    //    so portenta_reader.py needs no changes:
-    //      <t_ms>\t<src>\t<raw_code>\t<voltage_V>   (dual-ADC)
-    //      <t_ms>\t<raw_code>\t<voltage_V>           (single-ADC)
+    //    Phase 5: per-sample TSV gained hw_us + seq columns. Host parser
+    //    regex tolerates trailing columns, so older logs still parse.
+    //      <t_ms>\t<src>\t<raw>\t<V>\t<hw_us>\t<seq>   (dual-ADC)
+    //      <t_ms>\t<raw>\t<V>\t<hw_us>\t<seq>           (single-ADC)
     AdcSample s;
     int batch = 0;
     while (ring_pop(SAMPLE_RING, s) && batch < 64) {
@@ -188,7 +188,11 @@ void loop() {
 #endif
         Serial.print(s.raw_code);
         Serial.print('\t');
-        Serial.println(s.voltage_V, 6);
+        Serial.print(s.voltage_V, 6);
+        Serial.print('\t');
+        Serial.print(s.hw_us);
+        Serial.print('\t');
+        Serial.println(s.seq);
         batch++;
     }
 
@@ -370,13 +374,19 @@ void loop() {
     // the sample is dropped and the overflow counter incremented. M7
     // reports the count periodically so the operator can see it.
 
+    // Phase 5 ring layout: ring_push now takes (hw_us, ts_ms, src, ...).
+    // We capture micros() right before the SPI fetch so the slot's
+    // hw_us reflects the read instant within a few µs.
+
 #if ENABLE_ADC1
     static uint32_t t1_last = 0;
     if (millis() - t1_last >= ADC1_POLL_MS) {
         t1_last = millis();
+        uint32_t hw_us = micros();
         ADC_Reading r = adc.readADC1Direct();
         if (r.valid) {
-            ring_push(SAMPLE_RING, millis(), 1, r.raw_code, r.voltage_V);
+            ring_push(SAMPLE_RING, hw_us, millis(),
+                      SAMPLE_SRC_LASER, r.raw_code, r.voltage_V);
         }
     }
 #endif
@@ -385,9 +395,11 @@ void loop() {
     static uint32_t t2_last = 0;
     if (millis() - t2_last >= ADC2_POLL_MS) {
         t2_last = millis();
+        uint32_t hw_us = micros();
         ADC_Reading r = adc.readADC2Direct();
         if (r.valid) {
-            ring_push(SAMPLE_RING, millis(), 2, r.raw_code, r.voltage_V);
+            ring_push(SAMPLE_RING, hw_us, millis(),
+                      SAMPLE_SRC_LOAD, r.raw_code, r.voltage_V);
         }
     }
 #endif

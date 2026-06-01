@@ -59,6 +59,16 @@ class Sample:
                                      # or LaserHead_PIO with ENABLE_ADC1=1).
                                      # None for 3-col single-channel builds
                                      # or the plan-spec CSV format.
+    hw_us: Optional[int] = None      # Phase 5: M4-side microsecond
+                                     # timestamp captured at DRDY ISR /
+                                     # poll instant. ~µs resolution,
+                                     # ground truth for jitter analysis.
+                                     # None for pre-Phase-5 firmware.
+    seq: Optional[int] = None        # Phase 5: per-src monotonic
+                                     # sequence number assigned by
+                                     # ring_push. Gaps = dropped
+                                     # samples between M4 and M7.
+                                     # None for pre-Phase-5 firmware.
 
     def as_csv_row(self) -> str:
         """Plan §2 canonical serialisation."""
@@ -69,18 +79,28 @@ class Sample:
 # Line parsing
 # ---------------------------------------------------------------------------
 # Three accepted on-wire shapes:
-#   1. "<t_ms>\t<raw>\t<voltage>"              — single-ADC build (ADC1 or ADC2
-#                                                alone; src column suppressed)
-#   2. "<t_ms>\t<src>\t<raw>\t<voltage>"        — dual-ADC build (ADC1 & ADC2
+#   1. "<t_ms>\t<raw>\t<voltage>[\t<hw_us>\t<seq>]"
+#                                              — single-ADC build (ADC1 or ADC2
+#                                                alone; src column suppressed).
+#                                                Phase 5 firmware appends
+#                                                hw_us + seq; older firmware
+#                                                omits them — both parse.
+#   2. "<t_ms>\t<src>\t<raw>\t<voltage>[\t<hw_us>\t<seq>]"
+#                                              — dual-ADC build (ADC1 & ADC2
 #                                                interleaved; filter by
-#                                                adc_source in the reader)
+#                                                adc_source in the reader).
+#                                                Same Phase 5 hw_us+seq tail.
 #   3. "<t_us>,<voltage>"                       — plan-spec CSV format
 #
 # Anything with brackets or alphabetic chars other than '.', 'e', 'E', '+',
-# '-' is treated as a log line and dropped.
+# '-' is treated as a log line and dropped. In particular every Phase 5
+# [STATUS] frame starts with '[' and is therefore dropped here — see
+# parse_status_line() below if a consumer needs the diagnostic counters.
 _FLOAT_RE = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
-_TSV_3COL = re.compile(rf"^\s*(\d+)\s+(-?\d+)\s+({_FLOAT_RE})\s*$")
-_TSV_4COL = re.compile(rf"^\s*(\d+)\s+([12])\s+(-?\d+)\s+({_FLOAT_RE})\s*$")
+# Optional 2-column tail: "\t<hw_us>\t<seq>" added by Phase 5 firmware.
+_TAIL_RE  = r"(?:\s+(\d+)\s+(\d+))?"
+_TSV_3COL = re.compile(rf"^\s*(\d+)\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
+_TSV_4COL = re.compile(rf"^\s*(\d+)\s+([12])\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
 _CSV_PLAN = re.compile(rf"^\s*(\d+)\s*,\s*({_FLOAT_RE})\s*$")
 
 
@@ -115,6 +135,7 @@ def parse_line(line: str,
             return None
 
     # 4-column TSV (ADC1+ADC2 interleaved): "<t_ms>\t<src>\t<raw>\t<V>"
+    # Phase 5: an optional "\t<hw_us>\t<seq>" tail may follow.
     m = _TSV_4COL.match(line)
     if m:
         src = int(m.group(2))
@@ -126,11 +147,14 @@ def parse_line(line: str,
                 voltage_V=float(m.group(4)),
                 raw_code=int(m.group(3)),
                 adc_source=src,
+                hw_us=int(m.group(5)) if m.group(5) else None,
+                seq=int(m.group(6)) if m.group(6) else None,
             )
         except ValueError:
             return None
 
     # 3-column TSV (single-ADC build, ADC1 or ADC2 alone): "<t_ms>\t<raw>\t<V>"
+    # Phase 5: an optional "\t<hw_us>\t<seq>" tail may follow.
     m = _TSV_3COL.match(line)
     if m:
         try:
@@ -138,11 +162,44 @@ def parse_line(line: str,
                 timestamp_us=int(m.group(1)) * 1000,   # ms → µs
                 voltage_V=float(m.group(3)),
                 raw_code=int(m.group(2)),
+                hw_us=int(m.group(4)) if m.group(4) else None,
+                seq=int(m.group(5)) if m.group(5) else None,
             )
         except ValueError:
             return None
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# [STATUS] frame parsing (Phase 5)
+# ---------------------------------------------------------------------------
+# SensorHub_PIO M7 emits one diagnostic frame per second:
+#   "[STATUS] t_ms=12345 hwm=237 cap=1024 dropped=0 dropped_total=0
+#             rate1=400 rate2=400 prod1=400 prod2=400 m4_loops_per_s=120000"
+# The main parse_line() drops these (they contain '['). Consumers that
+# want the diagnostics can match this prefix and call parse_status_line.
+
+_STATUS_PREFIX = "[STATUS] "
+_STATUS_KV     = re.compile(r"(\w+)=(-?\d+)")
+
+def parse_status_line(line: str) -> Optional[dict]:
+    """Parse a [STATUS] diagnostic frame into a dict of integers, or None.
+
+    Returns e.g. {'t_ms': 12345, 'hwm': 237, 'cap': 1024,
+                  'dropped': 0, 'rate1': 400, 'rate2': 400, ...}.
+    Unknown keys are kept as-is so this stays forward-compatible with
+    any future field additions in the firmware.
+    """
+    if not line or not line.startswith(_STATUS_PREFIX):
+        return None
+    out: dict = {}
+    for k, v in _STATUS_KV.findall(line[len(_STATUS_PREFIX):]):
+        try:
+            out[k] = int(v)
+        except ValueError:
+            pass
+    return out or None
 
 
 # ---------------------------------------------------------------------------
