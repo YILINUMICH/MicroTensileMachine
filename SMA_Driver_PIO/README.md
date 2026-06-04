@@ -35,7 +35,7 @@ bench-verified.
             │                       ┌─────────────────┴───────┐      │
             │                       ▼                         │      │
             │                  [MOSFET] ───── SMA wire ───────┤      │
-  H7 PA_9 ──┼──► gate                                         │      │
+  H7 PG_7 ──┼──► gate                                         │      │
             │                                                 │      │
             │                       ┌── 10k/10k feedback ─────┘      │
             │                       │   divider                      │
@@ -59,7 +59,7 @@ powers everything analog.
 |--------------|-----------|----------------|-----------|
 | I2C SDA      | `Wire`    | `I2C0 SDA`     | PB_7      |
 | I2C SCL      | `Wire`    | `I2C0 SCL`     | PB_6      |
-| MOSFET gate  | `PA_9`    | `PWM 3`        | PA_9      |
+| MOSFET gate  | `PG_7`    | `PWM 3`        | PG7 (J2-65)|
 | Feedback ADC | `A0`      | `ANA0`         | PC_4*     |
 
 \* PC_4 is the mbed-core default mapping for `A0` on the Portenta H7.
