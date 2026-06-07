@@ -1,9 +1,11 @@
 # SMA_Driver_PIO
 
 Phase 6 SMA drive-path bring-up firmware. Portenta H7 M7 talks I2C to an
-externally-powered MCP4728 DAC, the DAC drives a TPS7A5701 LDO, the LDO
-heats the SMA wire through a MOSFET-gated load. The H7 reads the LDO
-output back through a divider into an on-chip 16-bit ADC.
+externally-powered MCP4728 DAC. The DAC sets a **TPS7A5701 (TPS7A57)** LDO
+via TI's **"DAC margining"** topology — the DAC drives the LDO's REF pin
+through a 6.2 kΩ series resistor — and the LDO heats the SMA wire through a
+MOSFET-gated load. The H7 reads the LDO output back through a 10k/10k
+divider into an on-chip 16-bit ADC.
 
 Standalone M7-only project. Once `set` / `drive` accuracy and linearity
 are bench-verified, the M7 control code merges into `SensorHub_PIO/` M7
@@ -17,35 +19,35 @@ bench-verified.
 ## Architecture
 
 ```
-            ┌────────────── External 5 V bench supply ──────────────┐
-            │                                                       │
-            │            ┌── VDD ──┐         ┌── V_IN ──┐            │
-            │            │         │         │          │            │
-  H7 SDA ◄──┼──► [LS] ◄──┤ MCP4728 │── VA ──►│  2k/10k  │            │
-  H7 SCL ◄──┼──► [LS] ◄──┤  DAC    │         │  divider │            │
-            │            └─────────┘         └─► V_mid ─┘            │
-            │                                          │             │
-            │                                          ▼             │
-            │                                  ┌───────────────┐     │
-            │                                  │  TPS7A5701    │     │
-            │                                  │  LDO  (SET=V_mid)   │
-            │                                  │      V_OUT ≈ V_mid  │
-            │                                  └──────┬────────┘     │
-            │                                         │              │
-            │                       ┌─────────────────┴───────┐      │
-            │                       ▼                         │      │
-            │                  [MOSFET] ───── SMA wire ───────┤      │
-  H7 PG_7 ──┼──► gate                                         │      │
-            │                                                 │      │
-            │                       ┌── 10k/10k feedback ─────┘      │
-            │                       │   divider                      │
-            │                       ▼                                │
-  H7 A0  ◄──┼─── V_LDO/2                                             │
-            │                                                        │
-            └────────────────────────────────────────────────────────┘
+  External bench supply (≥ 5.5 V) powers all analog rails:
+  MCP4728 VDD, TPS7A57 V_IN, and the I2C pull-up / level-shifter high side.
+  The H7 sources only control + readback signals, never analog power.
+
+  H7 SDA ──[LS]──┐
+  H7 SCL ──[LS]──┤  MCP4728 12-bit DAC  (I2C 0x60, VDD-ref, 1× gain)
+                 │      │
+                 │      └── VA ──[ 6.2 kΩ ]──► TPS7A57 REF pin
+                 │                                  │
+   "DAC margining": the TPS7A57's internal 50 µA    │
+   IREF flows OUT of the REF pin, through the        │  SNS tied to OUT
+   6.2 kΩ series resistor, into the DAC node.        │  → error amp unity-gain
+   With SNS tied to OUT the loop is unity-gain, so:  ▼
+                                               TPS7A57 LDO
+        V_OUT = V_DAC + IREF · R_SERIES              │
+              = V_OFFSET + (VDD/4095)·code           │  V_OUT
+        (V_OFFSET = IREF · 6.2 kΩ ≈ 0.31 V)          ▼
+                                               [MOSFET] ──► SMA wire (Joule heat)
+  H7 PG_7 ──► MOSFET gate (load-enable)              │
+                                                     │
+  H7 A0  ◄── V_OUT via 10k/10k readback divider ─────┘   (÷2 → on-chip 16-bit ADC)
 
   [LS] = bidirectional logic-level shifter (3.3 V ↔ 5 V) for the I2C bus.
 ```
+
+> **Note:** the old front end (DAC VA → 2k/10k divider → LDO SET pin,
+> `V_OUT ≈ V_mid`) was removed. The DAC now drives the **REF** pin through
+> a 6.2 kΩ series resistor (margining), per `src/main.cpp`. Only the
+> *readback* path is still a 10k/10k divider.
 
 The H7 never sources analog power; it only sources I2C control, the
 MOSFET gate, and reads the divided-down feedback. The bench supply
@@ -96,7 +98,19 @@ sides (typ. 4.7 kΩ each).
 If you skip the shifter the H7 sees ~5 V on SDA/SCL during ACKs —
 out-of-spec for the STM32 inputs and a reliable way to damage the pad.
 
-### Feedback divider sizing
+### REF-pin margining resistor (DAC → LDO)
+
+The MCP4728 `VA` output drives the TPS7A57 **REF** pin through a single
+**6.2 kΩ series resistor** (`R_SERIES` in `main.cpp`). This is TI's
+"DAC margining" topology: the LDO's internal 50 µA IREF flows out the REF
+pin and through this resistor into the DAC node, so the REF node — and,
+with SNS tied to OUT, the output — sits at `V_OUT = V_DAC + IREF·R_SERIES`.
+The `IREF·R_SERIES` term (~0.31 V) is the output floor / intercept
+(`V_OFFSET`). There is **no** 2k/10k input divider and **no** SET-pin
+connection on this board — if you find one on an older harness, it's the
+retired topology and won't match the firmware's transfer function.
+
+### Feedback divider sizing (LDO → ADC readback)
 
 LDO output 0..5 V → H7 ADC range 0..3.3 V. We use 10k/10k (FB_DIV_RATIO
 = 0.5) → ADC sees 0..2.5 V, comfortably under the 3.3 V Vref. If your
@@ -124,9 +138,12 @@ human-readable lines or TSV (parsable). 115200 baud.
 | `read`             | Read LDO output (averaged 64×). |
 | `drive <V> <ms>`   | Apply `V` for `ms` milliseconds, then return to 0. Logs feedback every 10 ms during the hold. SMA actuation primitive. |
 | `mosfet on \| off` | Load-enable MOSFET (default `off` at boot). |
-| `sweep [mV]`       | DAC sweep across the open-loop V range, TSV. |
-| `csv [mV]`         | Same as sweep, CSV format. |
-| `vdd <V>`          | Override assumed MCP4728 VDD (default 5.0). Affects open-loop V↔code math. Session-scoped — not persisted. |
+| `sweep [codestep]` | Raw-code diagnostic sweep across the V range, TSV (`dac_code`, `v_pred`, `v_ldo_meas`). |
+| `csv [codestep]`   | Same as sweep, CSV format. |
+| `step <code> [ms]` | Log the LDO settle transient at 10 ms cadence (default 1200 ms). MOSFET untouched. |
+| `vdd <V>`          | Set MCP4728 VDD — the **slope** of `V_LDO` vs code (default 5.5). Session-scoped, not persisted. |
+| `offset <V>`       | Set `V_OFFSET = IREF·R_SERIES` — the **intercept** of the transfer function (default ≈ 0.31 V). Trim to the meter. |
+| `aref <V>`         | Set the H7 ADC Vref+ (1-pt readback cal; default 3.145 V). |
 | `info`             | Print current state. |
 
 ### `drive` output format
@@ -153,19 +170,26 @@ match the TSV rows in between.
    power-on. Anything wrong burns the limit, not the chip.
 2. **MCP4728 alone first.** Disconnect the LDO V_IN. Flash. `info`
    should show DAC code 0; I2C scan should find `0x60`.
-3. **DAC sanity:** `code 4095` → `read` should show ~4.58 V at the
-   MCP4728 VA pad (probe it). Confirms VDD ref + 1x gain are active.
-4. **Reconnect LDO V_IN.** `code 4095` → `read` should show ~4.58 V at
-   the LDO output. Confirms divider + LDO SET-pin gain (≈1).
-5. **Linearity check:** `csv 100` → 46-row CSV from 0.5 V to 5.0 V in
-   100 mV steps. Plot `v_ldo_meas` vs `v_ldo_nominal`. Acceptable if
-   `R² > 0.999` and worst-case residual < 50 mV (the same threshold
-   used in the Uno-version cal). If much worse, the cause is usually:
-   - `VDD_MCP` mismatch (measure the bench supply at the chip and
-     `vdd <actual>` to correct).
-   - Wrong divider resistors (measure them in-circuit).
-   - LDO loading effect (the bench Verify uses no SMA load — the open-
-     loop model assumes the LDO is unloaded except for the divider).
+3. **DAC sanity:** `code 4095` → probe the MCP4728 `VA` pad. With VDD-ref
+   + 1× gain it should read ≈ VDD (the bench supply measured at the chip,
+   e.g. ~5.5 V). Confirms the DAC reference and gain are active.
+4. **Reconnect the 6.2 kΩ → LDO REF.** `code 4095` → `read`: the LDO
+   output should rise toward its ceiling (`V_IN` − dropout), since
+   `V_pred = V_OFFSET + VDD` exceeds what the rail can deliver at full
+   scale. Confirms the margining path and unity-gain REF (IREF·RREF) are
+   live. Use mid-range codes for the actual linearity check below, where
+   `V_OUT = V_OFFSET + V_DAC` isn't rail-clamped.
+5. **Linearity check:** `csv 100` → CSV across the code range. Plot
+   `v_ldo_meas` vs `v_pred`. Acceptable if `R² > 0.999` and worst-case
+   residual < 50 mV (the same threshold used in the Uno-version cal). If
+   much worse, the cause is usually:
+   - `VDD_MCP` (slope) mismatch — measure the bench supply at the chip
+     and `vdd <actual>` to correct.
+   - `R_SERIES` / `V_OFFSET` (intercept) off — measure the 6.2 kΩ
+     in-circuit and trim with `offset <V>`.
+   - LDO loading effect (the bench verify uses no SMA load — the open-
+     loop model assumes the LDO is unloaded except for the readback
+     divider).
 6. **`drive` smoke test:** `drive 3.0 1000` with no SMA wired (open
    circuit at MOSFET drain). Should print `start`, ~100 TSV rows at
    2.5 V (or wherever the LDO settles), then `done`. Confirms timing
@@ -205,8 +229,8 @@ These don't gate the bring-up but should be settled before the merge:
 ## References
 
 - Original Uno code: `doc/ArduinoUnoMCP4728LDO.ino` (uploaded
-  2026-06-01) — source for the transfer function and SET-pin gain
-  assumption.
+  2026-06-01) — source for the transfer function and the REF-pin
+  margining (IREF·RREF, unity-gain) assumption.
 - `doc/PLAN_phase5_spring_smoke_test.md` §"SMA-ready architecture
   (Phase 6 preview)" — IPC contract this firmware eventually
   implements (`SMACommand` setpoint struct, src ID reservations).
@@ -214,4 +238,6 @@ These don't gate the bring-up but should be settled before the merge:
   Phase 6 SMA channels (drive V, shunt I, computed R).
 - MCP4728 datasheet — 12-bit DAC, I2C 0x60 default, VDD-ref + 1× gain
   needed for full 0..VDD range.
-- TPS7A5701 datasheet — ANY-OUT pin programming, SET-pin gain.
+- TPS7A5701 (TPS7A57) datasheet (SBVS395) — REF-pin programming via
+  IREF·RREF (Eq. 5; IREF ≈ 50 µA from Table 7-4), CNR/SS soft-start
+  (the ~100 ms REF-node settle).

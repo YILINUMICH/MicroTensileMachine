@@ -4,7 +4,8 @@ A benchtop micro tensile rig for characterizing **Shape Memory Alloy (SMA / Flex
 
 > **University of Michigan — Robotics, HDR Lab**
 > Author: Yilin Ma
-> Last major update: 2026-05-28 — ADC↔sensor mapping finalized, SensorHub ring-buffer IPC ported, `ADS1263/` retired to `Archieve/`.
+> Last major update: 2026-06-01 — added `SMA_Driver_PIO/` (Phase 6 SMA drive-path bring-up: MCP4728 DAC → TPS7A57 LDO).
+> 2026-05-28 — ADC↔sensor mapping finalized, SensorHub ring-buffer IPC ported, `ADS1263/` retired to `Archieve/`.
 
 ---
 
@@ -80,6 +81,7 @@ Every module below carries a status. Same vocabulary in every README and in the 
 | [`SensorHub_PIO/`](SensorHub_PIO/STATUS.md) | **To-Test** (post-2026-05-28 swap + ring-buffer port) | **Production firmware target.** Dual-ADC stream — laser on **ADC1/AIN4-AIN5**, load cell on **ADC2/AIN2-AIN3** — single serial stream with `src` column. Ring-buffer IPC. Needs one bench re-verify run with the swapped pairing before flipping to Stable. |
 | [`Calibrate_LaserHead/Calibrate_LaserHead_PIO/`](Calibrate_LaserHead/) | **Stable** | Calibration firmware: dual-ADC cross-compare on AIN4/AIN5 (laser). Ring-buffer IPC. |
 | [`Calibrate_LoadCell/Calibrate_Loadcell_PIO/`](Calibrate_LoadCell/) | **Stable** | Calibration firmware: dual-ADC cross-compare on AIN2/AIN3 (load cell). Ring-buffer IPC. |
+| [`SMA_Driver_PIO/`](SMA_Driver_PIO/README.md) | **WIP** (bring-up draft, 2026-06-01 — not yet flashed/bench-verified) | **Phase 6 SMA drive-path bring-up.** Standalone M7-only firmware: I2C → MCP4728 DAC → TPS7A57 LDO (DAC-margining via a 6.2 kΩ REF-pin resistor) → MOSFET-gated SMA load; analytical `V_LDO = V_OFFSET + (VDD/4095)·code` transfer with 16-bit ADC readback. Merges into `SensorHub_PIO/` M7 once `set`/`drive` accuracy is bench-verified. |
 
 ### Host-side Python modules
 
@@ -118,6 +120,8 @@ Every module below carries a status. Same vocabulary in every README and in the 
 | LCR meter | Keysight E4980AL | (vendor site) |
 | Linear stage | Zaber X-LSQ300A-E01 (300 mm travel, encoder, serial 143153) | (vendor site) |
 | Bias-tee | Double bias-tee, 0.22 µF C0G + 47 µH | (custom) |
+| SMA drive DAC | Microchip MCP4728 (12-bit, I2C 0x60) — sets the LDO REF node via a 6.2 kΩ margining resistor, see [`SMA_Driver_PIO/`](SMA_Driver_PIO/README.md) | (vendor site) |
+| SMA drive LDO | TI TPS7A5701 (TPS7A57) — programmable LDO (IREF·RREF, unity-gain), Joule-heats the SMA coil through a MOSFET | (vendor site, SBVS395) |
 
 See [doc/README.md](doc/README.md) for the per-PDF index and the operator memos.
 
@@ -131,6 +135,7 @@ See [doc/README.md](doc/README.md) for the per-PDF index and the operator memos.
 | Re-calibrate the laser head before a run | [`Calibrate_LaserHead/`](Calibrate_LaserHead/) — `python run_calibration.py` |
 | Re-calibrate the load cell before a run | [`Calibrate_LoadCell/`](Calibrate_LoadCell/) — `python run_calibration.py` |
 | Flash/modify the production firmware on the H7 | [`SensorHub_PIO/`](SensorHub_PIO/) |
+| Drive / actuate the SMA coil (set LDO voltage, `drive <V> <ms>`) | [`SMA_Driver_PIO/`](SMA_Driver_PIO/) |
 | Control the Zaber stage from Python | [`ZaberStage/`](ZaberStage/) |
 | Talk to the LCR meter from Python | [`KeysightLCR/`](KeysightLCR/) |
 | Look up an ADS1263 register or known issue | `SensorHub_PIO/lib/ADS1263/ADS1263_Driver.cpp` (live driver). Historical notes in `Archieve/ADS1263/ADS1263_H7_Integration_Notes.md`. |
@@ -152,6 +157,7 @@ Per-module TODOs live in each module's `STATUS.md` (and in this section's "Modul
 
 ### Open
 
+- **Bring up and bench-verify `SMA_Driver_PIO/` (Phase 6 SMA drive path).** Flash the M7-only firmware, walk the [bring-up checklist](SMA_Driver_PIO/README.md#bring-up-checklist) (MCP4728 alone → 6.2 kΩ REF margining → `csv` linearity `R²>0.999`, residual <50 mV → `drive` smoke test), then trim `vdd`/`offset` to the meter. Once `set`/`drive` accuracy is confirmed, merge the M7 control code into `SensorHub_PIO/` M7 and push SMA feedback samples (src=3/4/5) onto the SRAM ring per `SensorHub_PIO/src/sample_ring.h`. *(SMA_Driver_PIO/README.md)*
 - **Bench re-verify `SensorHub_PIO/` after the 2026-05-28 ADC swap + ring-buffer port.** Same expected line rate as the pre-swap verify on 2026-05-25; confirm `src=1` now tracks the laser (AIN4/5) and `src=2` tracks the load cell (AIN2/3) within multimeter tolerance, no ring overflows, no checksum errors. Flips status to **Stable** once `SMA_CharacterizationV2/` consumes the stream end-to-end. *(SensorHub_PIO/STATUS.md)*
 - **Wire the new `Calibrate_LaserHead/` and `Calibrate_LoadCell/` constants into `SMA_CharacterizationV2/`.** The legacy `k = -0.1171 mV/µm`, `V₀ = 566.957 mV` constants came through the Waveshare HAT's ~4.4× attenuator and are invalid on the bare EVM. Read the current `Calibrate_LaserHead/calibration.json` and `Calibrate_LoadCell/calibration.json` into `SMA_CharacterizationV2/session.py` (laser_calibration_reference block).
 - **Bench-verify `SMA_CharacterizationV2/` after the LCR refactor.** The recorder now imports `LCRMeter` / `MeasurementConfig` / `MeasurementFunction` from `KeysightLCR/lcr_meter.py`; the local `lcr_reader.py` is gone. Smoke-test per `SMA_CharacterizationV2/STATUS.md` and flip the status back to Stable.
