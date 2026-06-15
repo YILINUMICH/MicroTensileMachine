@@ -15,7 +15,8 @@ The continuous-read path is built around the scope's automatic parameter
 measurement query:
 
     <source>:PAVA? <param>      e.g.  C1:PAVA? PKPK   -> "C1:PAVA PKPK,3.00E+00V"
-    C1-C2:PAVA? PHA             cross-channel phase  -> "C1-C2:PAVA PHA,1.17E+02"
+    <srcA>-<srcB>:MEAD? <param> e.g.  C1-C2:MEAD? PHA -> "C1-C2:MEAD PHA,1.17E+02"
+                                (cross-channel delay/phase uses MEAD?, not PAVA?)
 
 so `read_single()` / `iter_measurements()` yield a scalar reading per poll,
 exactly like the LCR FETCH? loop. Scope-specific helpers (waveform capture,
@@ -23,13 +24,21 @@ built-in AWG, sample-rate query, raw SCPI passthrough) are layered on top.
 
 Main features:
 - Raw-socket SCPI transport (no VISA), text + binary block reads
-- Auto-connect to the lab default IP, or explicit host[:port]
-- Continuous / burst / single automatic-measurement reads (PAVA)
-- Cross-channel measurements (phase, skew) via the C1-C2 source syntax
+- Auto-connect to the default IP, explicit host[:port], or link-local scan
+- Continuous / burst / single automatic-measurement reads (PAVA?)
+- Cross-channel phase/skew via the MEAD? two-source syntax (C1-C2:MEAD? PHA)
 - Built-in AWG (WaveGen) control via BSWV — for isolation / SRF sweeps
 - Raw waveform capture (DAT2) returning ADC codes + preamble
 - Robust error handling with soft reconnect for long recorder runs
 - Context-manager / iterator API matching lcr_meter.LCRMeter
+
+Hardware notes (bench-verified 2026-06-15 on an SDS2204X Plus, fw 5.4.1.5.2R2):
+- ONE SCPI socket client at a time. The scope serves a single connection on
+  port 5025; a second concurrent socket accepts at TCP but never answers
+  *IDN? (it times out). Always close() one session before opening another.
+- Link-local addressing only on a direct cable. The scope refuses a manual
+  static IP in 169.254.0.0/16, so it self-assigns an address that can move
+  between sessions — hence the auto_connect() subnet-scan fallback.
 
 Author: Yilin Ma
 University of Michigan Robotics — HDR Lab
@@ -53,10 +62,18 @@ from typing import Optional, Tuple, List, Callable, Iterator
 logger = logging.getLogger("Oscilloscope")
 
 
-# --- Lab defaults (direct PC<->scope link, static IP on the scope) ----------
-DEFAULT_HOST = "169.254.111.100"   # scope static IP; PC on same APIPA subnet
+# --- Lab defaults (direct PC<->scope link) ----------------------------------
+# The SDS2000X Plus refuses a *manual* static IP inside 169.254.0.0/16 (that
+# range is reserved for link-local / APIPA auto-assignment), so on a bare
+# PC<->scope cable the scope self-assigns a link-local address that can move
+# between sessions (e.g. 169.254.111.4 one day, .7 the next). DEFAULT_HOST is
+# tried first; if it's down, auto_connect() sweeps DEFAULT_SCAN_SUBNET for the
+# scope (see _scan_for_scope). Override discovery with $SCOPE_IP (exact host)
+# or $SCOPE_SUBNET (the /24 to sweep, e.g. "169.254.111").
+DEFAULT_HOST = "169.254.111.100"   # first guess; link-local addr may differ
 DEFAULT_PORT = 5025                # Siglent SCPI socket port
 DEFAULT_TIMEOUT_S = 5.0
+DEFAULT_SCAN_SUBNET = DEFAULT_HOST.rsplit(".", 1)[0]  # "169.254.111" (/24)
 
 # Code->volt scaling for DAT2 byte data. The SDS2000X Plus returns one signed
 # byte per sample over DAT2; volts = code * (vdiv / CODES_PER_DIV) - offset.
@@ -70,10 +87,11 @@ CODES_PER_DIV = 25.0
 class MeasureParam(Enum):
     """Automatic-measurement parameters accepted by `<src>:PAVA? <param>`.
 
-    Single-source params operate on one channel (C1..C4, MATH, etc.).
-    Cross-channel params (PHA, SKEW) require a two-source query, e.g.
-    `C1-C2:PAVA? PHA`; pass them via ScopeConfig.second_source/second_param
-    or build the source string yourself.
+    Single-source params operate on one channel (C1..C4, MATH, etc.) and are
+    queried with PAVA?. Cross-channel params (PHA, SKEW) are delay measurements
+    queried with MEAD? against a two-source pair, e.g. `C1-C2:MEAD? PHA`; pass
+    them via ScopeConfig.second_source/second_param (the driver picks PAVA? vs
+    MEAD? automatically — see _measure_query) or build the source yourself.
     """
     # Amplitude / level
     PKPK = "PKPK"   # peak-to-peak
@@ -96,9 +114,9 @@ class MeasureParam(Enum):
     NDUTY = "NDUTY"
     RISE = "RISE"
     FALL = "FALL"
-    # Cross-channel (two-source)
-    PHA = "PHA"     # phase  (C1-C2:PAVA? PHA)
-    SKEW = "SKEW"   # skew   (C1-C2:PAVA? SKEW)
+    # Cross-channel (two-source delay measurements — queried via MEAD?)
+    PHA = "PHA"     # phase  (C1-C2:MEAD? PHA)
+    SKEW = "SKEW"   # skew   (C1-C2:MEAD? SKEW)
 
 
 # Display unit hint per parameter (for format_result only; the scope already
@@ -174,6 +192,124 @@ class WaveformPreamble:
 
 # Regex that pulls the first signed scientific/decimal number out of a reply.
 _NUM_RE = re.compile(r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+# Siglent splits automatic measurements across two SCPI verbs:
+#   PAVA?  (PARAMETER_VALUE)  — single-channel params on one source (C1:PAVA? PKPK)
+#   MEAD?  (MEASURE_DELAY)    — cross-channel delay params on a two-source pair
+#                              (C1-C2:MEAD? PHA).  Sending PHA/SKEW via PAVA? gets
+#                              NO reply on SDS2000X Plus firmware, so the socket
+#                              read times out — pick the right verb per param.
+_DELAY_PARAMS = frozenset({MeasureParam.PHA, MeasureParam.SKEW})
+
+
+def _measure_query(source: str, param: MeasureParam) -> str:
+    """Build the correct measurement query for `source`/`param`.
+
+    Cross-channel delay params (PHA, SKEW) — or any explicit two-source pair
+    like 'C1-C2' — go through MEAD?; everything else through PAVA?.
+    """
+    verb = "MEAD" if (param in _DELAY_PARAMS or "-" in source) else "PAVA"
+    return f"{source}:{verb}? {param.value}"
+
+
+def _scan_for_scope(subnet: Optional[str] = None,
+                    port: int = DEFAULT_PORT,
+                    connect_timeout: float = 0.5,
+                    idn_timeout: float = 1.0,
+                    hosts: Optional[range] = None) -> Optional[str]:
+    """Sweep a link-local /24 for a Siglent SCPI socket and return its IP.
+
+    Why this exists: on a direct PC<->scope cable the scope can only hold a
+    link-local (169.254.x.x) address, which it auto-assigns and which may move
+    between sessions. When the configured host is unreachable, auto_connect()
+    calls this to find the scope on the wire instead of failing.
+
+    Strategy (two phases, fast):
+      1. Concurrent *non-blocking* TCP connect to <subnet>.1..254 : port. All
+         254 sockets are opened at once and polled with one selector, so the
+         whole sweep costs ~connect_timeout (sub-second), not 254 * timeout.
+      2. For each host that accepted the connection, send `*IDN?` and keep the
+         first reply that looks like a Siglent SDS.
+
+    Args:
+        subnet: First three octets to sweep, e.g. "169.254.111". Defaults to
+                $SCOPE_SUBNET, then DEFAULT_SCAN_SUBNET.
+        port:   SCPI socket port (5025).
+        connect_timeout: How long to wait for connects to complete (s).
+        idn_timeout:     Per-host *IDN? read timeout (s).
+        hosts:  Host-octet range to try (default 1..254).
+
+    Returns:
+        The discovered IP string, or None if no scope answered.
+    """
+    import selectors
+
+    subnet = (subnet or os.environ.get("SCOPE_SUBNET")
+              or DEFAULT_SCAN_SUBNET).rstrip(".")
+    host_range = hosts if hosts is not None else range(1, 255)
+    targets = [f"{subnet}.{h}" for h in host_range]
+    logger.info("Scanning %s.[%d-%d]:%d for the scope ...",
+                subnet, host_range.start, host_range.stop - 1, port)
+
+    # -- Phase 1: concurrent non-blocking connect ------------------------
+    sel = selectors.DefaultSelector()
+    pending = {}            # socket -> ip
+    open_hosts: List[str] = []
+    for ip in targets:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setblocking(False)
+        # connect_ex returns EINPROGRESS/EWOULDBLOCK immediately on a
+        # non-blocking socket; completion is reported via the selector.
+        s.connect_ex((ip, port))
+        try:
+            sel.register(s, selectors.EVENT_WRITE, ip)
+            pending[s] = ip
+        except (KeyError, ValueError, OSError):
+            s.close()
+
+    deadline = time.monotonic() + connect_timeout
+    while pending:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        for key, _ in sel.select(timeout=remaining):
+            s = key.fileobj
+            ip = key.data
+            err = s.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+            sel.unregister(s)
+            pending.pop(s, None)
+            if err == 0:
+                open_hosts.append(ip)
+            s.close()
+    for s in list(pending):            # never-resolved hosts: close & move on
+        try:
+            sel.unregister(s)
+        except Exception:
+            pass
+        s.close()
+    sel.close()
+
+    if not open_hosts:
+        logger.info("Subnet scan: no host had port %d open.", port)
+        return None
+    logger.info("Subnet scan: port %d open on %s — probing *IDN? ...",
+                port, ", ".join(open_hosts))
+
+    # -- Phase 2: identify which open host is the Siglent ----------------
+    for ip in open_hosts:
+        try:
+            with socket.create_connection((ip, port), timeout=idn_timeout) as s:
+                s.settimeout(idn_timeout)
+                s.sendall(b"*IDN?\n")
+                reply = s.recv(256).decode("ascii", "replace")
+            if "SDS" in reply.upper() or "SIGLENT" in reply.upper():
+                logger.info("Discovered scope at %s:%d — %s",
+                            ip, port, reply.strip())
+                return ip
+        except Exception as e:
+            logger.debug("IDN probe of %s:%d failed: %s", ip, port, e)
+    logger.info("Subnet scan: open ports found but none identified as a Siglent.")
+    return None
 
 
 class Oscilloscope:
@@ -295,14 +431,40 @@ class Oscilloscope:
 
     # -- connection --------------------------------------------------------
     def auto_connect(self) -> bool:
-        """Connect to $SCOPE_IP if set, else the lab DEFAULT_HOST."""
+        """Connect to the scope, auto-discovering its address if needed.
+
+        Order:
+          1. $SCOPE_IP, the host passed to __init__, or DEFAULT_HOST.
+          2. If that's unreachable, sweep the link-local subnet
+             ($SCOPE_SUBNET or DEFAULT_SCAN_SUBNET) for a Siglent answering
+             *IDN? on the SCPI port. This covers the case where the scope
+             self-assigned a link-local address that moved (see module header).
+        """
         host = self.host or os.environ.get("SCOPE_IP") or DEFAULT_HOST
         port = self.port or int(os.environ.get("SCOPE_PORT", DEFAULT_PORT))
         logger.info("Auto-connecting to SDS2000X Plus at %s:%d ...", host, port)
-        return self.connect(host, port)
+        if self.connect(host, port):
+            return True
+
+        logger.info("%s:%d unreachable — falling back to subnet discovery.",
+                    host, port)
+        found = _scan_for_scope(port=port)
+        if found and self.connect(found, port):
+            logger.info("Connected via discovery at %s:%d.", found, port)
+            return True
+        logger.error("Auto-connect failed: scope not found at %s:%d nor on "
+                     "the %s.x scan. Set $SCOPE_IP or $SCOPE_SUBNET.",
+                     host, port,
+                     os.environ.get("SCOPE_SUBNET") or DEFAULT_SCAN_SUBNET)
+        return False
 
     def connect(self, host: str, port: Optional[int] = None) -> bool:
-        """Connect to an explicit host. `host` may be 'ip' or 'ip:port'."""
+        """Connect to an explicit host. `host` may be 'ip' or 'ip:port'.
+
+        Note: the scope serves only ONE SCPI socket client at a time on
+        port 5025. If a socket opens but *IDN? times out, the usual cause is
+        another live connection to the same scope — close it first.
+        """
         if port is None:
             if ":" in host:
                 host, p = host.rsplit(":", 1)
@@ -315,7 +477,10 @@ class Oscilloscope:
         try:
             idn = self.query("*IDN?")
         except Exception as e:
-            logger.error("No *IDN? response from %s:%d (%s)", host, port, e)
+            logger.error("No *IDN? response from %s:%d (%s) — socket opened but "
+                         "the scope didn't reply; another SCPI client may "
+                         "already be connected (it allows only one).",
+                         host, port, e)
             self.close()
             return False
         # Siglent IDN: "Siglent Technologies,SDS2204X Plus,<serial>,<fw>"
@@ -362,19 +527,30 @@ class Oscilloscope:
             raise RuntimeError("Not connected")
         cfg = self.config
         try:
-            reply = self.query(f"{cfg.source}:PAVA? {cfg.param.value}")
+            reply = self.query(_measure_query(cfg.source, cfg.param))
             val = self._extract_num(reply)
             unit = self._extract_unit(reply)
             status = 0 if val is not None else 1
 
             sec = float("nan")
             if cfg.second_source and cfg.second_param:
-                r2 = self.query(f"{cfg.second_source}:PAVA? {cfg.second_param.value}")
-                s2 = self._extract_num(r2)
-                if s2 is None:
+                # Isolate the secondary read: a failing/timed-out secondary
+                # (e.g. a cross-channel param the firmware won't answer) must
+                # not throw away an otherwise-good primary reading or stall a
+                # recording. Flag status, keep the primary.
+                try:
+                    r2 = self.query(_measure_query(cfg.second_source,
+                                                   cfg.second_param))
+                    s2 = self._extract_num(r2)
+                    if s2 is None:
+                        status = status or 1
+                    else:
+                        sec = s2
+                except Exception as e2:
                     status = status or 1
-                else:
-                    sec = s2
+                    logger.warning("Secondary query (%s %s) failed: %s "
+                                   "(primary kept)", cfg.second_source,
+                                   cfg.second_param.value, e2)
 
             self._measurement_count += 1
             return ScopeMeasurement(

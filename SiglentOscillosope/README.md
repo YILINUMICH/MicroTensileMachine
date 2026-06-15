@@ -33,13 +33,31 @@ pip install numpy
 No VISA libraries, no PyVISA — the driver talks to the scope's SCPI socket directly.
 
 ### Network Setup
-Set a static IP on the scope and put the PC on the same subnet:
+On a direct scope↔PC cable both ends use link-local (APIPA, `169.254.x.x`)
+addressing. The scope **cannot hold a manual static IP in `169.254.0.0/16`**
+(that range is reserved for auto-assignment), so it self-assigns an address
+that can move between sessions. The driver handles this:
 
-- On the scope: `Utility > System Setting > I/O Setting > LAN Config`, uncheck
-  *Automatic (DHCP)*, set a static IP (e.g. `169.254.111.100`, mask `255.255.255.0`).
-- On the PC: use an APIPA / link-local address in the same subnet (a direct
-  scope↔PC cable works fine).
-- Confirm reachability: `ping 169.254.111.100`, then the driver connects on port `5025`.
+- Leave the scope on `Utility > System Setting > I/O Setting > LAN Config` with
+  *Automatic (DHCP)* checked — it will auto-assign a `169.254.x.x` address.
+- On the PC: use an APIPA / link-local address in the same range (the default
+  Windows behaviour on a direct cable — nothing to configure).
+- `auto_connect()` tries `DEFAULT_HOST` (`169.254.111.100`) first; if that's
+  down it **sweeps the link-local /24 for a Siglent answering `*IDN?`** and
+  latches onto it automatically. No manual IP needed.
+
+To skip discovery, pin the address explicitly:
+
+- `SCOPE_IP` — exact host, e.g. `169.254.111.4` (fastest; no scan).
+- `SCOPE_SUBNET` — the `/24` the auto-scan sweeps, e.g. `169.254.111` (use if
+  the scope lands outside the default subnet).
+
+Confirm reachability with `ping <scope-ip>`; the driver connects on port `5025`.
+
+> For a permanent fixed address, move both ends off link-local onto a routable
+> private subnet (e.g. scope `192.168.1.100/24`, PC NIC `192.168.1.50/24`) and
+> set `DEFAULT_HOST`/`SCOPE_IP` to match — that's the only way to get a true
+> static IP, since the scope rejects static addresses in the `169.254` range.
 
 ## Quick Start
 
@@ -95,6 +113,11 @@ Main interface class for instrument control.
 - `write(cmd)` / `query(cmd)` — raw SCPI passthrough
 - `close()` — release the socket
 
+> **One socket at a time.** The SDS2000X Plus serves a single SCPI client on
+> port 5025: a second concurrent connection accepts at the TCP layer but never
+> answers `*IDN?` (it times out). Always `close()` one session before opening
+> another — don't hold two `Oscilloscope` objects against the same scope.
+
 #### `ScopeConfig`
 Configuration dataclass for the read loop.
 
@@ -131,8 +154,13 @@ Result dataclass. Field names match `lcr_meter.MeasurementResult`.
 | WID / NWID | +width / −width | s | |
 | DUTY / NDUTY | Duty cycle | % | |
 | RISE / FALL | Rise / fall time | s | |
-| PHA | **Phase** | deg | **Cross-channel** (`C1-C2:PAVA? PHA`) |
-| SKEW | **Skew** | s | **Cross-channel** |
+| PHA | **Phase** | deg | **Cross-channel** (`C1-C2:MEAD? PHA`) |
+| SKEW | **Skew** | s | **Cross-channel** (`C1-C2:MEAD? SKEW`) |
+
+> Cross-channel delay params (`PHA`, `SKEW`) use the **`MEAD?`** (MEASURE_DELAY)
+> verb, not `PAVA?` — sending them via `PAVA?` gets no reply and the read times
+> out. The driver selects the verb automatically (`_measure_query`), so just
+> set `second_source="C1-C2"` + `second_param=PHA` and it does the right thing.
 
 ## Advanced Usage
 

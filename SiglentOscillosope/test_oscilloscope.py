@@ -25,10 +25,12 @@ Usage:
     python test_oscilloscope.py --demo      # Show usage examples
 
 Connection:
-    Defaults to the lab static IP (169.254.111.100:5025). Override with:
-        $env:SCOPE_IP   = '169.254.111.100'     # PowerShell
-        $env:SCOPE_PORT = '5025'
-        export SCOPE_IP=169.254.111.100         # bash
+    Tries the driver default (169.254.111.100:5025); if that's down it sweeps
+    the link-local subnet for a Siglent answering *IDN?. Override with:
+        $env:SCOPE_IP     = '169.254.111.4'     # exact host (PowerShell)
+        $env:SCOPE_SUBNET = '169.254.111'       # /24 for the auto-scan
+        $env:SCOPE_PORT   = '5025'
+        export SCOPE_IP=169.254.111.4           # bash
 
 Requirements:
 - SDS2000X Plus reachable over LAN (static IP on scope, PC on same subnet)
@@ -80,7 +82,7 @@ class TestOscilloscope:
         if host:
             print(f"   Using IP from environment: {host}:{port}")
         else:
-            print("   No SCOPE_IP set — using driver default (169.254.111.100:5025)")
+            print("   No SCOPE_IP set — trying driver default, then auto-scan")
 
         # auto_open=False so the handshake is explicit and we can report on it.
         self.scope = Oscilloscope(host=host, port=port, auto_open=False)
@@ -88,10 +90,13 @@ class TestOscilloscope:
 
         if not connected or not self.scope.sock:
             print("\n⚠️  WARNING: No oscilloscope detected over LAN")
+            print("   (auto_connect tried the default IP, then swept the")
+            print("    link-local subnet for a Siglent — both came up empty.)")
             print("   Checklist:")
-            print("   - Scope LAN set to static IP; PC on the same subnet")
+            print("   - PC and scope on the same link-local subnet; cable in")
             print("   - Ping the scope IP; confirm port 5025 reachable")
-            print("   - Set SCOPE_IP / SCOPE_PORT if not on the default IP")
+            print("   - Set SCOPE_IP for an exact host, or SCOPE_SUBNET (e.g.")
+            print("     169.254.111) to point the auto-scan at the right /24")
             return False
 
         print(f"✓ Connected: {self.scope.idn}")
@@ -272,9 +277,18 @@ class TestOscilloscope:
         return True
 
     def test_context_manager(self):
-        """Test 10: context manager releases the socket."""
+        """Test 10: context manager opens + releases the socket.
+
+        The SDS2000X Plus serves only ONE SCPI socket client at a time on
+        port 5025: a second concurrent connection's *IDN? times out. So close
+        the suite's main session first, then exercise a fresh context-managed
+        connection. This is the last test, so dropping the main session is
+        fine (teardown also closes, idempotently).
+        """
         host = self.scope.host
         port = self.scope.port
+        self.scope.close()                       # free the single SCPI socket
+        time.sleep(0.3)                          # let the scope release it
         with Oscilloscope(host=host, port=port) as s:
             ok = s.sock is not None and s.idn is not None
             print(f"  - In context: connected={ok}")
