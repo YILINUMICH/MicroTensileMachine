@@ -1,0 +1,77 @@
+{
+  "timestamp": "2026-06-16T19:50:43.815004",
+  "config": {
+    "serial": {
+      "port": "COM8",
+      "baud": 115200,
+      "timeout_s": 2.0,
+      "ack_timeout_s": 5.0
+    },
+    "scope": {
+      "host": "169.254.111.4",
+      "port": 5025,
+      "channels": {
+        "trigger": "C1",
+        "dac": "C2",
+        "output": "C3",
+        "current": null
+      },
+      "trigger_level_v": 1.0,
+      "trigger_slope": "POS",
+      "timebase_s": 0.02,
+      "memory_depth": "10K",
+      "codes_per_div": 25.0
+    },
+    "model": {
+      "v_offset": 0.31,
+      "vdd": 5.5
+    },
+    "isense": {
+      "gain_v_per_v": 10.0,
+      "shunt_ohm": 0.1,
+      "offset_v": 0.0
+    },
+    "experiment": {
+      "hold_ms": 500,
+      "repeats": 3,
+      "settle_window_frac": 0.15,
+      "loads": [
+        "unloaded",
+        "loaded"
+      ],
+      "steps": [
+        {
+          "name": "small_up",
+          "from_v": 0.5,
+          "to_v": 1.0
+        },
+        {
+          "name": "mid_up",
+          "from_v": 0.5,
+          "to_v": 2.5
+        },
+        {
+          "name": "large_up",
+          "from_v": 0.5,
+          "to_v": 5.0
+        },
+        {
+          "name": "large_dn",
+          "from_v": 5.0,
+          "to_v": 0.5
+        }
+      ]
+    },
+    "ripple": {
+      "enabled": true,
+      "hold_v": 2.5,
+      "n_reads": 200,
+      "loads": [
+        "unloaded",
+        "loaded"
+      ]
+    },
+    "output_dir": "data"
+  },
+  "scope_idn": "Siglent Technologies,SDS2204X Plus,SDS2PEED6R4560,5.4.1.5.2R2"
+}

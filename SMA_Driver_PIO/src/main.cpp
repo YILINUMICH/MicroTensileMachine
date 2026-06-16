@@ -40,7 +40,9 @@
  *   I2C SDA   -> Wire SDA  (Portenta H7 PB_7) -> Mid Carrier J15-28 / silkscreen "I2C0 SDA"
  *   I2C SCL   -> Wire SCL  (Portenta H7 PB_6) -> Mid Carrier J15-26 / silkscreen "I2C0 SCL"
  *   MOSFET    -> D3        -> Mid Carrier J15-31 / silkscreen "PWM 3"  (PWM3 = PG7, not PA_9)
- *   FB (AIN)  -> A0        -> Mid Carrier "ANA0" pad
+ *   FB (AIN)  -> A0        -> Mid Carrier "ANA0" pad  (LDO out, BEFORE shunt)
+ *   I-SENSE   -> A1        -> Mid Carrier "ANA1" pad  (INA296A OUT; 100 mOhm shunt)
+ *   TRIG OUT  -> PJ_11     -> Mid Carrier "PWM4" (J2-67) -> scope CH1 (edge = t0)
  *
  * (Pins chosen so this module's wiring does not overlap with
  *  SensorHub_PIO M4's PA_8 / PC_6 / PC_7. The two firmwares can
@@ -52,13 +54,20 @@
  *   set <V>          Set LDO output to V volts (analytical inverse)
  *   <number>         Same as `set <number>` (bare number shortcut)
  *   code <N>         Set raw DAC code 0-4095; shows predicted + measured V
- *   read             Read LDO output now (averaged)
+ *   read             Read LDO output, SMA current (INA296A), V_sma, R_sma
+ *   gain <V/V>       Set INA296A gain (default 10 = A1 variant)
+ *   shunt <ohm>      Set shunt resistance (default 0.1 = 100 mOhm)
+ *   ioffset <V>      Set INA296A 0 A output offset (default 0, REF=GND)
  *   drive <V> <ms>   Apply <V> for <ms> ms then return to 0 (SMA actuation).
  *                    Logs t, V_set, V_meas every 10 ms during the hold.
  *   mosfet on|off    Load-enable MOSFET control
  *   sweep [step]     Raw-code diagnostic sweep, prints code / V_meas (TSV)
  *   csv   [step]     Same as sweep, CSV format (parse-friendly)
  *   step <code>[ms]  Log the LDO settle transient (10 ms cadence)
+ *   fire <code>[ms][from]  Scope-triggered step: pulse TRIG_PIN at the DAC
+ *                    write (= scope t0), hold <ms>, then DAC->0. Optional
+ *                    <from> code sets the pre-step baseline (default 0).
+ *                    MOSFET state left as-is (set `mosfet on|off` first).
  *   vdd <V>          Set MCP4728 VDD (the slope of V_LDO vs code)
  *   offset <V>       Set V_OFFSET = IREF*R_series (the intercept)
  *   aref <V>         Set ADC Vref+ (1-pt reference cal; default 3.145 V)
@@ -96,6 +105,10 @@ Adafruit_MCP4728 mcp;
 // -- Pins --------------------------------------------------------------
 const int MOSFET_PIN = D3;   // PWM3 = D3 = PG7 (Mid Carrier J15-31). Arduino alias, not raw PinName.
 const int FB_PIN     = A0;
+// scope trigger OUT: rising edge = DAC-step t0 (plain GPIO via digitalWrite).
+// Mid Carrier silkscreen "PWM4" = J2-67 = STM32 PJ_11 (next to PWM3/PG_7 = MOSFET).
+// Explicit PinName, not the D-alias: the PWM_n macros are unreliable on this core.
+const PinName TRIG_PIN = PJ_11;
 
 // -- Analytical LDO transfer (TPS7A57: V_LDO = V_DAC + IREF*R_SERIES) ---
 // VDD_MCP is the MCP4728 supply rail = DAC full-scale; it is the SLOPE of
@@ -111,6 +124,20 @@ const float  R_FB_TOP     = 10000.0f;
 const float  R_FB_BOT     = 10000.0f;
 const float  FB_DIV_RATIO = R_FB_BOT / (R_FB_TOP + R_FB_BOT);   // 0.5
 const float  ADC_FB_SCALE = 1.0f / FB_DIV_RATIO;                // 2.0
+
+// -- INA296A current sense (LDO out -> 100 mOhm shunt -> SMA) -----------
+// Topology:  LDO_OUT --[A0 taps here]--[ 100 mOhm shunt ]--> SMA --> GND
+// The INA296A sits across the shunt; its OUT goes to A1. A1 variant = 10 V/V.
+//   V_ina = I * R_SHUNT * INA_GAIN   ->   I = (V_ina - offset) / (INA_GAIN*R_SHUNT)
+// With 10 V/V and 0.1 ohm the scale is 1.0 V/A (1 A -> 1.0 V), ~3.3 A full-scale.
+// Unidirectional (REF=GND): OUT = 0 V at 0 A, so ISENSE_OFFSET_V = 0 nominal.
+// V_sma = V_ldo - I*R_SHUNT (A0 is BEFORE the shunt); R_sma = V_sma / I.
+// All three are runtime-tunable (`gain`, `shunt`, `ioffset`) to trim to the meter.
+const int    ISENSE_PIN      = A1;     // INA296A OUT
+static float INA_GAIN        = 10.0f;  // INA296A1 = 10 V/V
+static float R_SHUNT_OHM     = 0.1f;   // 100 mOhm
+static float ISENSE_OFFSET_V = 0.0f;   // 0 A output (REF=GND)
+static const float I_FLOOR_A = 1e-3f;  // below this, R is undefined (open/no-drive)
 
 // -- ADC (H7 on-chip, 16-bit) ------------------------------------------
 static const int   ADC_RES_BITS = 16;
@@ -146,6 +173,19 @@ static float readADC(int pin) {
 // LDO output voltage (un-divided).
 static float readLDO() {
     return readADC(FB_PIN) * ADC_FB_SCALE;
+}
+
+// One coherent electrical read of the SMA drive path.
+struct SmaRead { float v_ldo; float i; float v_sma; float r; };
+static SmaRead readSma() {
+    SmaRead s;
+    s.v_ldo = readLDO();                                  // A0, before the shunt
+    float v_ina = readADC(ISENSE_PIN);                    // A1, INA296A OUT
+    float scale = INA_GAIN * R_SHUNT_OHM;                 // V/A
+    s.i     = (scale > 0.0f) ? (v_ina - ISENSE_OFFSET_V) / scale : 0.0f;
+    s.v_sma = s.v_ldo - s.i * R_SHUNT_OHM;                // subtract shunt drop
+    s.r     = (fabs(s.i) >= I_FLOOR_A) ? s.v_sma / s.i : NAN;
+    return s;
 }
 
 // Raw DAC write - updates the code + lets the I2C/DAC update, does NOT
@@ -255,11 +295,14 @@ static void cmdCode(uint16_t code) {
 }
 
 static void cmdRead() {
-    float v_adc = readADC(FB_PIN);
-    float v_ldo = v_adc * ADC_FB_SCALE;
-    Serial.print(F("A0=")); Serial.print(v_adc, 4);
-    Serial.print(F("V  V_LDO=")); Serial.print(v_ldo, 4);
-    Serial.print(F("V  code=")); Serial.println(currentCode);
+    SmaRead s = readSma();
+    Serial.print(F("V_LDO=")); Serial.print(s.v_ldo, 4);
+    Serial.print(F("V  I="));  Serial.print(s.i * 1000.0f, 2);
+    Serial.print(F("mA  V_sma=")); Serial.print(s.v_sma, 4);
+    Serial.print(F("V  R="));
+    if (isnan(s.r)) Serial.print(F("--"));
+    else            Serial.print(s.r, 3);
+    Serial.print(F("ohm  code=")); Serial.println(currentCode);
 }
 
 static void cmdMosfet(bool on) {
@@ -291,38 +334,45 @@ static void cmdDrive(float vtarget, uint32_t hold_ms) {
 
     Serial.print(F("[DRIVE] start V=")); Serial.print(vtarget, 3);
     Serial.print(F(" t_ms="));            Serial.println(hold_ms);
-    Serial.println(F("t_rel_ms\tV_set\tV_meas"));
+    Serial.println(F("t_rel_ms\tV_set\tV_meas\tI_mA\tR_ohm"));
 
     uint32_t t_start = millis();
     setDACraw(code);               // raw: log the LDO rise transient below
-    float v_at_t0 = readLDO();
+    SmaRead s0 = readSma();
     Serial.print(0);            Serial.print('\t');
     Serial.print(vtarget, 4);   Serial.print('\t');
-    Serial.println(v_at_t0, 4);
+    Serial.print(s0.v_ldo, 4);  Serial.print('\t');
+    Serial.print(s0.i * 1000.0f, 2); Serial.print('\t');
+    if (isnan(s0.r)) Serial.println(F("--")); else Serial.println(s0.r, 3);
 
-    float max_err = fabs(v_at_t0 - vtarget);
+    float max_err = fabs(s0.v_ldo - vtarget);
     uint32_t next_sample_ms = DRIVE_LOG_MS;
     while (true) {
         uint32_t t_rel = millis() - t_start;
         if (t_rel >= hold_ms) break;
         if (t_rel >= next_sample_ms) {
-            float vm = readLDO();
-            float e  = fabs(vm - vtarget);
+            SmaRead s = readSma();
+            float e  = fabs(s.v_ldo - vtarget);
             if (e > max_err) max_err = e;
             Serial.print(t_rel);   Serial.print('\t');
             Serial.print(vtarget, 4); Serial.print('\t');
-            Serial.println(vm, 4);
+            Serial.print(s.v_ldo, 4); Serial.print('\t');
+            Serial.print(s.i * 1000.0f, 2); Serial.print('\t');
+            if (isnan(s.r)) Serial.println(F("--")); else Serial.println(s.r, 3);
             next_sample_ms += DRIVE_LOG_MS;
         }
     }
 
+    SmaRead sf = readSma();          // final electrical state before release
     setDACraw(0);
     digitalWrite(MOSFET_PIN, LOW);   // release load-enable - return to safe state
     uint32_t t_done = millis();
-    float v_final = readLDO();
 
-    Serial.print(F("[DRIVE] done V_final=")); Serial.print(v_final, 4);
-    Serial.print(F(" max_err="));
+    Serial.print(F("[DRIVE] done V_final=")); Serial.print(sf.v_ldo, 4);
+    Serial.print(F(" I_final=")); Serial.print(sf.i * 1000.0f, 2); Serial.print(F("mA"));
+    Serial.print(F(" R_final="));
+    if (isnan(sf.r)) Serial.print(F("--")); else Serial.print(sf.r, 3);
+    Serial.print(F("ohm max_err="));
     Serial.print(max_err * 1000.0f, 1);       Serial.print(F("mV"));
     Serial.print(F(" elapsed_ms="));          Serial.println(t_done - t_start);
 }
@@ -383,6 +433,45 @@ static void cmdStep(uint16_t code, uint32_t ms) {
     Serial.print(F("[STEP] done V_final=")); Serial.println(readLDO(), 4);
 }
 
+// Hardware-triggered step for scope capture. Settles the DAC at `code_from`
+// (the pre-step baseline, default 0), then at t0 raises TRIG_PIN and *immediately*
+// writes `code_to` raw. A scope armed single-shot on the C1 rising edge captures
+// the V_LDO transient. After `ms`, DAC -> 0 and TRIG_PIN -> LOW so the next shot
+// can re-arm. MOSFET state is left untouched: the caller picks loaded vs unloaded
+// with `mosfet on|off` beforehand.
+static void cmdFire(uint16_t code_to, uint32_t ms, uint16_t code_from) {
+    // Establish + settle the pre-step baseline.
+    setDACraw(code_from);
+    settleWait();                       // honor the ~100 ms LDO soft-start
+    digitalWrite(TRIG_PIN, LOW);
+    delay(20);                          // quiet pre-trigger baseline on the scope
+
+    Serial.print(F("[FIRE] from="));  Serial.print(code_from);
+    Serial.print(F(" to="));          Serial.print(code_to);
+    Serial.print(F(" ms="));          Serial.print(ms);
+    Serial.print(F(" mosfet="));      Serial.println(digitalRead(MOSFET_PIN) ? F("on") : F("off"));
+
+    // t0: trigger edge, then the DAC step. The I2C write lands a few hundred us
+    // later -> the C2 (DAC node) trace shows the move just right of the C1 edge.
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(5);
+    setDACraw(code_to);
+
+    uint32_t t0 = millis();
+    while (millis() - t0 < ms) { /* hold; scope is acquiring */ }
+    SmaRead sf = readSma();             // settled electrical state before release
+
+    setDACraw(0);
+    digitalWrite(TRIG_PIN, LOW);        // re-arm for next shot
+
+    Serial.print(F("[FIRE] done V_final=")); Serial.print(sf.v_ldo, 4);
+    Serial.print(F("V V_pred="));            Serial.print(codeToVldo(code_to), 4);
+    Serial.print(F("V I_final="));           Serial.print(sf.i * 1000.0f, 2);
+    Serial.print(F("mA R_final="));
+    if (isnan(sf.r)) Serial.print(F("--")); else Serial.print(sf.r, 3);
+    Serial.println(F("ohm"));
+}
+
 static void cmdInfo() {
     Serial.println(F("\n== SMA_Driver_PIO state (analytical model) =="));
     Serial.print(F("V_LDO = V_OFFSET + (VDD/4095)*code"));
@@ -397,7 +486,14 @@ static void cmdInfo() {
         Serial.print(ADC_VREF_V, 3); Serial.println(F(" V"));
     Serial.print(F("DAC code          : ")); Serial.print(currentCode);
         Serial.print(F("  (V_pred=")); Serial.print(codeToVldo(currentCode), 3); Serial.println(F(" V)"));
-    Serial.print(F("V_LDO measured    : ")); Serial.print(readLDO(), 3); Serial.println(F(" V"));
+    SmaRead s = readSma();
+    Serial.print(F("V_LDO measured    : ")); Serial.print(s.v_ldo, 3); Serial.println(F(" V"));
+    Serial.print(F("I sense (INA296A) : ")); Serial.print(s.i * 1000.0f, 2);
+        Serial.print(F(" mA  (gain=")); Serial.print(INA_GAIN, 1);
+        Serial.print(F(" V/V, shunt=")); Serial.print(R_SHUNT_OHM * 1000.0f, 1);
+        Serial.print(F(" mOhm, scale=")); Serial.print(INA_GAIN * R_SHUNT_OHM, 3); Serial.println(F(" V/A)"));
+    Serial.print(F("V_sma / R_sma     : ")); Serial.print(s.v_sma, 3); Serial.print(F(" V  /  "));
+        if (isnan(s.r)) Serial.println(F("-- ohm (I < floor)")); else { Serial.print(s.r, 3); Serial.println(F(" ohm")); }
     Serial.print(F("MOSFET            : ")); Serial.println(digitalRead(MOSFET_PIN) ? F("HIGH (load on)") : F("LOW (load off)"));
 }
 
@@ -412,8 +508,12 @@ void setup() {
     pinMode(MOSFET_PIN, OUTPUT);
     digitalWrite(MOSFET_PIN, LOW);     // load OFF until operator enables
 
+    pinMode(TRIG_PIN, OUTPUT);
+    digitalWrite(TRIG_PIN, LOW);       // scope trigger idle LOW (re-armed each shot)
+
     analogReadResolution(ADC_RES_BITS);
     for (int i = 0; i < 10; i++) analogRead(FB_PIN);
+    for (int i = 0; i < 10; i++) analogRead(ISENSE_PIN);   // prime INA296A input (A1)
 
     Wire.begin();
 
@@ -458,10 +558,15 @@ void setup() {
     Serial.println(F("  sweep [codestep]   Raw-code sweep, pred vs meas (TSV)"));
     Serial.println(F("  csv   [codestep]   Same as sweep (CSV)"));
     Serial.println(F("  step <code> [ms]   Log LDO settle transient (10 ms cadence)"));
+    Serial.println(F("  fire <code> [ms] [from]  Scope-triggered step: TRIG_PIN edge at DAC write"));
     Serial.println(F("  vdd <V>            Set MCP4728 VDD (slope)"));
     Serial.println(F("  offset <V>         Set V_OFFSET = IREF*R_series (intercept)"));
     Serial.println(F("  aref <V>           Set ADC Vref+ (1-pt cal; default 3.145 V)"));
-    Serial.println(F("  info               Print state"));
+    Serial.println(F("  gain <V/V>         Set INA296A gain (default 10 = A1 variant)"));
+    Serial.println(F("  shunt <ohm>        Set shunt resistance (default 0.1 = 100 mOhm)"));
+    Serial.println(F("  ioffset <V>        Set INA296A 0 A output offset (default 0, REF=GND)"));
+    Serial.println(F("  info               Print state (incl. I / V_sma / R)"));
+    Serial.println(F("  reset | reboot     Safe-state + soft-reboot the MCU (port re-enumerates)"));
     Serial.println();
 }
 
@@ -482,6 +587,19 @@ void loop() {
     if (low == "read")  { cmdRead();              return; }
     if (low == "sweep") { cmdSweep(128, false);   return; }
     if (low == "csv")   { cmdSweep(128, true);    return; }
+    if (low == "reset" || low == "reboot") {
+        // Software reset: return the rig to a safe state, then restart the MCU.
+        // Recovers from a wedged logical state without the physical button. (A
+        // truly hung firmware can't reach this — pulse DTR from the host then,
+        // or press RST.) The USB-CDC port drops on reset; the host must reopen.
+        digitalWrite(MOSFET_PIN, LOW);   // load OFF first
+        setDACraw(0);                    // DAC to 0 V
+        digitalWrite(TRIG_PIN, LOW);
+        Serial.println(F("[RESET] rebooting MCU ..."));
+        Serial.flush();
+        delay(50);
+        NVIC_SystemReset();              // CMSIS: never returns
+    }
 
     if (low.startsWith("mosfet ")) {
         String arg = low.substring(7); arg.trim();
@@ -521,6 +639,29 @@ void loop() {
         Serial.print(F("ADC_VREF_V=")); Serial.print(ADC_VREF_V, 4); Serial.println(F(" V"));
         return;
     }
+    if (low.startsWith("gain ")) {                 // INA296A gain (V/V)
+        float g = in.substring(5).toFloat();
+        if (g < 1.0f || g > 1000.0f) { Serial.println(F("Range: 1-1000 V/V")); return; }
+        INA_GAIN = g;
+        Serial.print(F("INA_GAIN=")); Serial.print(INA_GAIN, 1);
+        Serial.print(F(" V/V  -> I scale ")); Serial.print(INA_GAIN * R_SHUNT_OHM, 3); Serial.println(F(" V/A"));
+        return;
+    }
+    if (low.startsWith("shunt ")) {                // shunt resistance (ohm)
+        float r = in.substring(6).toFloat();
+        if (r <= 0.0f || r > 10.0f) { Serial.println(F("Range: >0 - 10 ohm")); return; }
+        R_SHUNT_OHM = r;
+        Serial.print(F("R_SHUNT=")); Serial.print(R_SHUNT_OHM * 1000.0f, 1);
+        Serial.print(F(" mOhm -> I scale ")); Serial.print(INA_GAIN * R_SHUNT_OHM, 3); Serial.println(F(" V/A"));
+        return;
+    }
+    if (low.startsWith("ioffset ")) {              // INA296A 0 A output (V)
+        float v = in.substring(8).toFloat();
+        if (v < -1.0f || v > 3.3f) { Serial.println(F("Range: -1.0 - 3.3 V")); return; }
+        ISENSE_OFFSET_V = v;
+        Serial.print(F("ISENSE_OFFSET=")); Serial.print(ISENSE_OFFSET_V, 4); Serial.println(F(" V"));
+        return;
+    }
     if (low.startsWith("sweep ")) {
         int s = in.substring(6).toInt();
         cmdSweep(s, false);
@@ -541,6 +682,26 @@ void loop() {
         if (c > 4095) c = 4095;
         if (ms == 0 || ms > 10000) ms = 1200;
         cmdStep(c, ms);
+        return;
+    }
+    if (low.startsWith("fire ")) {
+        // fire <code_to> [ms] [code_from]   (scope-triggered step)
+        String rest = in.substring(5); rest.trim();
+        int s1 = rest.indexOf(' ');
+        uint16_t code_to, code_from = 0; uint32_t ms = 500;
+        if (s1 < 0) { code_to = (uint16_t)rest.toInt(); }
+        else {
+            code_to = (uint16_t)rest.substring(0, s1).toInt();
+            String r2 = rest.substring(s1 + 1); r2.trim();
+            int s2 = r2.indexOf(' ');
+            if (s2 < 0) { ms = (uint32_t)r2.toInt(); }
+            else { ms = (uint32_t)r2.substring(0, s2).toInt();
+                   code_from = (uint16_t)r2.substring(s2 + 1).toInt(); }
+        }
+        if (code_to   > 4095) code_to   = 4095;
+        if (code_from > 4095) code_from = 4095;
+        if (ms == 0 || ms > 10000) ms = 500;
+        cmdFire(code_to, ms, code_from);
         return;
     }
     if (low.startsWith("drive ")) {

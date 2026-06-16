@@ -135,8 +135,9 @@ human-readable lines or TSV (parsable). 115200 baud.
 | `<voltage>`        | Open-loop set LDO output. Bare-number shortcut for `set`. |
 | `set <V>`          | Same as above. |
 | `code <N>`         | Set raw DAC code 0..4095 (debug). |
-| `read`             | Read LDO output (averaged 64×). |
-| `drive <V> <ms>`   | Apply `V` for `ms` milliseconds, then return to 0. Logs feedback every 10 ms during the hold. SMA actuation primitive. |
+| `read`             | Read LDO output + **SMA current (INA296A), V_sma, R_sma** (averaged 64×). |
+| `drive <V> <ms>`   | Apply `V` for `ms` milliseconds, then return to 0. Logs V/I/R every 10 ms during the hold. SMA actuation primitive. |
+| `fire <code> [ms] [from]` | **Scope-triggered step**: pulse `TRIG_PIN` (PJ_11 / PWM4) at the DAC write (= scope t₀), hold `ms`, return to 0. Optional `from` sets the pre-step baseline code. MOSFET left as-is. Used by `LDO_Characterization/`. |
 | `mosfet on \| off` | Load-enable MOSFET (default `off` at boot). |
 | `sweep [codestep]` | Raw-code diagnostic sweep across the V range, TSV (`dac_code`, `v_pred`, `v_ldo_meas`). |
 | `csv [codestep]`   | Same as sweep, CSV format. |
@@ -144,17 +145,27 @@ human-readable lines or TSV (parsable). 115200 baud.
 | `vdd <V>`          | Set MCP4728 VDD — the **slope** of `V_LDO` vs code (default 5.5). Session-scoped, not persisted. |
 | `offset <V>`       | Set `V_OFFSET = IREF·R_SERIES` — the **intercept** of the transfer function (default ≈ 0.31 V). Trim to the meter. |
 | `aref <V>`         | Set the H7 ADC Vref+ (1-pt readback cal; default 3.145 V). |
-| `info`             | Print current state. |
+| `gain <V/V>`       | Set INA296A gain (default 10 = A1 variant). |
+| `shunt <ohm>`      | Set shunt resistance (default 0.1 = 100 mΩ). |
+| `ioffset <V>`      | Set INA296A 0 A output offset (default 0; REF=GND). |
+| `info`             | Print current state (incl. I / V_sma / R). |
+
+### Current / resistance sense (INA296A)
+
+After the LDO output a **100 mΩ shunt + INA296A (A1, 10 V/V)** reads SMA current on
+**A1** at **1 V/A**. `A0` taps *before* the shunt (= `V_ldo`), so firmware reports
+`I`, `V_sma = V_ldo − I·R_shunt`, and `R_sma = V_sma / I` (NaN below 1 mA). The
+`gain` / `shunt` / `ioffset` commands trim the conversion to the meter.
 
 ### `drive` output format
 
 ```
 [DRIVE] start V=2.500 t_ms=4000
-t_rel_ms\tV_set\tV_meas
-0\t2.5000\t2.4870
-10\t2.5000\t2.4985
+t_rel_ms\tV_set\tV_meas\tI_mA\tR_ohm
+0\t2.5000\t2.4870\t497.40\t4.952
+10\t2.5000\t2.4985\t499.10\t4.957
 ...
-[DRIVE] done V_final=0.012 max_err=+3.2mV elapsed_ms=4007
+[DRIVE] done V_final=0.012 I_final=2.40mA R_final=-- ohm max_err=+3.2mV elapsed_ms=4007
 ```
 
 Lines containing `[` are dropped by the standard host parser in

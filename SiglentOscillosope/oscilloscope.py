@@ -403,9 +403,25 @@ class Oscilloscope:
             buf += self._recv_some()
         nbytes = int(buf[idx + 2:idx + 2 + ndig])
         start = idx + 2 + ndig
-        while len(buf) < start + nbytes:
+        end = start + nbytes
+        while len(buf) < end:
             buf += self._recv_some()
-        return bytes(buf[start:start + nbytes])
+        data = bytes(buf[start:end])
+        # Drain the trailing terminator the scope appends after the binary block.
+        # Siglent sends it DOUBLED ("\n\n"); any leftover byte desyncs the next
+        # query on the same socket, so a 2nd/3rd channel WF? returns 0 samples.
+        # Length-agnostic: non-blocking drain until the socket goes briefly quiet.
+        prev_to = self.sock.gettimeout()
+        self.sock.settimeout(0.1)
+        try:
+            while True:
+                if not self.sock.recv(4096):
+                    break
+        except Exception:
+            pass
+        finally:
+            self.sock.settimeout(prev_to)
+        return data
 
     @staticmethod
     def _extract_num(reply: str) -> Optional[float]:

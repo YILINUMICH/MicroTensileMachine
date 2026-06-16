@@ -1,0 +1,62 @@
+# LDO_Characterization — experiment configuration
+# All knobs for the automated DAC->LDO settling + ripple run live here.
+
+serial:                      # Portenta H7 (SMA_Driver_PIO firmware)
+  port: COM8                 # COM8 = Portenta H7 (COM5 = Zaber). See root README.
+  baud: 115200
+  timeout_s: 2.0
+  ack_timeout_s: 5.0         # max wait for a firmware reply line
+
+scope:                       # SDS2000X Plus (SiglentOscillosope module)
+  host: "169.254.111.4"      # pinned (skips the failed-default + sweep). null -> auto-detect.
+  port: 5025
+  channels:
+    trigger: C1              # TRIG_PIN (PJ_11 = PWM4) rising edge = t0
+    dac:     C2              # MCP4728 V_OUT (DAC node)
+    output:  C3              # TPS7A57 V_OUT (LDO output)
+    current: null           # INA296A OUT (shunt current). null = not probed (current physically off).
+                            #   Set back to C4 when the INA296A output is wired to scope CH4.
+  trigger_level_v: 1.0       # edge threshold for the 3.3 V logic pulse
+  trigger_slope: POS
+  timebase_s: 0.05           # 50 ms/div -> 500 ms window, ~250 ms post-trigger.
+                             #   20 ms/div (200 ms window, 100 ms post-trig) cut the settle
+                             #   off mid-rise (scope "final" read 1.87 V vs the true 2.5 V).
+                             #   The settle is ~150 ms+, so give it room.
+  memory_depth: "10K"        # ACQ:MDEP — caps WF? record size. {10K|100K|1M|10M|100M}.
+                             #   10K over 500 ms = 50 us/sample (plenty for a ~150 ms settle).
+  codes_per_div: 25.0        # WF? DAT2 scaling; VERIFY against Programming Guide
+
+# Analytical transfer (must match SMA_Driver_PIO firmware): V_LDO = V_OFFSET + (VDD/4095)*code
+model:
+  v_offset: 0.31             # IREF*R_SERIES intercept (V)
+  vdd: 5.5                   # MCP4728 full-scale rail = slope (V)
+
+# INA296A current sense (LDO out -> shunt -> SMA). I = (V_ina - offset)/(gain*shunt).
+# A1 variant = 10 V/V, 100 mOhm shunt -> 1.0 V/A. Must match SMA_Driver_PIO firmware.
+isense:
+  gain_v_per_v: 10.0         # INA296A1
+  shunt_ohm: 0.1             # 100 mOhm
+  offset_v: 0.0              # 0 A output (unidirectional, REF=GND)
+  # scale (V/A) = gain*shunt = 1.0; current = (v_ina - offset_v)/scale
+
+experiment:
+  hold_ms: 500               # firmware `fire` hold (>= full settle + margin)
+  repeats: 3                 # shots per (step, load) for repeatability
+  settle_window_frac: 0.15   # fraction of record (tail) used as "final value"
+  loads:                     # mosfet state per pass
+    - unloaded               # mosfet off
+    - loaded                 # mosfet on (fixed power resistor)
+  # Settling step matrix. from_v / to_v in volts; codes computed from `model`.
+  steps:
+    - {name: small_up, from_v: 0.5, to_v: 1.0}
+    - {name: mid_up,   from_v: 0.5, to_v: 2.5}
+    - {name: large_up, from_v: 0.5, to_v: 5.0}
+    - {name: large_dn, from_v: 5.0, to_v: 0.5}
+
+ripple:                      # steady-state ripple/noise pass
+  enabled: true
+  hold_v: 2.5                # steady output during ripple measurement
+  n_reads: 200               # PAVA? burst length for PKPK / STDEV stats
+  loads: [unloaded, loaded]
+
+output_dir: data             # per-run dir created as data/ldo_<timestamp>/
