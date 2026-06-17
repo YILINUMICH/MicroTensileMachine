@@ -1,0 +1,480 @@
+[
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_small_up_r0.csv",
+    "load": "unloaded",
+    "step": "small_up",
+    "from_v": 0.5,
+    "to_v": 1.0,
+    "code_from": 141,
+    "code_to": 514,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=1.0282V V_pred=1.0004V I_final=222.17mA R_final=4.528ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_small_up_r1.csv",
+    "load": "unloaded",
+    "step": "small_up",
+    "from_v": 0.5,
+    "to_v": 1.0,
+    "code_from": 141,
+    "code_to": 514,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=1.0280V V_pred=1.0004V I_final=222.75mA R_final=4.515ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_small_up_r2.csv",
+    "load": "unloaded",
+    "step": "small_up",
+    "from_v": 0.5,
+    "to_v": 1.0,
+    "code_from": 141,
+    "code_to": 514,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=1.0277V V_pred=1.0004V I_final=222.17mA R_final=4.526ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_mid_up_r0.csv",
+    "load": "unloaded",
+    "step": "mid_up",
+    "from_v": 0.5,
+    "to_v": 2.5,
+    "code_from": 141,
+    "code_to": 1631,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=2.5315V V_pred=2.5006V I_final=224.92mA R_final=11.155ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_mid_up_r1.csv",
+    "load": "unloaded",
+    "step": "mid_up",
+    "from_v": 0.5,
+    "to_v": 2.5,
+    "code_from": 141,
+    "code_to": 1631,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=2.5297V V_pred=2.5006V I_final=222.48mA R_final=11.270ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_mid_up_r2.csv",
+    "load": "unloaded",
+    "step": "mid_up",
+    "from_v": 0.5,
+    "to_v": 2.5,
+    "code_from": 141,
+    "code_to": 1631,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=2.5283V V_pred=2.5006V I_final=225.64mA R_final=11.105ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_large_up_r0.csv",
+    "load": "unloaded",
+    "step": "large_up",
+    "from_v": 0.5,
+    "to_v": 5.0,
+    "code_from": 141,
+    "code_to": 3492,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=5.0331V V_pred=5.0001V I_final=229.53mA R_final=21.828ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_large_up_r1.csv",
+    "load": "unloaded",
+    "step": "large_up",
+    "from_v": 0.5,
+    "to_v": 5.0,
+    "code_from": 141,
+    "code_to": 3492,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=5.0324V V_pred=5.0001V I_final=227.41mA R_final=22.029ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_large_up_r2.csv",
+    "load": "unloaded",
+    "step": "large_up",
+    "from_v": 0.5,
+    "to_v": 5.0,
+    "code_from": 141,
+    "code_to": 3492,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=5.0304V V_pred=5.0001V I_final=227.49mA R_final=22.012ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_large_dn_r0.csv",
+    "load": "unloaded",
+    "step": "large_dn",
+    "from_v": 5.0,
+    "to_v": 0.5,
+    "code_from": 3492,
+    "code_to": 141,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=0.5250V V_pred=0.4994V I_final=221.21mA R_final=2.274ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_large_dn_r1.csv",
+    "load": "unloaded",
+    "step": "large_dn",
+    "from_v": 5.0,
+    "to_v": 0.5,
+    "code_from": 3492,
+    "code_to": 141,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=0.5280V V_pred=0.4994V I_final=222.34mA R_final=2.275ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_unloaded_large_dn_r2.csv",
+    "load": "unloaded",
+    "step": "large_dn",
+    "from_v": 5.0,
+    "to_v": 0.5,
+    "code_from": 3492,
+    "code_to": 141,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=0.5249V V_pred=0.4994V I_final=222.57mA R_final=2.258ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_small_up_r0.csv",
+    "load": "loaded",
+    "step": "small_up",
+    "from_v": 0.5,
+    "to_v": 1.0,
+    "code_from": 141,
+    "code_to": 514,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=1.0883V V_pred=1.0004V I_final=221.25mA R_final=4.819ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_small_up_r1.csv",
+    "load": "loaded",
+    "step": "small_up",
+    "from_v": 0.5,
+    "to_v": 1.0,
+    "code_from": 141,
+    "code_to": 514,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=1.0887V V_pred=1.0004V I_final=222.83mA R_final=4.786ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_small_up_r2.csv",
+    "load": "loaded",
+    "step": "small_up",
+    "from_v": 0.5,
+    "to_v": 1.0,
+    "code_from": 141,
+    "code_to": 514,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=1.0881V V_pred=1.0004V I_final=224.35mA R_final=4.750ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_mid_up_r0.csv",
+    "load": "loaded",
+    "step": "mid_up",
+    "from_v": 0.5,
+    "to_v": 2.5,
+    "code_from": 141,
+    "code_to": 1631,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=2.5903V V_pred=2.5006V I_final=224.64mA R_final=11.431ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_mid_up_r1.csv",
+    "load": "loaded",
+    "step": "mid_up",
+    "from_v": 0.5,
+    "to_v": 2.5,
+    "code_from": 141,
+    "code_to": 1631,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=2.5876V V_pred=2.5006V I_final=224.85mA R_final=11.408ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_mid_up_r2.csv",
+    "load": "loaded",
+    "step": "mid_up",
+    "from_v": 0.5,
+    "to_v": 2.5,
+    "code_from": 141,
+    "code_to": 1631,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=2.5917V V_pred=2.5006V I_final=224.01mA R_final=11.469ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_large_up_r0.csv",
+    "load": "loaded",
+    "step": "large_up",
+    "from_v": 0.5,
+    "to_v": 5.0,
+    "code_from": 141,
+    "code_to": 3492,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=5.0846V V_pred=5.0001V I_final=226.86mA R_final=22.313ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_large_up_r1.csv",
+    "load": "loaded",
+    "step": "large_up",
+    "from_v": 0.5,
+    "to_v": 5.0,
+    "code_from": 141,
+    "code_to": 3492,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=5.0853V V_pred=5.0001V I_final=229.06mA R_final=22.101ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_large_up_r2.csv",
+    "load": "loaded",
+    "step": "large_up",
+    "from_v": 0.5,
+    "to_v": 5.0,
+    "code_from": 141,
+    "code_to": 3492,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=5.0826V V_pred=5.0001V I_final=227.79mA R_final=22.213ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_large_dn_r0.csv",
+    "load": "loaded",
+    "step": "large_dn",
+    "from_v": 5.0,
+    "to_v": 0.5,
+    "code_from": 3492,
+    "code_to": 141,
+    "repeat": 0,
+    "fire_reply": "[FIRE] done V_final=0.5882V V_pred=0.4994V I_final=219.99mA R_final=2.574ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_large_dn_r1.csv",
+    "load": "loaded",
+    "step": "large_dn",
+    "from_v": 5.0,
+    "to_v": 0.5,
+    "code_from": 3492,
+    "code_to": 141,
+    "repeat": 1,
+    "fire_reply": "[FIRE] done V_final=0.5886V V_pred=0.4994V I_final=218.82mA R_final=2.590ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "settling",
+    "file": "settle_loaded_large_dn_r2.csv",
+    "load": "loaded",
+    "step": "large_dn",
+    "from_v": 5.0,
+    "to_v": 0.5,
+    "code_from": 3492,
+    "code_to": 141,
+    "repeat": 2,
+    "fire_reply": "[FIRE] done V_final=0.5853V V_pred=0.4994V I_final=223.71mA R_final=2.516ohm",
+    "scope_complete": true,
+    "samples": 10000,
+    "channel_counts": {
+      "v_trig": 10000,
+      "v_dac": 10000,
+      "v_out": 10000
+    }
+  },
+  {
+    "kind": "ripple",
+    "file": "",
+    "load": "unloaded",
+    "hold_v": 2.5,
+    "code": 1631,
+    "pkpk_mean_v": 0.133,
+    "pkpk_max_v": 0.133,
+    "std_mean_v": 0.01409,
+    "n": 200
+  },
+  {
+    "kind": "ripple",
+    "file": "",
+    "load": "loaded",
+    "hold_v": 2.5,
+    "code": 1631,
+    "pkpk_mean_v": 0.133,
+    "pkpk_max_v": 0.133,
+    "std_mean_v": 0.00931,
+    "n": 200
+  }
+]

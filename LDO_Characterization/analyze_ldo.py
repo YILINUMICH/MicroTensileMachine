@@ -124,6 +124,56 @@ def settle_metrics(t, v_out, t0: float, settle_frac: float = 0.15) -> dict:
     }
 
 
+def crossing_time(t, v, t0: float, frac: float = 0.5,
+                  settle_frac: float = 0.15) -> Optional[float]:
+    """Absolute time at which channel `v` first reaches `frac` of its
+    base->final transition after t0. Returns None if there's no resolvable step.
+    Each channel uses its OWN baseline/final (the DAC node and LDO output sit at
+    different absolute voltages)."""
+    n = len(v)
+    if n == 0:
+        return None
+    v_final = float(np.mean(v[int(n * (1 - settle_frac)):]))
+    pre = v[t < t0]
+    v_base = float(np.mean(pre)) if len(pre) >= 3 else float(np.mean(v[:max(3, n // 20)]))
+    span = v_final - v_base
+    if abs(span) < 1e-9:
+        return None
+    target = v_base + frac * span
+    post = t >= t0
+    seg_t, seg_v = t[post], v[post]
+    if len(seg_t) == 0:
+        return None
+    idx = np.where(seg_v >= target)[0] if span > 0 else np.where(seg_v <= target)[0]
+    if len(idx) == 0:
+        return None
+    return float(seg_t[idx[0]])
+
+
+def cascade_metrics(t, v_dac, v_out, t0: float) -> dict:
+    """Decompose the response into its two stages, using the 50% crossing of each
+    channel as the 'it moved' instant:
+
+      trigger (t0)  --[I2C write latency]-->  DAC steps  --[regulator]-->  LDO follows
+
+    `trig_to_dac_ms` is the firmware-fires-edge -> DAC-output-changes delay (the
+    MCP4728 is written over I2C, so this is dominated by the I2C transaction +
+    firmware overhead). `dac_to_ldo_ms` is the DAC-moves -> LDO-output-follows
+    delay (the regulator's response, 50%->50%). Both are NaN if a step isn't
+    resolvable. NOTE: at a slow timebase the I2C delay can be < 1 sample — shrink
+    `timebase_s` to resolve it (the LDO follow is the slow part and stays visible).
+    """
+    t_dac = crossing_time(t, v_dac, t0, 0.5)
+    t_ldo = crossing_time(t, v_out, t0, 0.5)
+    trig_to_dac = (t_dac - t0) if t_dac is not None else float("nan")
+    dac_to_ldo = (t_ldo - t_dac) if (t_dac is not None and t_ldo is not None) else float("nan")
+    return {
+        "t_dac": t_dac, "t_ldo": t_ldo,      # absolute (for plotting); not in summary
+        "trig_to_dac_ms": trig_to_dac * 1e3 if trig_to_dac == trig_to_dac else float("nan"),
+        "dac_to_ldo_ms": dac_to_ldo * 1e3 if dac_to_ldo == dac_to_ldo else float("nan"),
+    }
+
+
 def current_metrics(t, i_a, t0: float, settle_frac: float = 0.15) -> dict:
     """Steady current, inrush peak, and inrush ratio from the INA296A channel."""
     n = len(i_a)
@@ -155,9 +205,14 @@ def analyze_run(run_dir: Path, trig_level: float = 1.0) -> Path:
         if t0 is None:
             t0 = float(t[0])
         mets = settle_metrics(t, vout, t0)
+        casc = cascade_metrics(t, vdac, vout, t0)
+        mets.update({k: v for k, v in casc.items() if k in ("trig_to_dac_ms", "dac_to_ldo_ms")})
         if i_a is not None:
             mets.update(current_metrics(t, i_a, t0))
-        captures[(m["step"], m["load"], m["repeat"])] = (t, vout, t0, mets, i_a)
+        captures[(m["step"], m["load"], m["repeat"])] = {
+            "t": t, "vdac": vdac, "vout": vout, "t0": t0,
+            "t_dac": casc["t_dac"], "t_ldo": casc["t_ldo"], "mets": mets, "i_a": i_a,
+        }
         rows.append({**{k: m[k] for k in ("step", "load", "from_v", "to_v",
                                           "code_from", "code_to", "repeat")},
                      **{k: round(v, 4) for k, v in mets.items()}})
@@ -173,6 +228,7 @@ def analyze_run(run_dir: Path, trig_level: float = 1.0) -> Path:
         print(f"  summary -> {summary_path}")
 
     _plot_per_step(run_dir, captures, settling)
+    _plot_cascade(run_dir, captures, settling)
     _plot_overview(run_dir, captures, settling)
     if ripple:
         _plot_ripple(run_dir, ripple)
@@ -200,7 +256,8 @@ def _plot_one(ax, captures, step, settling):
             key = (step, load, rep)
             if key not in captures:
                 continue
-            t, vout, t0, mets, i_a = captures[key]
+            c = captures[key]
+            t, vout, t0, mets, i_a = c["t"], c["vout"], c["t0"], c["mets"], c["i_a"]
             ax.plot((t - t0) * 1e3, vout, color=colors.get(load, "gray"),
                     alpha=0.5 if j else 0.9, lw=1.0,
                     label=load if j == 0 else None)
@@ -230,6 +287,53 @@ def _plot_per_step(run_dir, captures, settling):
         _plot_one(ax, captures, step, settling)
         fig.tight_layout()
         out = run_dir / f"settling_{step}.png"
+        fig.savefig(out, dpi=130)
+        plt.close(fig)
+        print(f"  plot -> {out}")
+
+
+def _fmt_ms(x):
+    return f"{x:.1f} ms" if x == x else "n/a"
+
+
+def _plot_cascade(run_dir, captures, settling):
+    """One readable plot per step showing the CASCADE: trigger -> DAC (I2C) ->
+    LDO follow, with the two delays marked. Uses one representative shot
+    (unloaded, lowest repeat) so the sequence is clear instead of overlaid."""
+    for step in _step_names(settling):
+        key = None
+        for load in ("unloaded", "loaded"):
+            cand = sorted([k for k in captures if k[0] == step and k[1] == load],
+                          key=lambda k: k[2])
+            if cand:
+                key = cand[0]
+                break
+        if key is None:
+            continue
+        c = captures[key]
+        t, t0, mets = c["t"], c["t0"], c["mets"]
+        x = (t - t0) * 1e3
+        fig, ax = plt.subplots(figsize=(8, 4.4))
+        ax.plot(x, c["vdac"], color="tab:green", lw=1.3, label="DAC node (C2)")
+        ax.plot(x, c["vout"], color="tab:blue", lw=1.3, label="LDO out (C3)")
+        ax.axvline(0, color="k", lw=1.0, alpha=0.7)
+        ax.text(0, ax.get_ylim()[1], " trigger", color="k", va="top", fontsize=8)
+        for tx, col, lbl in ((c["t_dac"], "tab:green", "DAC steps"),
+                             (c["t_ldo"], "tab:blue", "LDO 50%")):
+            if tx is not None:
+                xm = (tx - t0) * 1e3
+                ax.axvline(xm, color=col, ls="--", lw=0.9, alpha=0.8)
+                ax.text(xm, ax.get_ylim()[1], f" {lbl}", color=col, va="top",
+                        rotation=90, fontsize=7)
+        td, dl = mets.get("trig_to_dac_ms"), mets.get("dac_to_ldo_ms")
+        ax.set_title(f"{step} [{key[1]}]:  trig→DAC = {_fmt_ms(td)} (I²C),  "
+                     f"DAC→LDO = {_fmt_ms(dl)}")
+        ax.set_xlabel("t since trigger (ms)")
+        ax.set_ylabel("V")
+        ax.grid(alpha=0.3)
+        ax.legend(fontsize=8, loc="lower right")
+        fig.tight_layout()
+        out = run_dir / f"cascade_{step}.png"
         fig.savefig(out, dpi=130)
         plt.close(fig)
         print(f"  plot -> {out}")

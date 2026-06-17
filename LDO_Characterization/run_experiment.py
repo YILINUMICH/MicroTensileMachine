@@ -96,27 +96,97 @@ def run_settling(scope, h7, cfg, run_dir: Path, manifest: list) -> None:
         for step in exp["steps"]:
             code_from = volts_to_code(step["from_v"], model["v_offset"], model["vdd"])
             code_to = volts_to_code(step["to_v"], model["v_offset"], model["vdd"])
+            # Size the DAC + output channels to THIS step's voltage so the trace
+            # fills the screen without clipping (the 5 V step rails at +127 on a
+            # fixed 1 V/div). Per-step so small/mid steps keep fine resolution.
+            vmax = max(abs(step["from_v"]), abs(step["to_v"]))
+            vdiv_dac = st.set_channel_range(scope, chans["dac"], vmax)
+            vdiv_out = st.set_channel_range(scope, chans["output"], vmax)
+            print(f"  [{step['name']}] vertical: {chans['dac']}/{chans['output']} "
+                  f"-> {vdiv_dac}/{vdiv_out} V/div for Vmax={vmax} V")
             for rep in range(int(exp["repeats"])):
                 tag = f"settle_{load}_{step['name']}_r{rep}"
                 print(f"  [{tag}] {step['from_v']}->{step['to_v']} V "
                       f"(code {code_from}->{code_to})")
-                st.arm_single(scope, cap)
-                time.sleep(0.2)                      # let ARM take effect
-                fire_reply = h7.fire(code_to, hold_ms, code_from)
-                ok = st.wait_capture_complete(scope, timeout_s=hold_ms / 1000.0 + 5.0)
-                if not ok:
-                    print(f"    WARN: scope did not report capture complete for {tag}")
-                st.stop(scope)                       # freeze the frame for a coherent multi-channel read
-                t1, v_trig = st.capture_channel_volts(scope, chans["trigger"], cap.codes_per_div)
-                _,  v_dac  = st.capture_channel_volts(scope, chans["dac"],     cap.codes_per_div)
-                _,  v_out  = st.capture_channel_volts(scope, chans["output"],  cap.codes_per_div)
-                cols = {"t_s": t1, "v_trig": v_trig, "v_dac": v_dac, "v_out": v_out}
-                cur_ch = chans.get("current")
-                if cur_ch:
-                    _, v_ina = st.capture_channel_volts(scope, cur_ch, cap.codes_per_div)
-                    isn = cfg["isense"]
-                    scale = isn["gain_v_per_v"] * isn["shunt_ohm"]   # V/A
-                    cols["i_a"] = (v_ina - isn["offset_v"]) / scale
+                # One whole shot is wrapped so a scope hiccup (a read that times
+                # out / a block that fails to parse) RESYNCS the SCPI stream and
+                # drops just this shot, instead of an uncaught exception aborting
+                # the entire run mid-sweep. The driver also resyncs on its own
+                # errors; this is the run-level backstop.
+                fire_reply = None
+                ok = False
+                try:
+                    # Start every shot from a known-clean stream: drop any stray
+                    # bytes a prior shot's capture may have left so a desync can't
+                    # leak into THIS shot's arming (the mid_up_r0 -> r1 cascade).
+                    scope.resync()
+                    st.arm_single(scope, cap)
+                    # Wait for the PRE-TRIGGER buffer to fill before firing, else
+                    # the edge can arrive while the scope is still acquiring its
+                    # pre-trigger data and is silently ignored (~30% random misses
+                    # on a slow timebase). Scales with timebase_s. See
+                    # scope_trigger.arm_to_fire_delay_s.
+                    time.sleep(st.arm_to_fire_delay_s(cap))
+                    fire_reply = h7.fire(code_to, hold_ms, code_from)
+                    # fire() blocks through the whole hold, so the single-shot has
+                    # already triggered+stopped (or missed) by now. Short confirm,
+                    # not the ~100-query poll that bred desyncs + false timeouts.
+                    ok = st.wait_for_stop(scope, timeout_s=2.0)
+                    if not ok:
+                        print(f"    WARN: no STOP for {tag} (likely missed trigger)")
+                    st.stop(scope)                   # freeze the frame for a coherent multi-channel read
+                    t1, v_trig = st.capture_channel_volts(scope, chans["trigger"], cap.codes_per_div)
+                    _,  v_dac  = st.capture_channel_volts(scope, chans["dac"],     cap.codes_per_div)
+                    _,  v_out  = st.capture_channel_volts(scope, chans["output"],  cap.codes_per_div)
+                    cols = {"t_s": t1, "v_trig": v_trig, "v_dac": v_dac, "v_out": v_out}
+                    cur_ch = chans.get("current")
+                    if cur_ch:
+                        _, v_ina = st.capture_channel_volts(scope, cur_ch, cap.codes_per_div)
+                        isn = cfg["isense"]
+                        scale = isn["gain_v_per_v"] * isn["shunt_ohm"]   # V/A
+                        cols["i_a"] = (v_ina - isn["offset_v"]) / scale
+                except Exception as e:
+                    # Recover the link and skip this shot. resync() clears any
+                    # stale/in-flight bytes so the NEXT shot starts clean.
+                    print(f"    ERROR: {tag} failed ({type(e).__name__}: {e}) — "
+                          f"resyncing scope, skipping shot")
+                    try:
+                        scope.resync()
+                    except Exception:
+                        pass
+                    manifest.append({
+                        "kind": "settling", "file": "", "load": load,
+                        "step": step["name"], "from_v": step["from_v"], "to_v": step["to_v"],
+                        "code_from": code_from, "code_to": code_to, "repeat": rep,
+                        "fire_reply": fire_reply[-1] if fire_reply else "",
+                        "scope_complete": ok, "samples": 0, "channel_counts": {},
+                        "error": f"{type(e).__name__}: {e}",
+                    })
+                    continue
+                # Per-channel sample counts: a header-only (0-row) CSV happens when
+                # ANY channel reads 0 samples (save uses min-of-columns). Surface
+                # WHICH channel is empty + the scope state so a flaky shot is
+                # self-diagnosing instead of a silent 24-byte file. Empty trigger
+                # channel => never triggered; empty data channel only => read
+                # desync. See scope_trigger.capture_channel_volts.
+                counts = {k: len(v) for k, v in cols.items() if k != "t_s"}
+                n_min = min(counts.values())
+                if n_min == 0:
+                    empties = [k for k, c in counts.items() if c == 0]
+                    # Diagnostic-only: must NEVER abort the run. A desync here used
+                    # to throw and kill the whole sweep — guard it and resync.
+                    try:
+                        sast = scope.query("SAST?", expect="SAST").strip()
+                        inr = scope.query("INR?", expect="INR").strip()
+                    except Exception as e:
+                        sast = inr = f"<unread: {type(e).__name__}>"
+                        try:
+                            scope.resync()
+                        except Exception:
+                            pass
+                    print(f"    WARN: empty capture for {tag} — 0 samples on "
+                          f"{empties}; counts={counts}; SAST?={sast!r} INR?={inr!r} "
+                          f"(scope_complete={ok})")
                 csv_path = run_dir / f"{tag}.csv"
                 save_capture_csv(csv_path, cols)
                 manifest.append({
@@ -125,6 +195,7 @@ def run_settling(scope, h7, cfg, run_dir: Path, manifest: list) -> None:
                     "code_from": code_from, "code_to": code_to, "repeat": rep,
                     "fire_reply": fire_reply[-1] if fire_reply else "",
                     "scope_complete": ok,
+                    "samples": n_min, "channel_counts": counts,
                 })
 
 
@@ -227,7 +298,11 @@ def main() -> int:
     # --- scope ---
     from oscilloscope import Oscilloscope
     sc = cfg["scope"]
-    scope = Oscilloscope(host=sc.get("host"), port=sc.get("port", 5025), auto_open=False)
+    # Short socket timeout (2 s default): with the drain-before-query guard a
+    # desync can't cascade, but if a single read does stall we want it to fail
+    # fast and surface, not block 5 s and look frozen. Override via scope.timeout_s.
+    scope = Oscilloscope(host=sc.get("host"), port=sc.get("port", 5025),
+                         timeout=sc.get("timeout_s", 2.0), auto_open=False)
     ok = scope.connect(sc["host"]) if sc.get("host") else scope.auto_connect()
     if not ok:
         print("ERROR: could not connect to scope", file=sys.stderr)

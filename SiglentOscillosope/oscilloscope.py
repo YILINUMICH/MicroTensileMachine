@@ -341,6 +341,11 @@ class Oscilloscope:
         self._error_count = 0
         self._start_time: Optional[float] = None
         self._idn: Optional[str] = None
+        # Persistent receive buffer. The socket is framed as a continuous byte
+        # stream (NOT one recv == one reply): _read_line / _query_block pull what
+        # they need and stash the rest here, so the DOUBLED '\n\n' a WF? block
+        # leaves behind is carried to the next read instead of racing a drain.
+        self._rxbuf = bytearray()
 
         if auto_open:
             if host:
@@ -357,6 +362,7 @@ class Oscilloscope:
             s.connect((host, port))
             self.sock = s
             self.host, self.port = host, port
+            self._rxbuf.clear()          # fresh socket starts with a clean stream
             return True
         except Exception as e:
             logger.debug("Socket open to %s:%d failed: %s", host, port, e)
@@ -374,76 +380,195 @@ class Oscilloscope:
             raise RuntimeError("Socket closed by instrument")
         return chunk
 
-    def query(self, cmd: str) -> str:
-        """Send a query and return the text reply (newline-terminated, stripped)."""
+    def resync(self, quiet_s: float = 0.25, max_s: float = 3.0) -> int:
+        """Hard re-align the SCPI stream: drop the residual buffer and drain the
+        socket until the scope stays QUIET for `quiet_s` (bounded by `max_s`).
+        Returns the byte count discarded.
+
+        Why blocking-quiet, not a non-blocking skim: the reply we're flushing can
+        be a 10k-byte WF? block that is still ARRIVING. A non-blocking drain clears
+        only what landed so far, the next read picks up the middle of the same
+        block, and a validating retry just churns. Waiting for a `quiet_s` gap of
+        silence lets the whole block (which streams in within ms) flush, then
+        stops shortly after — so the stream is genuinely realigned.
+
+        Call after a read times out or a reply fails to validate; query()/
+        _query_block() use it, and run_experiment resyncs at the top of each shot.
+        """
+        dropped = len(self._rxbuf)
+        self._rxbuf.clear()
+        if not self.sock:
+            return dropped
+        prev_to = self.sock.gettimeout()
+        self.sock.settimeout(quiet_s)        # each recv waits up to quiet_s
+        t0 = time.monotonic()
+        try:
+            while time.monotonic() - t0 < max_s:
+                try:
+                    chunk = self.sock.recv(65536)
+                except (socket.timeout, BlockingIOError):
+                    break                    # quiet for quiet_s -> drained
+                if not chunk:                # peer closed
+                    break
+                dropped += len(chunk)
+        finally:
+            self.sock.settimeout(prev_to)
+        if dropped:
+            logger.debug("resync: drained %d byte(s)", dropped)
+        return dropped
+
+    def _read_line(self) -> str:
+        """Read one reply line from the buffered stream and return it stripped.
+
+        Leading terminator bytes (CR/LF) are skipped first. This is what makes
+        the doubled '\\n\\n' after a WF? block harmless WITHOUT any timing-based
+        drain: TCP preserves order, so a stray newline always sits AHEAD of the
+        next real reply — whether it was already buffered or arrives an instant
+        later, it is consumed here as a leading terminator and never mistaken for
+        an empty reply. Bytes past the line end stay in _rxbuf for the next read.
+        """
+        while True:
+            # strip any leading CR/LF already buffered (0x0A=\n, 0x0D=\r)
+            i = 0
+            n = len(self._rxbuf)
+            while i < n and self._rxbuf[i] in (0x0A, 0x0D):
+                i += 1
+            if i:
+                del self._rxbuf[:i]
+            nl = self._rxbuf.find(b"\n")
+            if nl != -1:
+                line = bytes(self._rxbuf[:nl])
+                del self._rxbuf[:nl + 1]
+                return line.decode("ascii", "replace").strip()
+            self._rxbuf += self._recv_some()   # blocks up to socket timeout
+
+    def query(self, cmd: str, expect: Optional[str] = None, tries: int = 3) -> str:
+        """Send a query and return the text reply (one line, stripped).
+
+        `expect`: a hint, NOT a hard requirement. If given and the reply lacks
+        this token, the stream MIGHT be desynced, so we `resync()` + re-issue (up
+        to `tries`). But a missing header is ALSO what a bare CHDR-OFF reply looks
+        like ('SAST?' -> 'Ready', 'C1:VDIV?' -> '1.00E+00'), which is perfectly
+        valid — so after the retries we ACCEPT the line rather than raising. This
+        keeps expect= as desync protection when headers are on (CHDR SHORT) without
+        making the whole run fail if the scope is in CHDR OFF. Only a genuine read
+        failure (timeout/closed socket) propagates.
+        """
         if not self.sock:
             raise RuntimeError("Not connected")
-        self._send(cmd)
-        buf = bytearray()
-        while b"\n" not in buf:
-            buf += self._recv_some()
-        return buf.split(b"\n", 1)[0].decode("ascii", "replace").strip()
+        last_exc: Optional[Exception] = None
+        last_line: Optional[str] = None
+        for attempt in range(max(1, tries)):
+            self._send(cmd)
+            try:
+                line = self._read_line()
+            except Exception as e:
+                # The reply may still be in flight; left buffered it would desync
+                # the next query. Drop it before retrying/propagating.
+                self.resync()
+                last_exc = e
+                continue
+            if expect and expect.upper() not in line.upper():
+                last_line = line
+                if attempt < tries - 1:
+                    logger.debug("reply %r to %r lacks %r — resync + retry %d/%d",
+                                 line[:40], cmd, expect, attempt + 1, tries)
+                    self.resync()
+                    continue
+                # Persisted across retries: almost certainly a valid bare value
+                # (CHDR OFF), not a desync. Accept it rather than failing the run.
+                logger.debug("reply %r to %r never matched %r; accepting it "
+                             "(CHDR off?)", line[:40], cmd, expect)
+                return line
+            return line
+        if last_line is not None:        # reads later failed but we had a reply
+            return last_line
+        raise last_exc or RuntimeError(f"query {cmd!r} failed after {tries} tries")
 
     def write(self, cmd: str) -> None:
         """Send a command with no reply (raw SCPI passthrough)."""
         self._send(cmd)
 
-    def _query_block(self, cmd: str) -> bytes:
+    def _query_block(self, cmd: str, tries: int = 3) -> bytes:
         """Send a query whose reply is an IEEE-488.2 definite-length block
-        (`#<n><len><bytes>`), used for waveform DAT2 transfers."""
-        self._send(cmd)
-        buf = bytearray()
-        while b"#" not in buf:
-            buf += self._recv_some()
-        idx = buf.index(b"#")
-        while len(buf) < idx + 2:
-            buf += self._recv_some()
-        ndig = int(buf[idx + 1:idx + 2])
-        while len(buf) < idx + 2 + ndig:
-            buf += self._recv_some()
-        nbytes = int(buf[idx + 2:idx + 2 + ndig])
-        start = idx + 2 + ndig
-        end = start + nbytes
-        while len(buf) < end:
-            buf += self._recv_some()
-        data = bytes(buf[start:end])
-        # Drain the trailing terminator the scope appends after the binary block.
-        # Siglent sends it DOUBLED ("\n\n"); any leftover byte desyncs the next
-        # query on the same socket, so a 2nd/3rd channel WF? returns 0 samples.
-        # Length-agnostic: non-blocking drain until the socket goes briefly quiet.
-        prev_to = self.sock.gettimeout()
-        self.sock.settimeout(0.1)
-        try:
-            while True:
-                if not self.sock.recv(4096):
-                    break
-        except Exception:
-            pass
-        finally:
-            self.sock.settimeout(prev_to)
-        return data
+        (`#<n><len><bytes>`), used for waveform DAT2 transfers.
+
+        Reads exactly `nbytes` of payload and stashes everything after it
+        (the trailing DOUBLED '\\n\\n', plus anything else) in _rxbuf, where the
+        next _read_line skips it as a leading terminator. No heuristic drain, so
+        nothing races and nothing is lost between channels.
+
+        Self-healing: with CHDR ON the scope echoes '<src>:WF DAT2,#...'. If the
+        header in front of '#' does NOT name the source we asked for, we are
+        reading a STALE reply (stream desynced one step) — return another
+        channel's samples and the desync silently leaks into the next read.
+        Instead we `resync()` and re-issue the query, up to `tries` times, so a
+        desync heals at the point of detection instead of cascading into the next
+        shot's arming.
+        """
+        expect = cmd.split(":", 1)[0].strip().upper().encode("ascii", "replace")
+        last_exc: Optional[Exception] = None
+        for attempt in range(tries):
+            self._send(cmd)
+            try:
+                buf = self._rxbuf              # start from any residual bytes
+                self._rxbuf = bytearray()
+                while b"#" not in buf:
+                    buf += self._recv_some()
+                idx = buf.index(b"#")
+                header = bytes(buf[:idx])      # '' when CHDR OFF
+                if header and expect and expect not in header.upper():
+                    logger.debug("WF block header %r doesn't name %r "
+                                 "(stream desynced) — resync + retry %d/%d",
+                                 header[:40], expect.decode(), attempt + 1, tries)
+                    self.resync()
+                    last_exc = RuntimeError(f"block header desync: {header[:40]!r}")
+                    continue
+                while len(buf) < idx + 2:
+                    buf += self._recv_some()
+                ndig = int(buf[idx + 1:idx + 2])
+                while len(buf) < idx + 2 + ndig:
+                    buf += self._recv_some()
+                nbytes = int(buf[idx + 2:idx + 2 + ndig])
+                start = idx + 2 + ndig
+                end = start + nbytes
+                while len(buf) < end:
+                    buf += self._recv_some()
+                data = bytes(buf[start:end])
+                # Carry the trailing terminator (and any over-read) forward.
+                self._rxbuf = bytearray(buf[end:])
+                return data
+            except Exception as e:
+                last_exc = e
+                self.resync()                 # drop the partial/stale reply
+        raise last_exc or RuntimeError(f"block read failed after {tries} tries")
 
     @staticmethod
     def _extract_num(reply: str) -> Optional[float]:
-        """Pull the measurement value out of a PAVA-style reply.
+        """Pull the value out of a scope reply.
 
-        Replies look like 'C1:PAVA PKPK,3.00E+00V' (header on) or '3.00E+00V'
-        (CHDR OFF). The value lives after the comma when a header is present.
-        Invalid measurements come back as '****' -> returns None.
+        Replies look like 'C1:PAVA PKPK,3.00E+00V' (comma form), 'C2:VDIV
+        1.00E+00V' / 'C3:OFST 0.00E+00V' (Cn-headered, NO comma), or a bare
+        '3.00E+00V' (CHDR OFF). Take the LAST number: a channel-headed reply
+        begins with the channel digit ('C2:VDIV ...'), and grabbing the FIRST
+        number returned the '2' from 'C2' as if it were a 1.0 V/div — which
+        scaled every capture's volts by the channel number and offset it by the
+        same (negative baselines, bogus v_final, fake-fast settle). The value is
+        always last. Invalid measurements come back as '****' -> None.
         """
         tail = reply.split(",", 1)[1] if "," in reply else reply
         if "*" in tail:           # e.g. "****" when no valid signal
             return None
-        m = _NUM_RE.search(tail)
-        return float(m.group(0)) if m else None
+        nums = _NUM_RE.findall(tail)
+        return float(nums[-1]) if nums else None
 
     @staticmethod
     def _extract_unit(reply: str) -> str:
         tail = reply.split(",", 1)[1] if "," in reply else reply
-        m = _NUM_RE.search(tail)
-        if not m:
+        matches = list(_NUM_RE.finditer(tail))
+        if not matches:
             return ""
-        return tail[m.end():].strip()
+        return tail[matches[-1].end():].strip()
 
     # -- connection --------------------------------------------------------
     def auto_connect(self) -> bool:
@@ -689,7 +814,7 @@ class Oscilloscope:
     # -- scope-specific helpers -------------------------------------------
     def get_sample_rate(self) -> float:
         """Current sample rate in Sa/s, from `SARA?`."""
-        val = self._extract_num(self.query("SARA?"))
+        val = self._extract_num(self.query("SARA?", expect="SARA"))
         return val if val is not None else float("nan")
 
     def get_timebase(self) -> float:
@@ -753,8 +878,8 @@ class Oscilloscope:
         # Transfer setup: SP sparse interval, NP number of points (0 = all),
         # FP first point. SP,0 / NP,0 returns the full record.
         self.write("WFSU SP,0,NP,0,FP,0")
-        vdiv = self._extract_num(self.query(f"{source}:VDIV?")) or 0.0
-        ofst = self._extract_num(self.query(f"{source}:OFST?")) or 0.0
+        vdiv = self._extract_num(self.query(f"{source}:VDIV?", expect=f"{source}:VDIV")) or 0.0
+        ofst = self._extract_num(self.query(f"{source}:OFST?", expect=f"{source}:OFST")) or 0.0
         sara = self.get_sample_rate()
         raw = self._query_block(f"{source}:WF? DAT2")
         codes = np.frombuffer(raw, dtype=np.int8)

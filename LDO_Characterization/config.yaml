@@ -10,6 +10,10 @@ serial:                      # Portenta H7 (SMA_Driver_PIO firmware)
 scope:                       # SDS2000X Plus (SiglentOscillosope module)
   host: "169.254.111.4"      # pinned (skips the failed-default + sweep). null -> auto-detect.
   port: 5025
+  timeout_s: 2.0             # socket read timeout. Low so a stalled read fails
+                             #   fast instead of looking frozen (the drain-before-
+                             #   query guard prevents desync cascades). Raise if a
+                             #   slow WF? on a huge MDEP legitimately needs >2 s.
   channels:
     trigger: C1              # TRIG_PIN (PJ_11 = PWM4) rising edge = t0
     dac:     C2              # MCP4728 V_OUT (DAC node)
@@ -18,12 +22,15 @@ scope:                       # SDS2000X Plus (SiglentOscillosope module)
                             #   Set back to C4 when the INA296A output is wired to scope CH4.
   trigger_level_v: 1.0       # edge threshold for the 3.3 V logic pulse
   trigger_slope: POS
-  timebase_s: 0.1            # 100 ms/div -> 1000 ms window, ~500 ms post-trigger.
-                             #   The LDO settle turned out SLOW (~300-500 ms, still rising
-                             #   at +250 ms on 50 ms/div). Needs the bigger window to see
-                             #   the full settle + any overshoot/recovery.
+  timebase_s: 0.01           # 10 ms/div -> 100 ms window, ~50 ms post-trigger.
+                             #   2026-06-17: the LDO settle is now FAST (~5-10 ms, rise
+                             #   ~2 ms) after the hardware change — the old 100 ms/div was
+                             #   for the previous ~400 ms response. 50 ms post-trigger holds
+                             #   the settle with ~5x margin; 10K/100 ms = 10 us/sample, which
+                             #   resolves the ~0.4 ms I2C trig->DAC delay too. Drop to
+                             #   0.005 (5 ms/div) to zoom further if the settle stays <10 ms.
   memory_depth: "10K"        # ACQ:MDEP — caps WF? record size. {10K|100K|1M|10M|100M}.
-                             #   10K over 1000 ms = 100 us/sample (fine for a ~400 ms settle).
+                             #   10K over 100 ms = 10 us/sample.
   codes_per_div: 25.0        # WF? DAT2 scaling; VERIFY against Programming Guide
 
 # Analytical transfer (must match SMA_Driver_PIO firmware): V_LDO = V_OFFSET + (VDD/4095)*code
