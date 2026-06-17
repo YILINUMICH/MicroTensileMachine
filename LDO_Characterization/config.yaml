@@ -18,12 +18,12 @@ scope:                       # SDS2000X Plus (SiglentOscillosope module)
                             #   Set back to C4 when the INA296A output is wired to scope CH4.
   trigger_level_v: 1.0       # edge threshold for the 3.3 V logic pulse
   trigger_slope: POS
-  timebase_s: 0.05           # 50 ms/div -> 500 ms window, ~250 ms post-trigger.
-                             #   20 ms/div (200 ms window, 100 ms post-trig) cut the settle
-                             #   off mid-rise (scope "final" read 1.87 V vs the true 2.5 V).
-                             #   The settle is ~150 ms+, so give it room.
+  timebase_s: 0.1            # 100 ms/div -> 1000 ms window, ~500 ms post-trigger.
+                             #   The LDO settle turned out SLOW (~300-500 ms, still rising
+                             #   at +250 ms on 50 ms/div). Needs the bigger window to see
+                             #   the full settle + any overshoot/recovery.
   memory_depth: "10K"        # ACQ:MDEP — caps WF? record size. {10K|100K|1M|10M|100M}.
-                             #   10K over 500 ms = 50 us/sample (plenty for a ~150 ms settle).
+                             #   10K over 1000 ms = 100 us/sample (fine for a ~400 ms settle).
   codes_per_div: 25.0        # WF? DAT2 scaling; VERIFY against Programming Guide
 
 # Analytical transfer (must match SMA_Driver_PIO firmware): V_LDO = V_OFFSET + (VDD/4095)*code
@@ -40,7 +40,8 @@ isense:
   # scale (V/A) = gain*shunt = 1.0; current = (v_ina - offset_v)/scale
 
 experiment:
-  hold_ms: 500               # firmware `fire` hold (>= full settle + margin)
+  hold_ms: 800               # firmware `fire` hold; must exceed the ~500 ms post-trigger
+                             #   window so the LDO stays at target through the whole capture
   repeats: 3                 # shots per (step, load) for repeatability
   settle_window_frac: 0.15   # fraction of record (tail) used as "final value"
   loads:                     # mosfet state per pass
