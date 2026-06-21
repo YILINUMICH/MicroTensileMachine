@@ -17,7 +17,7 @@ Add four more checkpoints — `cp7`, `cp8`, `cp9`, `cp10` — to [`../ADS1263_Fi
 | cp | What it checks | Retires |
 |---|---|---|
 | `cp7` | AIN-pair scan: does each non-reference AIN pair on the EVM work, or does the legacy HAT's AIN2/3 saturation reproduce? | TODO: "Re-test ADC2/AIN2-AIN3 on the EVM" (silicon-side, ADC1 path) |
-| `cp8` | ADC2 (the chip's 24-bit secondary ADC) — does it stream cleanly? | TODO: "Re-test ADC2" (ADC2 path). Unblocks `SensorHub_PIO/` dual-ADC mode. |
+| `cp8` | ADC2 (the chip's 24-bit secondary ADC) — does it stream cleanly? | TODO: "Re-test ADC2" (ADC2 path). Unblocks `Firmware_SensorHub_PIO/` dual-ADC mode. |
 | `cp9` | DRDY (Data Ready) interrupt — is `PC_6` a working edge-triggered DRDY on the Mid Carrier, or do we need to fall back to timed polling like the legacy HAT? | TODO: "Reroute DRDY off PJ_11" |
 | `cp10` | TDAC (Test DAC) sanity — drive a known internal voltage onto AIN6, measure it through ADC1, confirm it matches. | Free DC-accuracy sanity check before Phase 2.1 self-calibration verification. |
 
@@ -142,7 +142,7 @@ static void cp7_ain_pair_scan() {
 
 ### `cp8` — ADC2 enable + read
 
-**Purpose.** The ADS1263 has a 24-bit ΔΣ secondary ADC (ADC2) on the same chip, with its own input mux, filter, and command set. Production firmware (`SensorHub_PIO/`) plans to use ADC2 for the laser channel so load cell + laser can run concurrently on different rates. The bring-up never exercised ADC2 — we don't know if it works on the EVM.
+**Purpose.** The ADS1263 has a 24-bit ΔΣ secondary ADC (ADC2) on the same chip, with its own input mux, filter, and command set. Production firmware (`Firmware_SensorHub_PIO/`) plans to use ADC2 for the laser channel so load cell + laser can run concurrently on different rates. The bring-up never exercised ADC2 — we don't know if it works on the EVM.
 
 **Method.** Configure `ADC2CFG` and `ADC2MUX` registers, issue `START2`, wait for settling, read with `RDATA2`. Verify codes are non-stuck, non-saturated.
 

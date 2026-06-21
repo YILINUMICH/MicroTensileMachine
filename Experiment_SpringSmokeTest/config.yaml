@@ -1,0 +1,79 @@
+# =============================================================================
+# Spring Smoke Test — Run Parameters  (Phase 5)
+# =============================================================================
+# Parameters for one execution of run_spring_smoke_test.py against the rig.
+# Hardware configuration for the Zaber stage lives in Driver_ZaberStage/*.json — do
+# NOT duplicate it here.
+#
+# The plan that motivates this test:
+#   doc/PLAN_phase5_spring_smoke_test.md
+#
+# All distances in mm, times in seconds, velocities in mm/s.
+# =============================================================================
+
+# --- Spring transfer standard ------------------------------------------------
+# Same spring used in the load-cell calibration. The cal-run k value
+# is the ground truth for the Step 2 slope check.
+spring_k_mN_per_mm: 30.86
+spring_k_source: "Instron 2530-100N pooled fit (doc/spring loadcell/)"
+
+# --- Reference noise floors (cal-run anchored) -------------------------------
+# Static σ from each sensor's calibration run, used by analyze.py Step 1.
+# Update when a new cal run replaces the headline number.
+# Leave null to skip the noise-floor comparison check.
+laser_noise_V_ref: 4.0e-5      # Calibrate_LaserHead — set to your cal-run σ_V
+load_noise_V_ref: 6.0e-5       # Calibrate_LoadCell  — set to your cal-run σ_V
+
+# --- Sensor calibration references ------------------------------------------
+# Values mirror Calibrate_*/calibration.json so analyze.py can convert
+# voltages to engineering units without importing those modules. Keep
+# these in sync by hand when the cal is re-run.
+laser_k_mV_per_um: -0.49779577     # Calibrate_LaserHead/calibration.json
+laser_V0_mV:       2503.75         #
+load_sensitivity_mV_per_mN: 10.2009  # Calibrate_LoadCell/calibration.json
+load_V0_mV:        -34.186          #
+
+# --- Firmware annotation ----------------------------------------------------
+# Annotation only — the runner does NOT change the firmware. Operator must
+# flash the build that emits the desired rate before launching the run.
+sample_rate_sps: 400               # 400 or 1000
+firmware_path:  "Firmware_SensorHub_PIO/src/main.cpp"
+
+# --- Serial I/O -------------------------------------------------------------
+portenta_port:  "COM8"
+portenta_baud:  115200
+zaber_config_path: ../Driver_ZaberStage/safety_config.json
+zaber_port:     "COM5"
+
+# --- Acquisition timing -----------------------------------------------------
+stage_poll_hz:   50.0              # how often the runner polls Zaber position
+drain_timeout_s: 2.0
+
+# --- Per-step parameters ----------------------------------------------------
+steps:
+  # Step 1: static noise floor at the Zaber zero (spring slack)
+  static_duration_s: 60.0
+
+  # Step 2: quasi-static ramp through the spring's working range
+  ramp_start_mm:        10.0       # absolute Zaber position = stage zero
+  ramp_end_mm:          16.0       # ~6 mm stroke through spring engagement
+  ramp_velocity_mm_s:    0.1
+
+  # Step 3: step-and-hold
+  step_target_mm:       14.0       # mid-stroke
+  step_hold_pre_s:       2.0
+  step_hold_post_s:      5.0
+
+  # Step 4 (and Step 6): fast pull / slow return
+  profile_base_mm:                10.0
+  profile_peak_mm:                16.0
+  profile_pull_velocity_mm_s:      3.0
+  profile_return_velocity_mm_s:    0.1
+  profile_peak_hold_s:             1.0
+
+  # Step 5: pipeline endurance (stage idle)
+  endurance_duration_s:          600.0   # 10 minutes
+
+# --- Run metadata -----------------------------------------------------------
+operator: ""
+notes: ""

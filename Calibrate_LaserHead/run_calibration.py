@@ -48,7 +48,7 @@ from portenta_reader import PortentaReader, Sample
 
 # Make the sibling ZaberStage package importable without requiring an install.
 _THIS_DIR = Path(__file__).resolve().parent
-_ZABER_DIR = _THIS_DIR.parent / "ZaberStage"
+_ZABER_DIR = _THIS_DIR.parent / "Driver_ZaberStage"
 if str(_ZABER_DIR) not in sys.path:
     sys.path.insert(0, str(_ZABER_DIR))
 
@@ -317,7 +317,7 @@ def build_metadata(cfg: SweepConfig, paths: RunPaths, stage: ZaberStage,
             ),
             "xcompare_mode": cfg.xcompare,
             # ADC2 path — Keyence IL-030 → AIN4(+) / AIN5(-) on the bare
-            # TI ADS1263 EVM, mirroring SensorHub_PIO production. Values
+            # TI ADS1263 EVM, mirroring Firmware_SensorHub_PIO production. Values
             # below are the literal register settings written by
             # LaserHead_PIO/src/main.cpp setup() — if you change those,
             # update here too.
@@ -427,9 +427,9 @@ def run(cfg: SweepConfig, dry_run: bool) -> None:
         log.info("Opening Portenta on %s @ %d", port, cfg.portenta_baud)
         # adc_source=2: laser is on ADC2 (AIN4/AIN5) on the EVM, per the
         # post-port LaserHead_PIO firmware (laser-only build) and per
-        # SensorHub_PIO production routing. For LaserHead_PIO's 3-column
+        # Firmware_SensorHub_PIO production routing. For LaserHead_PIO's 3-column
         # TSV stream this filter argument is ignored at parse time; for a
-        # 4-column dual-ADC stream (e.g. SensorHub_PIO, or LaserHead_PIO
+        # 4-column dual-ADC stream (e.g. Firmware_SensorHub_PIO, or LaserHead_PIO
         # with the ENABLE_ADC1 cross-compare flag) it correctly selects
         # the src=2 laser rows. The prior `adc_source=1` setting was a
         # Waveshare-HAT workaround when the laser was routed through

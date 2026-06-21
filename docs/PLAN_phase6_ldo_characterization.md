@@ -2,7 +2,7 @@
 
 > **Status: Plan / To-Test.** Goal: quantify how *fast* and how *clean* the
 > MCP4728 → TPS7A57 "DAC-margining" structure is, using the SDS2000X Plus scope
-> as the time-domain instrument. Module under test: [`../SMA_Driver_PIO/`](../SMA_Driver_PIO/).
+> as the time-domain instrument. Module under test: [`../Firmware_SMADriver_PIO/`](../Firmware_SMADriver_PIO/).
 
 ## 1. Why scope, not ADC
 
@@ -39,7 +39,7 @@ fine for a sanity curve, useless for sub-ms edge timing. For the scope we need a
 scope can be armed in single-shot and catch the rising transient with proper
 pre-trigger baseline.
 
-Add to [`SMA_Driver_PIO/src/main.cpp`](../SMA_Driver_PIO/src/main.cpp):
+Add to [`Firmware_SMADriver_PIO/src/main.cpp`](../Firmware_SMADriver_PIO/src/main.cpp):
 
 - **`TRIG_PIN`** — a spare digital output, **`PJ_11`** = Mid Carrier silkscreen
   **PWM4** (J2-67), right next to the MOSFET's PWM3/PG_7. Driven with plain
@@ -58,11 +58,11 @@ Add to [`SMA_Driver_PIO/src/main.cpp`](../SMA_Driver_PIO/src/main.cpp):
 - `pinMode(TRIG_PIN, OUTPUT); digitalWrite(TRIG_PIN, LOW);` in `setup()`.
 
 This is purely additive — `step`, `drive`, `sweep`, `code` stay as-is. Build/flash
-per `SMA_Driver_PIO/README.md` (M7-only: `pio run -t upload`, then **power-cycle**).
+per `Firmware_SMADriver_PIO/README.md` (M7-only: `pio run -t upload`, then **power-cycle**).
 
 ### 2.2 Python — single-shot capture using the SiglentOscilloscope module
 
-[`../SiglentOscillosope/oscilloscope.py`](../SiglentOscillosope/oscilloscope.py)
+[`../Driver_SiglentOscilloscope/oscilloscope.py`](../Driver_SiglentOscilloscope/oscilloscope.py)
 already has `capture_waveform(source)` (raw `WF? DAT2` → codes + preamble),
 `codes_to_volts()`, and raw `write()`/`query()` passthrough. It does **not** yet
 have single-shot trigger-arming helpers, so the capture script drives those over
@@ -187,10 +187,10 @@ comes for free with the current-sense path enabled.
 
 ## 8. Deliverables
 
-- Updated `SMA_Driver_PIO/main.cpp` with `TRIG_PIN` + `fire` command, and a
+- Updated `Firmware_SMADriver_PIO/main.cpp` with `TRIG_PIN` + `fire` command, and a
   `STATUS.md` note (To-Test).
-- A capture script under `SMA_Driver_PIO/` (or a small `LDO_Characterization/`
-  module) using `SiglentOscillosope/oscilloscope.py` + `pyserial`.
+- A capture script under `Firmware_SMADriver_PIO/` (or a small `Experiment_LDOCharacterization/`
+  module) using `Driver_SiglentOscilloscope/oscilloscope.py` + `pyserial`.
 - Per-step CSVs (C1/C2/C3 waveforms) + a short results memo: settle times,
   overshoot, ripple, loaded-vs-unloaded delta.
 

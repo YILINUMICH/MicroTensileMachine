@@ -10,7 +10,7 @@
 > the Zaber linear stage provides ground-truth displacement. A static
 > sweep produces the linear fit V(F) = sensitivity · F + V₀ whose slope
 > (mV/mN) is the calibration constant that propagates into
-> `SMA_CharacterizationV2/` for production use.
+> `Experiment_SMACharacterizationV2/` for production use.
 
 This single document covers the full module: hardware, firmware, Python
 pipeline, procedure, analysis, and troubleshooting.
@@ -89,7 +89,7 @@ Pre-filled in `config.yaml` and `platformio.ini`.
 ### 3.1 Architecture
 
 The firmware lives in `Calibrate_Loadcell_PIO/` within this directory. It is
-a self-contained PlatformIO project, separate from `SensorHub_PIO/`
+a self-contained PlatformIO project, separate from `Firmware_SensorHub_PIO/`
 (production dual-stream). This keeps calibration-specific behaviour (dual-ADC
 cross-compare on the load cell channel) isolated from production firmware.
 
@@ -200,7 +200,7 @@ Calibrate_LoadCell/
 python -m pip install -r requirements.txt
 ```
 
-The scripts import `zaber_stage.py` from `../ZaberStage/` via a `sys.path`
+The scripts import `zaber_stage.py` from `../Driver_ZaberStage/` via a `sys.path`
 shim in `run_calibration.py`.
 
 ### 4.3 portenta_reader.py
@@ -316,7 +316,7 @@ v0 = cal["V0_mV"]
 4. **Spring mounting:** Confirm the spring is physically connected between the
    load cell and the stage carriage. The spring should be near its relaxed
    length at `sweep_start_mm`.
-5. **Zaber safety limits:** `../ZaberStage/safety_config.json`
+5. **Zaber safety limits:** `../Driver_ZaberStage/safety_config.json`
    `position_limits_mm` must permit the full sweep range.
 
 ### 5.2 Determine sweep_start_mm
@@ -463,7 +463,7 @@ Once a good run is obtained:
 
 1. `calibration.json` is automatically updated by `analyze.py` — downstream
    modules can read it directly.
-2. Propagate the sensitivity into `SMA_CharacterizationV2/` config if needed.
+2. Propagate the sensitivity into `Experiment_SMACharacterizationV2/` config if needed.
 3. V₀ is informational here — it drifts with temperature and amplifier
    state, so production code should re-measure it at the start of each
    session.
@@ -500,7 +500,7 @@ Once a good run is obtained:
   load cell sensitivity.
 - **Driver sync:** The ADS1263 driver in `Calibrate_Loadcell_PIO/lib/ADS1263/`
   is a copy from `Calibrate_LaserHead_PIO/lib/ADS1263/` as of 2026-05-27.
-  If new fixes land in SensorHub_PIO, copy them here too.
+  If new fixes land in Firmware_SensorHub_PIO, copy them here too.
 - **COM port drift:** If the Portenta renumbers after a USB replug, update
   COM8 in both `config.yaml` and `Calibrate_Loadcell_PIO/platformio.ini`.
 

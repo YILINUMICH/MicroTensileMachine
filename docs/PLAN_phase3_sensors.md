@@ -20,7 +20,7 @@ Three sub-tasks:
 |---|---|---|---|
 | 3.1 | Decide which AIN pairs the load cell and laser go on | 5 min | doc updates only |
 | 3.2 | Wire load cell to the EVM and calibrate (zero + span) | ~1 hour bench + 30 min amp warm-up | minor — record constants in operator memo |
-| 3.3 | Recalibrate the laser head on the bare EVM (the old constants are invalid) | ~1 hour | update `SMA_CharacterizationV2/` defaults |
+| 3.3 | Recalibrate the laser head on the bare EVM (the old constants are invalid) | ~1 hour | update `Experiment_SMACharacterizationV2/` defaults |
 
 ---
 
@@ -40,7 +40,7 @@ Phase 1 (chip characterization) and Phase 2.1 (self-calibration verification) mu
 - Phase 2.1 (self-calibration verification) complete — captured `OFCAL` / `FSCAL` values for the AIN pair the load cell will use.
 - Load cell mechanically mounted in the test fixture, LCA-9PC amplifier physically connected and powered.
 - Keyence IL-030 controller wired to its amplifier and powered.
-- Zaber stage operational and reachable from the host PC (`ZaberStage/` module passes its self-test).
+- Zaber stage operational and reachable from the host PC (`Driver_ZaberStage/` module passes its self-test).
 
 ---
 
@@ -52,7 +52,7 @@ Phase 1 (chip characterization) and Phase 2.1 (self-calibration verification) mu
 - cp7 results: which non-reference AIN pairs read cleanly on this EVM.
 - Sensor characteristics:
   - **Load cell (via LCA-9PC):** unipolar 0–5 V output, low-bandwidth (mechanical < 100 Hz). Wants high resolution and stability. ADC1 is the right ADC for this.
-  - **Keyence IL-030:** voltage output, low-bandwidth (< 100 Hz mechanical). Wants enough resolution to resolve sub-µm. ADC1 or ADC2 — `SensorHub_PIO/` design puts it on ADC2 to allow simultaneous load + displacement at different rates.
+  - **Keyence IL-030:** voltage output, low-bandwidth (< 100 Hz mechanical). Wants enough resolution to resolve sub-µm. ADC1 or ADC2 — `Firmware_SensorHub_PIO/` design puts it on ADC2 to allow simultaneous load + displacement at different rates.
 - Constraints:
   - AIN0 / AIN1 = REF7050 reference → off-limits.
   - Both sensors must be **differential** in the connection (use a pair like AIN2/3 or AIN4/5), not single-ended against AINCOM (AINCOM is reserved for VBIAS during PGA-enabled modes).
@@ -68,7 +68,7 @@ Phase 1 (chip characterization) and Phase 2.1 (self-calibration verification) mu
 **Deliverables:**
 - Update [`MEMO_cable_map.md`](MEMO_cable_map.md): add **Cable 3 — Load cell amp output ↔ EVM AIN?/AIN?** and **Cable 4 — Keyence IL controller ↔ EVM AIN?/AIN?**. Use the existing Cable 1 / Cable 2 entries as the template.
 - Update [`MEMO_sensor_setup.md`](MEMO_sensor_setup.md) (currently TODO/empty per `doc/README.md`) with the actual pair assignments and any cable color codes.
-- Update `SensorHub_PIO/lib/ADS1263/ADS1263_Driver.h` constants for the assigned pairs (deferred to Phase 4 — just note them here).
+- Update `Firmware_SensorHub_PIO/lib/ADS1263/ADS1263_Driver.h` constants for the assigned pairs (deferred to Phase 4 — just note them here).
 
 **Acceptance:** both sensors have a documented AIN pair, both pair assignments cross-reference cp7 results, both rows added to the cable map.
 
@@ -106,8 +106,8 @@ Phase 1 (chip characterization) and Phase 2.1 (self-calibration verification) mu
 
 **Deliverables:**
 - Calibration constants in `MEMO_sensor_setup.md`.
-- Updated `SensorHub_PIO/` config (deferred to Phase 4 — just record the constants here for now).
-- Bench log saved under (somewhere appropriate — TBD, suggest `SensorHub_PIO/data/loadcell_cal_YYYYMMDD.log`).
+- Updated `Firmware_SensorHub_PIO/` config (deferred to Phase 4 — just record the constants here for now).
+- Bench log saved under (somewhere appropriate — TBD, suggest `Firmware_SensorHub_PIO/data/loadcell_cal_YYYYMMDD.log`).
 
 **Acceptance:** load cell reads expected force values within 1% across the load range you've calibrated, after 30 min warm-up.
 
@@ -117,7 +117,7 @@ Phase 1 (chip characterization) and Phase 2.1 (self-calibration verification) mu
 
 **Goal:** laser reads displacement in µm with a slope and offset valid for the bare EVM hardware path.
 
-**Why this is needed (background for the agent):** the existing calibration constants in `SMA_CharacterizationV2/` were derived through the **legacy Waveshare HAT**, which had a 4.4× input attenuation network on the load-cell front end. The IL-030 calibration was indirectly affected because all sensor readings went through the same conditioned path. On the bare TI EVM there is no input attenuator — the AIN inputs have only the small RC filters built into the EVM. So the old constants (`k ≈ −0.1171 mV/µm`, `V₀ ≈ 566.957 mV`) are **invalid** on the new hardware and will produce ~4.4× wrong displacement readings.
+**Why this is needed (background for the agent):** the existing calibration constants in `Experiment_SMACharacterizationV2/` were derived through the **legacy Waveshare HAT**, which had a 4.4× input attenuation network on the load-cell front end. The IL-030 calibration was indirectly affected because all sensor readings went through the same conditioned path. On the bare TI EVM there is no input attenuator — the AIN inputs have only the small RC filters built into the EVM. So the old constants (`k ≈ −0.1171 mV/µm`, `V₀ ≈ 566.957 mV`) are **invalid** on the new hardware and will produce ~4.4× wrong displacement readings.
 
 **Existing tooling:** the [`../Calibrate_LaserHead/`](../Calibrate_LaserHead/) module already does this calibration. It walks the Zaber stage through a known displacement sweep, captures the IL-030 voltage at each point via the H7+ADS1263, and fits `V = k·µm + V₀`. Reuse it — don't reinvent.
 
@@ -133,15 +133,15 @@ Phase 1 (chip characterization) and Phase 2.1 (self-calibration verification) mu
 
 3. **Run the calibration.** Follow [`../Calibrate_LaserHead/README.md`](../Calibrate_LaserHead/README.md). The module produces a fit report (`k`, `V₀`, R², residuals).
 
-4. **Update `SMA_CharacterizationV2/`.** Replace the default `k` and `V₀` in:
-   - `SMA_CharacterizationV2/config.yaml` (the operator-tunable defaults)
-   - `SMA_CharacterizationV2/config.py` (if the laser constants are also baked into Python defaults)
-   - `SMA_CharacterizationV2/session.py` — search for `laser_calibration_reference` block
+4. **Update `Experiment_SMACharacterizationV2/`.** Replace the default `k` and `V₀` in:
+   - `Experiment_SMACharacterizationV2/config.yaml` (the operator-tunable defaults)
+   - `Experiment_SMACharacterizationV2/config.py` (if the laser constants are also baked into Python defaults)
+   - `Experiment_SMACharacterizationV2/session.py` — search for `laser_calibration_reference` block
 
 5. **Sanity-check the new constants.** With the new `k`/`V₀` in place, run a short SMA characterization and confirm displacement readings match a known stage position to within a few µm.
 
 **Deliverables:**
-- New calibration constants in `SMA_CharacterizationV2/` config files.
+- New calibration constants in `Experiment_SMACharacterizationV2/` config files.
 - Bench log + fit plot in `Calibrate_LaserHead/data/`.
 - Note in `MEMO_sensor_setup.md` with date, operator, and the IL-030 controller's V/mm setting in use.
 
@@ -154,7 +154,7 @@ Phase 1 (chip characterization) and Phase 2.1 (self-calibration verification) mu
 Once all three sub-tasks pass:
 
 - `MEMO_sensor_setup.md` has real content (currently TODO/empty).
-- `SensorHub_PIO/` can be configured with correct pin defines + AIN pairs + calibration constants for both sensors. This is **Phase 4**, in `PLAN_phase4_production.md`.
+- `Firmware_SensorHub_PIO/` can be configured with correct pin defines + AIN pairs + calibration constants for both sensors. This is **Phase 4**, in `PLAN_phase4_production.md`.
 - The full SMA characterization workflow can be re-validated end-to-end on the new hardware.
 
 ---
@@ -166,6 +166,6 @@ Once all three sub-tasks pass:
 - [`LCA9PC_LCARTC_LoadCellAmp_Manual.pdf`](LCA9PC_LCARTC_LoadCellAmp_Manual.pdf) — load cell amplifier setup, 30 min warm-up note.
 - [`KeyenceIL_LaserSensor_Manual.pdf`](KeyenceIL_LaserSensor_Manual.pdf) — IL-030 specifications, voltage-output mode.
 - [`../Calibrate_LaserHead/README.md`](../Calibrate_LaserHead/README.md) — laser calibration procedure (existing module to reuse).
-- [`../SMA_CharacterizationV2/config.yaml`](../SMA_CharacterizationV2/config.yaml), [`../SMA_CharacterizationV2/session.py`](../SMA_CharacterizationV2/session.py) — where the laser calibration constants live.
+- [`../Experiment_SMACharacterizationV2/config.yaml`](../Experiment_SMACharacterizationV2/config.yaml), [`../Experiment_SMACharacterizationV2/session.py`](../Experiment_SMACharacterizationV2/session.py) — where the laser calibration constants live.
 - [`../TODO.md`](../TODO.md) — cross-cutting items: "Recalibrate the laser head on the EVM" and the load-cell AIN-pair decision are tracked there too.
 - `PLAN_phase4_production.md` — what Phase 3 unblocks.

@@ -8,7 +8,7 @@
 > IL-030 → ADS1263 signal chain. The Zaber linear stage provides ground-truth
 > displacement; a static sweep produces the linear fit V(x) = k·x + V₀ whose
 > slope k (mV/µm) and offset V₀ are the calibration constants that propagate
-> into `SMA_CharacterizationV2/` for production use.
+> into `Experiment_SMACharacterizationV2/` for production use.
 
 This single document replaces the previous `Calibrate_LaserHead_Plan.md`,
 `MEMO_session_2026-05-26.md`, `STATUS.md`, and the old `README.md`.
@@ -57,7 +57,7 @@ errors that a single-channel measurement cannot.
 | IL-030 signal ground (−) | AIN5 | Cable 4 | |
 | IL-030 supply ground (0 V) | AVSS / GND | Separate wire | Do not rely on AIN5 alone for ground reference |
 | REF7050 (+5 V) | AIN0 (+) | Cable 2 | External reference, shared by both ADCs |
-| REF7050 ground | AIN1 (−) | Cable 2 | Should already be in place from SensorHub_PIO wiring |
+| REF7050 ground | AIN1 (−) | Cable 2 | Should already be in place from Firmware_SensorHub_PIO wiring |
 
 Full cable map: `doc/MEMO_cable_map.md`.
 
@@ -104,7 +104,7 @@ replugging, check `pio device list` and update both files.
 
 The firmware lives in `Calibrate_LaserHead_PIO/` within this directory. It is
 a self-contained PlatformIO project, separate from `LaserHead_PIO/`
-(production laser-only) and `SensorHub_PIO/` (production dual-stream). This
+(production laser-only) and `Firmware_SensorHub_PIO/` (production dual-stream). This
 keeps calibration-specific behaviour (dual-ADC cross-compare) isolated from
 production firmware.
 
@@ -130,7 +130,7 @@ Both ADCs sample AIN4(+) / AIN5(−) simultaneously:
 | REF register | REFMUX = 0x09 | REF2 = external AIN0/1 |
 
 ADC2 is the production channel — its fit becomes the k / V₀ that propagates
-to `SMA_CharacterizationV2/`. ADC1 is the independent digital-path cross-check.
+to `Experiment_SMACharacterizationV2/`. ADC1 is the independent digital-path cross-check.
 
 Build-time flags in `main.cpp`:
 - `ENABLE_ADC1 = 1` — cross-compare on (default for calibration)
@@ -158,7 +158,7 @@ The `portenta_reader.py` parser handles both formats transparently.
 
 ### 3.4 ADS1263 Driver Provenance
 
-`lib/ADS1263/` was copied from `SensorHub_PIO/lib/ADS1263/` (via
+`lib/ADS1263/` was copied from `Firmware_SensorHub_PIO/lib/ADS1263/` (via
 `LaserHead_PIO/`) on 2026-05-26. It carries the Mid Carrier pin defines
 (CS = PA_8, DRDY = PC_6, RESET = PC_7) and two critical bug fixes from
 2026-05-25:
@@ -169,7 +169,7 @@ The `portenta_reader.py` parser handles both formats transparently.
    transposed in the register write, causing ADC2 to land on the wrong
    reference and misread above ~1.25 V differential.
 
-If new driver fixes land in SensorHub_PIO, copy them here too.
+If new driver fixes land in Firmware_SensorHub_PIO, copy them here too.
 
 ### 3.5 Flash Procedure
 
@@ -200,7 +200,7 @@ At boot you should see:
 ```
 
 This banner confirms you flashed the calibration firmware, not
-`LaserHead_PIO` or `SensorHub_PIO`.
+`LaserHead_PIO` or `Firmware_SensorHub_PIO`.
 
 ---
 
@@ -231,7 +231,7 @@ Calibrate_LaserHead/
 python -m pip install -r requirements.txt
 ```
 
-The scripts import `zaber_stage.py` from `../ZaberStage/` via a `sys.path`
+The scripts import `zaber_stage.py` from `../Driver_ZaberStage/` via a `sys.path`
 shim in `run_calibration.py`.
 
 ### 4.3 portenta_reader.py
@@ -341,7 +341,7 @@ Before any calibration run:
    mounting fixture has shifted — reseat sensor or re-zero stage.
 5. **Jog to 5 mm and 15 mm** — confirm IL-030 output is valid at both
    extremes (no saturation, no out-of-range indicator).
-6. **Zaber safety limits:** `../ZaberStage/safety_config.json`
+6. **Zaber safety limits:** `../Driver_ZaberStage/safety_config.json`
    `position_limits_mm` must permit at least [5, 15]. The pre-2026-05-26
    default was [10, 40] which would abort the sweep at 5 mm.
 7. **30-minute thermal soak** with the laser powered on before sampling.
@@ -475,7 +475,7 @@ and verify AIN4/AIN5 wiring polarity.
 
 Once a good run is obtained:
 
-1. Propagate k and V₀ into `SMA_CharacterizationV2/` defaults and the
+1. Propagate k and V₀ into `Experiment_SMACharacterizationV2/` defaults and the
    `laser_calibration_reference` block in `session.py`.
 2. Keep k signed so `displacement = (V − V₀) / k` recovers the correct
    physical direction downstream.
@@ -503,8 +503,8 @@ Once a good run is obtained:
   sensitivity by cos(θ). The fit still looks clean (high R²) but k is biased
   low. Worth a physical alignment check before each run.
 - **Driver sync:** The ADS1263 driver in `Calibrate_LaserHead_PIO/lib/ADS1263/`
-  is a copy from `SensorHub_PIO/lib/ADS1263/` as of 2026-05-26. If new fixes
-  land in SensorHub_PIO, manually copy them here.
+  is a copy from `Firmware_SensorHub_PIO/lib/ADS1263/` as of 2026-05-26. If new fixes
+  land in Firmware_SensorHub_PIO, manually copy them here.
 - **COM port drift:** If the Portenta renumbers after a USB replug (or the rig
   moves to a different PC), update COM8 in both `config.yaml` and
   `Calibrate_LaserHead_PIO/platformio.ini`. Check `pio device list`.

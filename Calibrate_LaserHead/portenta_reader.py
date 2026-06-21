@@ -55,7 +55,7 @@ class Sample:
     voltage_V: float           # already scaled by firmware (0–5 V range)
     raw_code: Optional[int] = None   # only set by the current (TSV) firmware
     adc_source: Optional[int] = None # 1 or 2 if the firmware emits the
-                                     # 4-col dual-stream form (SensorHub_PIO,
+                                     # 4-col dual-stream form (Firmware_SensorHub_PIO,
                                      # or LaserHead_PIO with ENABLE_ADC1=1).
                                      # None for 3-col single-channel builds
                                      # or the plan-spec CSV format.
@@ -174,7 +174,7 @@ def parse_line(line: str,
 # ---------------------------------------------------------------------------
 # [STATUS] frame parsing (Phase 5)
 # ---------------------------------------------------------------------------
-# SensorHub_PIO M7 emits one diagnostic frame per second:
+# Firmware_SensorHub_PIO M7 emits one diagnostic frame per second:
 #   "[STATUS] t_ms=12345 hwm=237 cap=1024 dropped=0 dropped_total=0
 #             rate1=400 rate2=400 prod1=400 prod2=400 m4_loops_per_s=120000"
 # The main parse_line() drops these (they contain '['). Consumers that
@@ -395,7 +395,7 @@ class PortentaReader:
         Use this when the firmware emits the 4-column dual-stream form
         (``<t_ms>\\t<src>\\t<raw>\\t<V>``), e.g. LaserHead_PIO compiled
         with ENABLE_ADC1 = ENABLE_ADC2 = 1 for the AIN4/AIN5
-        cross-compare, or SensorHub_PIO in production. The reader's
+        cross-compare, or Firmware_SensorHub_PIO in production. The reader's
         ``adc_source`` filter is bypassed (parse_line is called with
         ``adc_source=None``) and the two streams are demuxed on
         ``Sample.adc_source``.

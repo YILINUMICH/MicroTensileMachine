@@ -20,7 +20,7 @@
  *
  * Designed to be shared: include this header from any *_PIO/src/main.cpp
  * that needs the ring (Calibrate_LaserHead_PIO, Calibrate_Loadcell_PIO,
- * SensorHub_PIO, etc.).
+ * Firmware_SensorHub_PIO, etc.).
  *
  *
  * ── Phase 5 layout (2026-06-01) ────────────────────────────────────────
@@ -30,7 +30,7 @@
  *
  *   - `hw_us`  — free-running microsecond timestamp captured at the
  *                instant the ADC sample was acquired (DRDY ISR entry
- *                on SensorHub_PIO; micros() at read time on the
+ *                on Firmware_SensorHub_PIO; micros() at read time on the
  *                Calibrate_*_PIO single-ADC variants). Lets the host
  *                measure per-channel timing jitter directly instead
  *                of inferring it from millis()-quantised timestamps.

@@ -12,7 +12,7 @@ Operator-maintained record of every cable in the rig. Datasheets tell you what e
 
 The SPI bus and control lines between the Arduino Portenta H7 (on the Mid Carrier, ASX00055) and the **TI ADS1263 EVM** ADC board. Six discrete wires, four of them twisted as adjacent pairs to keep the high-edge-rate SPI signals from radiating onto the slower control lines.
 
-This connection replaces the earlier Hat-Carrier + Waveshare-HAT setup (J5 40-pin Pi-compatible header). The firmware in `LoadCell_PIO/`, `LaserHead_PIO/`, and `SensorHub_PIO/` still references the Hat-Carrier pin names — see [../TODO.md](../TODO.md) "Port firmware from Hat Carrier to Mid Carrier" for the open work to update the pin defines to match the table below.
+This connection replaces the earlier Hat-Carrier + Waveshare-HAT setup (J5 40-pin Pi-compatible header). The firmware in `LoadCell_PIO/`, `LaserHead_PIO/`, and `Firmware_SensorHub_PIO/` still references the Hat-Carrier pin names — see [../TODO.md](../TODO.md) "Port firmware from Hat Carrier to Mid Carrier" for the open work to update the pin defines to match the table below.
 
 > **Mid Carrier pinout reference:** [PortentaMidCarrier_ASX00055_Pinout.pdf](PortentaMidCarrier_ASX00055_Pinout.pdf)
 > **EVM pinout reference:** [ADS1263_EVM_User_Guide.pdf](ADS1263_EVM_User_Guide.pdf) (J2 header)
@@ -80,7 +80,7 @@ Add an entry per cable as the rig is wired up. Suggested order of importance:
 - [ ] **USB cables.** Which physical USB-A port on the host PC each instrument uses. **Current host (Yilin's Windows machine, 2026-05-25):**
     - **COM5** — Zaber **X-LSQ300A-E01** stage, serial 143153, firmware 7.48.24004 (FTDI bridge, USB VID:PID = `0403:6001`). 300 mm travel, built-in encoder. Confirmed from live device 2026-05-27.
     - **COM8** — Portenta H7 (Arduino CDC, USB VID:PID = `2341:025B` in normal mode; `2341:035B` in DFU mode)
-    - `SensorHub_PIO/platformio.ini` pins `upload_port = COM8` and `monitor_port = COM8` (in a shared `[env]` block) so PIO doesn't grab the Zaber by COM-number race. COM-numbers are Windows-specific and may renumber when the H7 is replugged into a different USB-A port — if that happens, check `pio device list`, update the .ini, or override at the CLI with `--upload-port COMx`. The VID:PIDs above are stable across hosts; PIO's `upload_port` is a glob over port paths and doesn't accept VID:PID directly.
+    - `Firmware_SensorHub_PIO/platformio.ini` pins `upload_port = COM8` and `monitor_port = COM8` (in a shared `[env]` block) so PIO doesn't grab the Zaber by COM-number race. COM-numbers are Windows-specific and may renumber when the H7 is replugged into a different USB-A port — if that happens, check `pio device list`, update the .ini, or override at the CLI with `--upload-port COMx`. The VID:PIDs above are stable across hosts; PIO's `upload_port` is a glob over port paths and doesn't accept VID:PID directly.
 
 ---
 

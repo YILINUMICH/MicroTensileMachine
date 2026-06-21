@@ -15,7 +15,7 @@ This MEMO is the **near-term active plan**. Work that is deferred or that the op
 | **MEMO_baseline_testing.md** (this file) | Phase 0 (housekeeping, done) + Phase 1.1–1.2 (active code work) + Phase 2.1 (next, after Phase 1 bench-test) | active |
 | [`PLAN_phase1_followups.md`](PLAN_phase1_followups.md) | Phase 1.3–1.6: cp7 AIN-pair scan, cp8 ADC2 cp, cp9 DRDY edge count, cp10 TDAC sanity | **handoff** — ready when Phase 1.1+1.2 bench-tested clean |
 | [`PLAN_phase3_sensors.md`](PLAN_phase3_sensors.md) | Phase 3: AIN-pair assignment, load cell calibration, laser recalibration | **deferred** — gated on Phase 1 + Phase 2.1 |
-| [`PLAN_phase4_production.md`](PLAN_phase4_production.md) | Phase 4: SensorHub_PIO port to Mid Carrier, bench-verify, archive legacy modules | **deferred** — gated on Phase 3 |
+| [`PLAN_phase4_production.md`](PLAN_phase4_production.md) | Phase 4: Firmware_SensorHub_PIO port to Mid Carrier, bench-verify, archive legacy modules | **deferred** — gated on Phase 3 |
 
 **Phase 2.2 and 2.3 are TABLED** in the current cycle — see Phase 2 section below for rationale.
 
@@ -94,7 +94,7 @@ The PLAN doc has register-level implementation hints, code skeletons, acceptance
 
 - 3.1 AIN-pair assignment for load cell and laser (based on Phase 1.3 cp7 results)
 - 3.2 Load cell wiring + calibration (LCA-9PC zero/span, 30 min warm-up, per amp manual)
-- 3.3 Laser recalibration on the bare EVM — re-derive `k` and `V₀`, update `SMA_CharacterizationV2/` defaults (the legacy HAT's 4.4× attenuator is gone, so old constants are invalid)
+- 3.3 Laser recalibration on the bare EVM — re-derive `k` and `V₀`, update `Experiment_SMACharacterizationV2/` defaults (the legacy HAT's 4.4× attenuator is gone, so old constants are invalid)
 
 **Status:** deferred — gated on Phase 1 + Phase 2.1 completion. PLAN doc has full procedure, acceptance criteria, and references to the existing `Calibrate_LaserHead/` module that gets reused.
 
@@ -104,8 +104,8 @@ The PLAN doc has register-level implementation hints, code skeletons, acceptance
 
 **Handed off to [`PLAN_phase4_production.md`](PLAN_phase4_production.md).** Covers:
 
-- 4.1 Port `SensorHub_PIO/lib/ADS1263/ADS1263_Driver.h` to Mid Carrier pin defines (`PA_8/PC_6/PC_7`) + `REFMUX=0x09` + VBIAS + Phase 3 AIN-pair assignments
-- 4.2 Bench-verify `SensorHub_PIO/` end-to-end with both sensors live
+- 4.1 Port `Firmware_SensorHub_PIO/lib/ADS1263/ADS1263_Driver.h` to Mid Carrier pin defines (`PA_8/PC_6/PC_7`) + `REFMUX=0x09` + VBIAS + Phase 3 AIN-pair assignments
+- 4.2 Bench-verify `Firmware_SensorHub_PIO/` end-to-end with both sensors live
 - 4.3 Move `LoadCell_PIO/` and `LaserHead_PIO/` into `Archieve/` once SensorHub is verified
 
 **Status:** deferred — gated on Phase 3 completion. PLAN doc has the legacy-to-new pin mapping table, configuration deltas, per-step failure triage, and the archive procedure.
@@ -162,7 +162,7 @@ The active near-term path is ~2 hours of bench work (after the current code-writ
 | 1.1 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1759.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1759.log) | **PASS** | cp6 PGA sweep clean across all gains; cp5 baseline reproduced at 1.257 µV RMS. Notable: chip's residual offset is post-PGA (output-referred mean constant at ~740 µV) rather than input-referred. Healthy pattern, just different from README's illustrative example. |
 | 1.2 | 2026-05-24 | [`../ADS1263_NoiseFloor_PIO/data/noisefloor_20260524_1845.csv`](../ADS1263_NoiseFloor_PIO/data/noisefloor_20260524_1845.csv) | **PASS** | All 42 cells in-spec; offset rock-stable across SPS (12 nV span at gain 1); NFB 17.0–22.8 bits (datasheet typical 17–18); anchor (400 SPS, gain 1) = 1.290 µV vs cp5's 1.257 µV. Two cells (50 SPS, gain 2/4) flagged stuck_pct = 0.6%/0.8% — counting-statistics noise, not operationally significant. |
 | 1.3 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp7 AIN-pair scan: all 8 pair configs PASS, no saturation. Legacy AIN2/3 question RETIRED. |
-| 1.4 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp8 ADC2 enable+read: 8.5 µV RMS at 100 SPS Sinc3 gain=1 (datasheet typical 10.3 µV). Unblocks SensorHub_PIO dual-ADC mode. Bug found+fixed: original ADC2MUX=0x4A read floating AIN4, picked up EMI; changed to 0xAA (AINCOM-shorted) to measure intrinsic noise floor. |
+| 1.4 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp8 ADC2 enable+read: 8.5 µV RMS at 100 SPS Sinc3 gain=1 (datasheet typical 10.3 µV). Unblocks Firmware_SensorHub_PIO dual-ADC mode. Bug found+fixed: original ADC2MUX=0x4A read floating AIN4, picked up EMI; changed to 0xAA (AINCOM-shorted) to measure intrinsic noise floor. |
 | 1.5 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp9 DRDY edge-rate: 4007/4000 falling edges in 10 s on PC_6. Interrupt-driven reads viable on Mid Carrier; legacy PJ_11/LoRa IRQ conflict does not apply here. |
 | 1.6 | 2026-05-24 | [`../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log`](../ADS1263_FirstPowerUp_PIO/data/firstpowerup_20260524_1925.log) | **PASS** | cp10 ratiometric TDAC: AVDD derived = 5.2056 V mean, 24.9 mV span across 5 rows. EVM's TPS7A4700 LDO output is 5.2 V (in spec, trim choice). Bug found+fixed: original test assumed AVDD=5.0V exactly; per datasheet §9.3.14, TDAC outputs scale with AVDD, so we rewrote as a ratiometric AVDD derivation. |
 | 2.1 | 2026-05-24 | [`../ADS1263_SelfCal_PIO/data/selfcal_20260524_1949.log`](../ADS1263_SelfCal_PIO/data/selfcal_20260524_1949.log) | **PASS** | SFOCAL1 sweep: 94–100% offset reduction across PGA gains; predicted vs actual OFCAL agree within ~80 LSB. SYGCAL1 demo: FSCAL math matches prediction to 1.4 ppm of FS (post-cal = 5.0000 V = exactly +VREF). **INTERFACE register survived all 7 calibration commands** — legacy-HAT snap-back issue does NOT reproduce on EVM. Defensive register re-write retained as production safety net. cp3 bug found+fixed: initial test misinterpreted SYGCAL1 as "make output match input"; correct behavior is "normalize input to +VREF" per §9.4.9.6. |
@@ -171,7 +171,7 @@ The active near-term path is ~2 hours of bench work (after the current code-writ
 | 3.1 | | | moved to PLAN_phase3_sensors.md | AIN-pair assignment |
 | 3.2 | | | moved to PLAN_phase3_sensors.md | load cell wiring + calibration |
 | 3.3 | | | moved to PLAN_phase3_sensors.md | laser recalibration on bare EVM |
-| 4.1 | | | moved to PLAN_phase4_production.md | port `SensorHub_PIO` pin defines + config |
+| 4.1 | | | moved to PLAN_phase4_production.md | port `Firmware_SensorHub_PIO` pin defines + config |
 | 4.2 | | | moved to PLAN_phase4_production.md | bench-verify SensorHub end-to-end |
 | 4.3 | | | moved to PLAN_phase4_production.md | archive LoadCell_PIO + LaserHead_PIO |
 

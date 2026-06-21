@@ -12,7 +12,7 @@
 
 ## TL;DR
 
-Before installing an SMA wire into the rig, run a **spring-as-SMA-surrogate smoke test** on `SensorHub_PIO/` to (a) validate dual-sensor integration (laser displacement + load cell) against ground truth from the load-cell calibration spring, and (b) prove the M4 sample pipeline has CPU and bandwidth headroom at **1 kSPS per ADC** — the rate we will need once the SMA state machine and on-chip ADC channels start competing for M4 cycles.
+Before installing an SMA wire into the rig, run a **spring-as-SMA-surrogate smoke test** on `Firmware_SensorHub_PIO/` to (a) validate dual-sensor integration (laser displacement + load cell) against ground truth from the load-cell calibration spring, and (b) prove the M4 sample pipeline has CPU and bandwidth headroom at **1 kSPS per ADC** — the rate we will need once the SMA state machine and on-chip ADC channels start competing for M4 cycles.
 
 The test forces several architectural decisions that benefit the SMA integration regardless of how the smoke test turns out: DRDY-driven sampling, sample-slot instrumentation (sequence numbers + hardware timestamps), a `[STATUS]` telemetry frame, and a command channel from M7 to M4. All of those are scoped here so the SMA addition (Phase 6) is a mechanical+wiring task, not a firmware redesign.
 
@@ -40,7 +40,7 @@ The spring test answers all three with one rig configuration.
 
 - **Spring**: same spring used in the load-cell calibration run. Already characterized — `k` is known, so it doubles as a load-cell sanity check.
 - **Stage zero**: Zaber position at absolute 10 mm = mechanical zero (spring slack). Pre-tensioning was tried and proved impractical; instead the slack region is identified and removed in post-processing.
-- **Sensors**: Keyence IL-030 laser (ADC1 path) + LCA-9PC load cell (ADC2 path), production wiring per `SensorHub_PIO/` current main.cpp.
+- **Sensors**: Keyence IL-030 laser (ADC1 path) + LCA-9PC load cell (ADC2 path), production wiring per `Firmware_SensorHub_PIO/` current main.cpp.
 
 ### Procedure
 
@@ -73,7 +73,7 @@ These are scoped to land before the bench session. They are **also the foundatio
 
 ### Change 1 — Grow `AdcSample` to 24 bytes
 
-Current slot is exactly 16 bytes with no spare bits (see `SensorHub_PIO/src/sample_ring.h`). The SRAM4 partition allocated to the ring is 32 KB; current ring uses ~16 KB. We have room to grow.
+Current slot is exactly 16 bytes with no spare bits (see `Firmware_SensorHub_PIO/src/sample_ring.h`). The SRAM4 partition allocated to the ring is 32 KB; current ring uses ~16 KB. We have room to grow.
 
 New layout (target):
 
@@ -204,7 +204,7 @@ M7 has CMSIS-NN / TFLM capacity for models up to a few hundred KB given the Mid 
 Phase 5 is complete when:
 
 1. Sample slot grown to 24 bytes with `hw_us` + `seq`; static_assert updated; `Calibrate_*_PIO` modules that share the header still build and produce valid streams.
-2. DRDY-interrupt-driven sampling lands in `SensorHub_PIO/`; sample timestamps show <100 µs jitter at 1 kSPS over a 10-minute pipeline-stress run.
+2. DRDY-interrupt-driven sampling lands in `Firmware_SensorHub_PIO/`; sample timestamps show <100 µs jitter at 1 kSPS over a 10-minute pipeline-stress run.
 3. `[STATUS]` frame emitted by M7 every 1 s; host-side parser stores it; existing TSV sample parsing unchanged.
 4. Spring smoke test runs completed at 400 SPS and 1 kSPS; F-vs-x linearity confirms sensor integration; per-channel σ matches the calibration-run reference noise floors.
 5. No dropped samples on the 10-minute 1 kSPS endurance run; status frame `hwm <50%` of ring capacity throughout.
@@ -225,8 +225,8 @@ Phase 5 is complete when:
 
 ## References
 
-- `SensorHub_PIO/src/sample_ring.h` — current 16-byte slot, SRAM4 placement, ring API.
-- `SensorHub_PIO/src/main.cpp` — current M4/M7 split, production ADC routing.
+- `Firmware_SensorHub_PIO/src/sample_ring.h` — current 16-byte slot, SRAM4 placement, ring API.
+- `Firmware_SensorHub_PIO/src/main.cpp` — current M4/M7 split, production ADC routing.
 - `Calibrate_LaserHead/portenta_reader.py` — host parser, drops `[` lines (so `[STATUS]` is non-breaking).
 - `Calibrate_LoadCell/` — source of the calibration spring used in this test and the reference noise floor.
 - `doc/MEMO_cable_map.md` — current rig wiring; SMA additions will extend this.

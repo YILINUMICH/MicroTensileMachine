@@ -56,7 +56,7 @@ class Sample:
     adc_source: Optional[int] = None # 1 or 2 if the firmware emits the
                                      # 4-col dual-stream form (e.g.
                                      # Calibrate_Loadcell_PIO with both
-                                     # ADCs enabled, or SensorHub_PIO).
+                                     # ADCs enabled, or Firmware_SensorHub_PIO).
                                      # None for 3-col single-channel builds
                                      # or the plan-spec CSV format.
 
@@ -338,7 +338,7 @@ class PortentaReader:
         Use this when the firmware emits the 4-column dual-stream form
         (``<t_ms>\\t<src>\\t<raw>\\t<V>``), e.g. Calibrate_Loadcell_PIO
         with ENABLE_ADC1 = ENABLE_ADC2 = 1 for the AIN2/AIN3
-        cross-compare, or SensorHub_PIO in production. The reader's
+        cross-compare, or Firmware_SensorHub_PIO in production. The reader's
         ``adc_source`` filter is bypassed (parse_line is called with
         ``adc_source=None``) and the two streams are demuxed on
         ``Sample.adc_source``.

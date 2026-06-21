@@ -43,7 +43,7 @@ from portenta_reader import PortentaReader, Sample
 
 # Make the sibling ZaberStage package importable without requiring an install.
 _THIS_DIR = Path(__file__).resolve().parent
-_ZABER_DIR = _THIS_DIR.parent / "ZaberStage"
+_ZABER_DIR = _THIS_DIR.parent / "Driver_ZaberStage"
 if str(_ZABER_DIR) not in sys.path:
     sys.path.insert(0, str(_ZABER_DIR))
 

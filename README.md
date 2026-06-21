@@ -1,10 +1,12 @@
 # MicroTensileMachine
 
-A benchtop micro tensile rig for characterizing **Shape Memory Alloy (SMA / Flexinol) coils** under Joule-heating actuation. The rig captures **force**, **displacement**, **electrical impedance**, and **stage position** as time-aligned streams so that mechanical and electrical behaviour can be correlated post-hoc.
+A benchtop micro tensile rig for characterizing **Shape Memory Alloy (SMA / Flexinol) coils** under Joule-heating actuation. The rig captures **force**, **displacement**, **electrical impedance**, and **stage position** as time-aligned streams (joined on a single host `time.time()` clock) so that mechanical and electrical behaviour can be correlated post-hoc.
 
 > **University of Michigan — Robotics, HDR Lab**
 > Author: Yilin Ma
-> Last major update: 2026-06-01 — added `SMA_Driver_PIO/` (Phase 6 SMA drive-path bring-up: MCP4728 DAC → TPS7A57 LDO).
+> Last major update: 2026-06-21 — README reconciled with the on-disk tree: added `Experiment_LDOCharacterization/`, `Driver_SiglentOscilloscope/`, `Driver_RedPitaya/`, `Experiment_SpringSmokeTest/`; modules regrouped by role (driver / calibration / test); `doc/` → `docs/`.
+> 2026-06-17 — LDO **dynamic** performance (settling / overshoot / ripple) bench-verified via `Experiment_LDOCharacterization/`. Absolute-voltage accuracy deferred (see TODO).
+> 2026-06-01 — added `Firmware_SMADriver_PIO/` (Phase 6 SMA drive-path bring-up: MCP4728 DAC → TPS7A57 LDO).
 > 2026-05-28 — ADC↔sensor mapping finalized, SensorHub ring-buffer IPC ported, `ADS1263/` retired to `Archieve/`.
 
 ---
@@ -34,12 +36,14 @@ A benchtop micro tensile rig for characterizing **Shape Memory Alloy (SMA / Flex
              ▼                   ▼           │   (Flexinol)     │
         ── Disp. ──         ── Force ──     │       ▲          │
                                             │       │          │
-                                            │  DC supply       │
+                                            │  MCP4728 DAC →   │
+                                            │  TPS7A57 LDO →   │
+                                            │  MOSFET          │
                                             │  (Joule-heating) │
                                             └──────────────────┘
 ```
 
-The whole machine produces, for one experiment: per-sample voltage streams from the ADCs (force + displacement), per-measurement impedance from the LCR (Ls + Rs), and per-command stage position — all timestamped on the same host clock so that they join cleanly during analysis.
+The SMA Joule-heating supply is the **MCP4728 DAC → TPS7A57 LDO → MOSFET** drive path (see [`Firmware_SMADriver_PIO/`](Firmware_SMADriver_PIO/README.md)); its dynamic response was characterized with the Siglent scope (see [`Experiment_LDOCharacterization/`](Experiment_LDOCharacterization/README.md)). The whole machine produces, for one experiment: per-sample voltage streams from the ADCs (force + displacement), per-measurement impedance from the LCR (Ls + Rs), and per-command stage position — all timestamped on the same host clock so that they join cleanly during analysis.
 
 ---
 
@@ -52,9 +56,9 @@ After the dual-ADC cross-compare runs in `Calibrate_LaserHead/` and `Calibrate_L
 | **ADC1** | **AIN4 (+) / AIN5 (−)** | **Keyence IL-030 (laser)** | **400 SPS** | PGA in path, gain = 1 | Sinc3 | 32-bit | Cable 4 |
 | **ADC2** | **AIN2 (+) / AIN3 (−)** | **Load cell (LCA-9PC)**    | **400 SPS** | gain = 1 (PGA in path) | Sinc3 | 24-bit | Cable 3 |
 
-External REF7050 (+5.000 V) on AIN0(+)/AIN1(-) is shared by both ADCs (REFMUX=0x09, REF2=001b). All wiring in [`doc/MEMO_cable_map.md`](doc/MEMO_cable_map.md).
+External REF7050 (+5.000 V) on AIN0(+)/AIN1(-) is shared by both ADCs (REFMUX=0x09, REF2=001b). All wiring in [`docs/MEMO_cable_map.md`](docs/MEMO_cable_map.md).
 
-The SensorHub firmware was switched to a **shared-SRAM ring buffer (SRAM4)** for M4→M7 sample transport on the same date, replacing the synchronous per-sample `RPC.print()` path that was crashing under sustained dual-ADC throughput (~660 msg/s). See [`SensorHub_PIO/src/sample_ring.h`](SensorHub_PIO/src/sample_ring.h).
+The SensorHub firmware uses a **shared-SRAM ring buffer (SRAM4)** for M4→M7 sample transport, replacing the synchronous per-sample `RPC.print()` path that was crashing under sustained dual-ADC throughput (~660 msg/s). See [`Firmware_SensorHub_PIO/src/sample_ring.h`](Firmware_SensorHub_PIO/src/sample_ring.h).
 
 ---
 
@@ -72,26 +76,47 @@ Every module below carries a status. Same vocabulary in every README and in the 
 
 ---
 
-## Modules at a glance
+## How the modules are organized
+
+The tree mixes several *kinds* of module. Read them in these buckets (this grouping is newer than some folder names — see the "formalize the taxonomy" TODO):
+
+- **Firmware** — PlatformIO projects that run on the Portenta H7.
+- **Instrument drivers** — thin host-side Python wrappers for one piece of bench hardware each (stage, LCR, scope, Red Pitaya). No experiment logic.
+- **Calibration tools** — turn a known physical input into sensor constants (`calibration.json`) consumed downstream.
+- **Characterization / experiments** — orchestrate hardware + drivers to record or characterize the system (the SMA recorder, the LDO dynamic study, the spring integration test).
 
 ### Firmware (PlatformIO, Portenta H7 + TI ADS1263 EVM)
 
 | Folder | Status | Purpose |
 |---|---|---|
-| [`SensorHub_PIO/`](SensorHub_PIO/STATUS.md) | **To-Test** (post-2026-05-28 swap + ring-buffer port) | **Production firmware target.** Dual-ADC stream — laser on **ADC1/AIN4-AIN5**, load cell on **ADC2/AIN2-AIN3** — single serial stream with `src` column. Ring-buffer IPC. Needs one bench re-verify run with the swapped pairing before flipping to Stable. |
+| [`Firmware_SensorHub_PIO/`](Firmware_SensorHub_PIO/STATUS.md) | **To-Test** (post-2026-05-28 swap + ring-buffer port) | **Production sensing firmware.** Dual-ADC stream — laser on **ADC1/AIN4-AIN5**, load cell on **ADC2/AIN2-AIN3** — single serial stream with `src` column. Ring-buffer IPC. Needs one bench re-verify run with the swapped pairing before flipping to Stable. |
+| [`Firmware_SMADriver_PIO/`](Firmware_SMADriver_PIO/README.md) | **To-Test** (drive path + **dynamics verified** 2026-06-17; absolute-V trim deferred) | **Phase 6 SMA drive-path firmware.** M7-only: I2C → MCP4728 DAC → TPS7A57 LDO (DAC-margining via a 6.2 kΩ REF-pin resistor) → MOSFET-gated SMA load; INA296A current sense; `fire` command emits a scope-trigger edge. Settling/overshoot/ripple confirmed via `Experiment_LDOCharacterization/`. Still to do: trim `vdd`/`offset` against a meter for absolute accuracy, then merge the M7 control code into `Firmware_SensorHub_PIO/`. |
 | [`Calibrate_LaserHead/Calibrate_LaserHead_PIO/`](Calibrate_LaserHead/) | **Stable** | Calibration firmware: dual-ADC cross-compare on AIN4/AIN5 (laser). Ring-buffer IPC. |
 | [`Calibrate_LoadCell/Calibrate_Loadcell_PIO/`](Calibrate_LoadCell/) | **Stable** | Calibration firmware: dual-ADC cross-compare on AIN2/AIN3 (load cell). Ring-buffer IPC. |
-| [`SMA_Driver_PIO/`](SMA_Driver_PIO/README.md) | **WIP** (bring-up draft, 2026-06-01 — not yet flashed/bench-verified) | **Phase 6 SMA drive-path bring-up.** Standalone M7-only firmware: I2C → MCP4728 DAC → TPS7A57 LDO (DAC-margining via a 6.2 kΩ REF-pin resistor) → MOSFET-gated SMA load; analytical `V_LDO = V_OFFSET + (VDD/4095)·code` transfer with 16-bit ADC readback. Merges into `SensorHub_PIO/` M7 once `set`/`drive` accuracy is bench-verified. |
 
-### Host-side Python modules
+### Instrument drivers (host-side Python)
 
 | Folder | Status | Purpose |
 |---|---|---|
-| [`SMA_CharacterizationV2/`](SMA_CharacterizationV2/STATUS.md) | **To-Test** (refactor pending bench-verify) | **Current SMA recorder.** Single-session OPEN → SHORT → RAW state machine with worker threads. Produces per-phase CSVs + `meta.json` for the offline analyzer. Uses `KeysightLCR/` as the single LCR driver. Needs the new `Calibrate_LaserHead/` constants wired in. |
-| [`Calibrate_LaserHead/`](Calibrate_LaserHead/) | **Stable** | Calibration tool. Walks the Zaber through a fixed displacement sweep, captures the laser voltage at each point, fits `V = k·µm + V₀`. The resulting `k` and `V₀` feed the SMA analyzer. Dual-ADC cross-compare pipeline. |
-| [`Calibrate_LoadCell/`](Calibrate_LoadCell/) | **Stable** | Load-cell calibration. Applies known weights, captures the LCA-9PC output via ADC1+ADC2 cross-compare, fits force↔voltage. |
-| [`ZaberStage/`](ZaberStage/STATUS.md) | **Stable** | Linear-stage control wrapper. Auto-discovery, JSON config, 100 Hz position reads, safety limits. v1.0 (Nov 2025). |
-| [`KeysightLCR/`](KeysightLCR/STATUS.md) | **Stable** | E4980A/AL LCR meter wrapper. USB or LAN VISA, optimized for max read rate. |
+| [`Driver_ZaberStage/`](Driver_ZaberStage/STATUS.md) | **Stable** | Linear-stage control wrapper. Auto-discovery, JSON config, 100 Hz position reads, safety limits. v1.0 (Nov 2025). COM5. |
+| [`Driver_KeysightLCR/`](Driver_KeysightLCR/STATUS.md) | **Stable** | E4980A/AL LCR meter wrapper. USB or LAN VISA, optimized for max read rate. The single LCR driver used by the recorder. |
+| [`Driver_SiglentOscilloscope/`](Driver_SiglentOscilloscope/STATUS.md) | **Stable** (bench-verified 2026-06-15, 10/10 tests) | SDS2000X Plus wrapper over a raw SCPI socket (`:5025`, no VISA). Mirrors the `Driver_KeysightLCR` API so it drops into the same worker pattern. Used by `Experiment_LDOCharacterization/`; a `ScopeWorker` for `Experiment_SMACharacterizationV2/` is still TODO. |
+| [`Driver_RedPitaya/`](Driver_RedPitaya/README.md) | **Draft / To-Test** (not yet HW-validated) | Thin SCPI driver for the STEMlab 125-14: generate a sine + capture two raw phase-coherent waveforms. Intended future replacement for the bench LCR (signal role on the board, R/L math on the host). Validate against the E4980 before production use. |
+
+### Calibration tools (host-side Python)
+
+| Folder | Status | Purpose |
+|---|---|---|
+| [`Calibrate_LaserHead/`](Calibrate_LaserHead/) | **Stable** | Walks the Zaber through a fixed displacement sweep, captures laser voltage at each point, fits `V = k·µm + V₀`. The resulting `k`/`V₀` feed the SMA analyzer. Dual-ADC cross-compare pipeline. |
+| [`Calibrate_LoadCell/`](Calibrate_LoadCell/) | **Stable** | Applies known weights, captures the LCA-9PC output via ADC1+ADC2 cross-compare, fits force↔voltage. |
+
+### Characterization / experiments (host-side Python)
+
+| Folder | Status | Purpose |
+|---|---|---|
+| [`Experiment_SMACharacterizationV2/`](Experiment_SMACharacterizationV2/STATUS.md) | **To-Test** (refactor pending bench-verify) | **The SMA recorder.** Single-session OPEN → SHORT → RAW state machine with worker threads. Produces per-phase CSVs + `meta.json` for the offline analyzer. Uses `Driver_KeysightLCR/` as the single LCR driver. Needs the new `Calibrate_*` constants wired in. |
+| [`Experiment_LDOCharacterization/`](Experiment_LDOCharacterization/STATUS.md) | **To-Test** — **dynamics verified** (2026-06-17), absolute-V deferred | Time-domain characterization of the MCP4728→TPS7A57 LDO drive path using the Siglent scope. **Settling time, overshoot, 10–90% rise, and ripple are bench-verified** across loaded/unloaded × small/mid/large steps (10 runs, 6/16–6/17). **Absolute voltage** from `capture_waveform()` is *not* trusted yet — `codes_per_div = 25.0` is still unverified against the Programming Guide (settle *time* is unaffected; overshoot % needs it). One-off debug scripts live in [`Experiment_LDOCharacterization/diag/`](Experiment_LDOCharacterization/diag/). |
+| [`Experiment_SpringSmokeTest/`](Experiment_SpringSmokeTest/README.md) | **Diagnostic** (Phase 5 integration test; ran 2026-05-31) | Spring-as-SMA-surrogate joint test: validates the **laser-displacement and load-cell** channels against each other and Hooke's-law ground truth while stressing the M4→ring→M7→USB pipeline at 1 kSPS. A bring-up/integration test, not part of the production recording flow. |
 
 ### Archive — `Archieve/` (read-only, **excluded from project understanding**)
 
@@ -99,10 +124,10 @@ Every module below carries a status. Same vocabulary in every README and in the 
 
 | Folder | Notes |
 |---|---|
-| `Archieve/ADS1263/` | Arduino-IDE era ADS1263 test sketches (TestA–E, SPI loopback, pin scanner, Stable.ino) plus the original `ADS1263_H7_Integration_Notes.md`. Driver lineage that fed `SensorHub_PIO/lib/ADS1263/`. Retired 2026-05-28. |
-| `Archieve/LaserHead_PIO/` | Single-path reference build (ADC2 / laser only). Superseded by `SensorHub_PIO/`. |
-| `Archieve/LoadCell_PIO/` | Single-path reference build (ADC1 / load cell only). Superseded by `SensorHub_PIO/`. |
-| `Archieve/SMA_Characterization/` | v1 SMA recorder. Superseded by `SMA_CharacterizationV2/`. |
+| `Archieve/ADS1263/` | Arduino-IDE era ADS1263 test sketches plus the original `ADS1263_H7_Integration_Notes.md`. Driver lineage that fed `Firmware_SensorHub_PIO/lib/ADS1263/`. Retired 2026-05-28. |
+| `Archieve/LaserHead_PIO/` | Single-path reference build (laser only). Superseded by `Firmware_SensorHub_PIO/`. |
+| `Archieve/LoadCell_PIO/` | Single-path reference build (load cell only). Superseded by `Firmware_SensorHub_PIO/`. |
+| `Archieve/SMA_Characterization/` | v1 SMA recorder. Superseded by `Experiment_SMACharacterizationV2/`. |
 | `Archieve/AD2/` | Digilent Analog Discovery 2 substitute interface used during the H7 down-time. |
 
 ---
@@ -111,19 +136,22 @@ Every module below carries a status. Same vocabulary in every README and in the 
 
 | Subsystem | Part | Datasheet |
 |---|---|---|
-| MCU | Arduino Portenta H7 (ABX00042) | [doc/PortentaH7_ABX00042_Pinout.pdf](doc/PortentaH7_ABX00042_Pinout.pdf) |
-| Carrier | Arduino Portenta Mid Carrier (ASX00055) | [doc/PortentaMidCarrier_ASX00055_Pinout.pdf](doc/PortentaMidCarrier_ASX00055_Pinout.pdf) |
-| ADC board | **TI ADS1263 EVM** (32-bit ADC1 + 24-bit ADC2) — connected to the Mid Carrier via a 6-wire SPI cable, see [doc/MEMO_cable_map.md](doc/MEMO_cable_map.md) | [doc/ADS1263_Datasheet.pdf](doc/ADS1263_Datasheet.pdf), [doc/ADS1263_EVM_User_Guide.pdf](doc/ADS1263_EVM_User_Guide.pdf) |
-| Voltage reference | **TI REF7050** (5.000 V precision reference) — feeds the ADS1263's external reference inputs on AIN0 / AIN1, see [doc/MEMO_cable_map.md](doc/MEMO_cable_map.md) Cable 2 | (vendor site) |
-| Displacement sensor | Keyence IL-030 laser, 30 mm reference, ±5 mm range — wired to AIN4/AIN5 | [doc/KeyenceIL_LaserSensor_Manual.pdf](doc/KeyenceIL_LaserSensor_Manual.pdf) |
-| Load cell amplifier | LCA-9PC / LCA-RTC — output wired to AIN2/AIN3 | [doc/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf](doc/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf) |
+| MCU | Arduino Portenta H7 (ABX00042) | [docs/PortentaH7_ABX00042_Pinout.pdf](docs/PortentaH7_ABX00042_Pinout.pdf) |
+| Carrier | Arduino Portenta Mid Carrier (ASX00055) | [docs/PortentaMidCarrier_ASX00055_Pinout.pdf](docs/PortentaMidCarrier_ASX00055_Pinout.pdf) |
+| ADC board | **TI ADS1263 EVM** (32-bit ADC1 + 24-bit ADC2) — connected to the Mid Carrier via a 6-wire SPI cable, see [docs/MEMO_cable_map.md](docs/MEMO_cable_map.md) | [docs/ADS1263_Datasheet.pdf](docs/ADS1263_Datasheet.pdf), [docs/ADS1263_EVM_User_Guide.pdf](docs/ADS1263_EVM_User_Guide.pdf) |
+| Voltage reference | **TI REF7050** (5.000 V precision reference) — feeds the ADS1263's external reference inputs on AIN0 / AIN1, see [docs/MEMO_cable_map.md](docs/MEMO_cable_map.md) Cable 2 | (vendor site) |
+| Displacement sensor | Keyence IL-030 laser, 30 mm reference, ±5 mm range — wired to AIN4/AIN5 | [docs/KeyenceIL_LaserSensor_Manual.pdf](docs/KeyenceIL_LaserSensor_Manual.pdf) |
+| Load cell amplifier | LCA-9PC / LCA-RTC — output wired to AIN2/AIN3 | [docs/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf](docs/LCA9PC_LCARTC_LoadCellAmp_Manual.pdf) |
 | LCR meter | Keysight E4980AL | (vendor site) |
+| Oscilloscope | Siglent SDS2000X Plus (SDS2204X Plus on the bench) — LDO dynamic capture | [Driver_SiglentOscilloscope/](Driver_SiglentOscilloscope/) |
+| Impedance analyzer (future) | Red Pitaya STEMlab 125-14 — intended LCR replacement | [Driver_RedPitaya/](Driver_RedPitaya/) |
 | Linear stage | Zaber X-LSQ300A-E01 (300 mm travel, encoder, serial 143153) | (vendor site) |
 | Bias-tee | Double bias-tee, 0.22 µF C0G + 47 µH | (custom) |
-| SMA drive DAC | Microchip MCP4728 (12-bit, I2C 0x60) — sets the LDO REF node via a 6.2 kΩ margining resistor, see [`SMA_Driver_PIO/`](SMA_Driver_PIO/README.md) | (vendor site) |
-| SMA drive LDO | TI TPS7A5701 (TPS7A57) — programmable LDO (IREF·RREF, unity-gain), Joule-heats the SMA coil through a MOSFET | (vendor site, SBVS395) |
+| SMA drive DAC | Microchip MCP4728 (12-bit, I2C 0x60) — sets the LDO REF node via a 6.2 kΩ margining resistor, see [`Firmware_SMADriver_PIO/`](Firmware_SMADriver_PIO/README.md) | (vendor site) |
+| SMA drive LDO | TI TPS7A5701 (TPS7A57) — programmable LDO (IREF·RREF, unity-gain), Joule-heats the SMA coil through a MOSFET | [docs/tps7a57.pdf](docs/tps7a57.pdf) |
+| SMA current sense | TI INA296A (10 V/V) + 100 mΩ shunt = 1 V/A on H7 A1 | (vendor site) |
 
-See [doc/README.md](doc/README.md) for the per-PDF index and the operator memos.
+See [docs/README.md](docs/README.md) for the per-PDF index and the operator memos.
 
 ---
 
@@ -131,51 +159,21 @@ See [doc/README.md](doc/README.md) for the per-PDF index and the operator memos.
 
 | If you want to… | Go to |
 |---|---|
-| Run an SMA characterization experiment | [`SMA_CharacterizationV2/`](SMA_CharacterizationV2/) — `python sma_recorder.py` |
+| Run an SMA characterization experiment | [`Experiment_SMACharacterizationV2/`](Experiment_SMACharacterizationV2/) — `python sma_recorder.py` |
 | Re-calibrate the laser head before a run | [`Calibrate_LaserHead/`](Calibrate_LaserHead/) — `python run_calibration.py` |
 | Re-calibrate the load cell before a run | [`Calibrate_LoadCell/`](Calibrate_LoadCell/) — `python run_calibration.py` |
-| Flash/modify the production firmware on the H7 | [`SensorHub_PIO/`](SensorHub_PIO/) |
-| Drive / actuate the SMA coil (set LDO voltage, `drive <V> <ms>`) | [`SMA_Driver_PIO/`](SMA_Driver_PIO/) |
-| Control the Zaber stage from Python | [`ZaberStage/`](ZaberStage/) |
-| Talk to the LCR meter from Python | [`KeysightLCR/`](KeysightLCR/) |
-| Look up an ADS1263 register or known issue | `SensorHub_PIO/lib/ADS1263/ADS1263_Driver.cpp` (live driver). Historical notes in `Archieve/ADS1263/ADS1263_H7_Integration_Notes.md`. |
+| Flash/modify the production sensing firmware | [`Firmware_SensorHub_PIO/`](Firmware_SensorHub_PIO/) |
+| Drive / actuate the SMA coil (`set <V>`, `drive <V> <ms>`, `fire`) | [`Firmware_SMADriver_PIO/`](Firmware_SMADriver_PIO/) |
+| Characterize the LDO dynamic response (settling/ripple) | [`Experiment_LDOCharacterization/`](Experiment_LDOCharacterization/) — `python run_experiment.py` |
+| Validate laser + load cell together against a spring | [`Experiment_SpringSmokeTest/`](Experiment_SpringSmokeTest/) |
+| Control the Zaber stage from Python | [`Driver_ZaberStage/`](Driver_ZaberStage/) |
+| Talk to the LCR meter from Python | [`Driver_KeysightLCR/`](Driver_KeysightLCR/) |
+| Talk to the Siglent scope from Python | [`Driver_SiglentOscilloscope/`](Driver_SiglentOscilloscope/) |
+| Look up an ADS1263 register or known issue | `Firmware_SensorHub_PIO/lib/ADS1263/ADS1263_Driver.cpp` (live driver). Historical notes in `Archieve/ADS1263/ADS1263_H7_Integration_Notes.md`. |
 
 ---
 
 ## Top-level conventions
 
 - **One master README per module** (not scattered Plan/Memo/Status files). The root README + each module's `README.md` is the canonical source; per-module `STATUS.md` is a short status header.
-- **Datasheets** live under [`doc/`](doc/) only. No sub-module duplicates.
-- **`Archieve/`** (sic — known misspelling, preserved to avoid breaking any path references) is read-only and excluded from project understanding.
-- The `.gitignore` is intentionally minimal — `.DS_Store` only.
-
----
-
-## TODO — Cross-cutting / major items
-
-Per-module TODOs live in each module's `STATUS.md` (and in this section's "Module pointers" lines).
-
-### Open
-
-- **Bring up and bench-verify `SMA_Driver_PIO/` (Phase 6 SMA drive path).** Flash the M7-only firmware, walk the [bring-up checklist](SMA_Driver_PIO/README.md#bring-up-checklist) (MCP4728 alone → 6.2 kΩ REF margining → `csv` linearity `R²>0.999`, residual <50 mV → `drive` smoke test), then trim `vdd`/`offset` to the meter. Once `set`/`drive` accuracy is confirmed, merge the M7 control code into `SensorHub_PIO/` M7 and push SMA feedback samples (src=3/4/5) onto the SRAM ring per `SensorHub_PIO/src/sample_ring.h`. *(SMA_Driver_PIO/README.md)*
-- **Bench re-verify `SensorHub_PIO/` after the 2026-05-28 ADC swap + ring-buffer port.** Same expected line rate as the pre-swap verify on 2026-05-25; confirm `src=1` now tracks the laser (AIN4/5) and `src=2` tracks the load cell (AIN2/3) within multimeter tolerance, no ring overflows, no checksum errors. Flips status to **Stable** once `SMA_CharacterizationV2/` consumes the stream end-to-end. *(SensorHub_PIO/STATUS.md)*
-- **Wire the new `Calibrate_LaserHead/` and `Calibrate_LoadCell/` constants into `SMA_CharacterizationV2/`.** The legacy `k = -0.1171 mV/µm`, `V₀ = 566.957 mV` constants came through the Waveshare HAT's ~4.4× attenuator and are invalid on the bare EVM. Read the current `Calibrate_LaserHead/calibration.json` and `Calibrate_LoadCell/calibration.json` into `SMA_CharacterizationV2/session.py` (laser_calibration_reference block).
-- **Bench-verify `SMA_CharacterizationV2/` after the LCR refactor.** The recorder now imports `LCRMeter` / `MeasurementConfig` / `MeasurementFunction` from `KeysightLCR/lcr_meter.py`; the local `lcr_reader.py` is gone. Smoke-test per `SMA_CharacterizationV2/STATUS.md` and flip the status back to Stable.
-- **Fill in the operator memos in `doc/`** (`MEMO_cable_map.md` Cables 3/4 are partial; `MEMO_carrier_config.md`, `MEMO_sensor_setup.md`, `MEMO_bias_tee.md`, `MEMO_lcr_setup.md` are stubs). Single biggest gap for someone else (or an AI agent) reasoning about state.
-- **Validate laser displacement linearity against physical reference across full ±5 mm range.** Currently `Calibrate_LaserHead/` runs a sweep but full-range linearity verification is still an open follow-up.
-- **Re-record the LCR SHORT calibration any time the cable routing changes.** Per the Notion bias-tee writeup §4.2, the short drifts ~1% with mechanical disturbance. Bake into the operator procedure.
-
-### Future / nice-to-have
-
-- **Layer Ethernet streaming on M7** so the sample stream isn't tied to a USB cable.
-- **Rename `Archieve/` → `Archive/`** (it's misspelled). Low priority — grep first to make sure no `sys.path` shim still points at the old name.
-
-### Resolved (recent)
-
-- ✅ **First power-up of the H7 + Mid Carrier + ADS1263 EVM** — 2026-05-24, all 11 checkpoints PASS.
-- ✅ **Port firmware from Hat Carrier to Mid Carrier** (SensorHub_PIO) — 2026-05-25 bench-verified pre-swap.
-- ✅ **Re-test ADC2/AIN2-AIN3 on the EVM** — 2026-05-24 cp7+cp8 PASS, all pairs clean.
-- ✅ **DRDY off `PJ_11`** — resolved by Mid Carrier (DRDY now on PC_6, no LoRa conflict).
-- ✅ **M4↔M7 slow-comm crash under sustained dual-ADC throughput** — resolved 2026-05-28 by porting the shared-SRAM (SRAM4) ring buffer from the Calibrate_* modules into `SensorHub_PIO/`. RPC retained for boot-time checkpoints only.
-- ✅ **Finalize ADC↔sensor mapping** — 2026-05-28. ADC1 → AIN4/AIN5 laser, ADC2 → AIN2/AIN3 load cell, both 400 SPS. Cross-compare runs in `Calibrate_LaserHead/` and `Calibrate_LoadCell/` settled it.
-- ✅ **Retire `LoadCell_PIO/`, `LaserHead_PIO/`, `ADS1263/`** — moved to `Archieve/` (2026-05-28 for `ADS1263/`).
+- **Datasheets and operator memos** live under [`docs/`](docs/) only. No sub-module dupli

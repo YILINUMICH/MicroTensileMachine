@@ -1,6 +1,6 @@
 # `doc/` — Datasheets, manuals, and operator memos
 
-This folder holds the authoritative reference material for every physical part in the rig. **All datasheets live here**; sub-module `doc/` folders (e.g. `SensorHub_PIO/doc/`) hold only build-specific supporting notes, not duplicate copies.
+This folder holds the authoritative reference material for every physical part in the rig. **All datasheets live here**; sub-module `doc/` folders (e.g. `Firmware_SensorHub_PIO/doc/`) hold only build-specific supporting notes, not duplicate copies.
 
 ## Datasheets / manuals
 
@@ -16,14 +16,14 @@ This folder holds the authoritative reference material for every physical part i
 | File | Part | Used by | One-line summary |
 |---|---|---|---|
 | [`ADS1263_Datasheet.pdf`](ADS1263_Datasheet.pdf) | TI ADS1263 (32-bit ADC1 + 24-bit ADC2 on one die) | All `*_PIO/` firmware, `ADS1263/` | Definitive register reference. Look here for `INPMUX`, `MODE2`, `ADC2CFG`, `REFMUX`, filter modes, SPI frame format. |
-| [`ADS1263_EVM_User_Guide.pdf`](ADS1263_EVM_User_Guide.pdf) | TI ADS1263 EVM (evaluation module) | All `*_PIO/` firmware (current rig), `ADS1263/` (historical reference) | **EVM is the current ADC board on the rig.** Use this guide for the EVM's J1/J2 headers, jumper map, and on-board reference. The companion [`../SensorHub_PIO/doc/ADS1263EVM_Modifications.md`](../SensorHub_PIO/doc/ADS1263EVM_Modifications.md) records any non-default jumper / solder mods we've applied. Note: the legacy Waveshare ADS1263 HAT (used March–April 2026) carried the same silicon but with added input-stage circuitry — that's why old calibration numbers don't transfer to the bare EVM. |
+| [`ADS1263_EVM_User_Guide.pdf`](ADS1263_EVM_User_Guide.pdf) | TI ADS1263 EVM (evaluation module) | All `*_PIO/` firmware (current rig), `ADS1263/` (historical reference) | **EVM is the current ADC board on the rig.** Use this guide for the EVM's J1/J2 headers, jumper map, and on-board reference. The companion [`../Firmware_SensorHub_PIO/doc/ADS1263EVM_Modifications.md`](../Firmware_SensorHub_PIO/doc/ADS1263EVM_Modifications.md) records any non-default jumper / solder mods we've applied. Note: the legacy Waveshare ADS1263 HAT (used March–April 2026) carried the same silicon but with added input-stage circuitry — that's why old calibration numbers don't transfer to the bare EVM. |
 
 ### Sensors
 
 | File | Part | Used by | One-line summary |
 |---|---|---|---|
-| [`KeyenceIL_LaserSensor_Manual.pdf`](KeyenceIL_LaserSensor_Manual.pdf) | Keyence IL-series laser displacement sensor (we use IL-030) | `LaserHead_PIO/`, `SensorHub_PIO/`, `Calibrate_LaserHead/`, `SMA_Characterization*/` | IL-030 specs and amplifier setup: 30 mm reference distance, ±5 mm range, 0.5 mV/µm nominal in the 0–5 V output mode, voltage-vs-current output switch on the controller. |
-| [`LCA9PC_LCARTC_LoadCellAmp_Manual.pdf`](LCA9PC_LCARTC_LoadCellAmp_Manual.pdf) | Omega LCA-9PC / LCA-RTC bridge amplifier | `LoadCell_PIO/`, `SensorHub_PIO/`, `Archieve/AD2/` | Load-cell amplifier setup: bridge excitation, zero/span calibration, 0–5 V output. **Note: needs 30 min warm-up before calibration measurements.** Compression-only wiring in this rig. |
+| [`KeyenceIL_LaserSensor_Manual.pdf`](KeyenceIL_LaserSensor_Manual.pdf) | Keyence IL-series laser displacement sensor (we use IL-030) | `LaserHead_PIO/`, `Firmware_SensorHub_PIO/`, `Calibrate_LaserHead/`, `SMA_Characterization*/` | IL-030 specs and amplifier setup: 30 mm reference distance, ±5 mm range, 0.5 mV/µm nominal in the 0–5 V output mode, voltage-vs-current output switch on the controller. |
+| [`LCA9PC_LCARTC_LoadCellAmp_Manual.pdf`](LCA9PC_LCARTC_LoadCellAmp_Manual.pdf) | Omega LCA-9PC / LCA-RTC bridge amplifier | `LoadCell_PIO/`, `Firmware_SensorHub_PIO/`, `Archieve/AD2/` | Load-cell amplifier setup: bridge excitation, zero/span calibration, 0–5 V output. **Note: needs 30 min warm-up before calibration measurements.** Compression-only wiring in this rig. |
 
 ---
 
@@ -52,5 +52,5 @@ Memos capture the things the datasheets *don't* tell you: how this particular ri
 ## Conventions
 
 - **Datasheets only here.** Operator memos go here too (above), but per-module debugging notes belong in that module's folder.
-- **Don't duplicate.** `SensorHub_PIO/doc/` holds `PortentaH7_ABX00042_Pinout.pdf` etc. as a convenience during development — long-term, those should be removed in favour of links back to this folder.
+- **Don't duplicate.** `Firmware_SensorHub_PIO/doc/` holds `PortentaH7_ABX00042_Pinout.pdf` etc. as a convenience during development — long-term, those should be removed in favour of links back to this folder.
 - **Keep names descriptive.** Future-you and the AI agent both rely on filenames carrying meaning. `ABX00042-full-pinout.pdf` is ambiguous; `PortentaH7_ABX00042_Pinout.pdf` is not.

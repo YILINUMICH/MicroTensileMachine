@@ -4,7 +4,7 @@
  * Purpose-built firmware for the IL-030 → ADS1263 calibration workflow in
  * Calibrate_LaserHead/. BOTH ADC1 and ADC2 sample the Keyence IL-030 analog
  * output on AIN4/AIN5 at the same time. ADC2 is the primary channel — its
- * fit becomes the production k / V₀ that propagates into SMA_CharacterizationV2/
+ * fit becomes the production k / V₀ that propagates into Experiment_SMACharacterizationV2/
  * and session.py. ADC1 is an independent digital-path cross-check; two ADCs
  * converging on the same fit catches ADC2-specific driver bugs and register-
  * config errors that a single-channel measurement cannot.
@@ -33,7 +33,7 @@
  * Where this fits in the project firmware family (2026-05-26):
  *
  *   ┌──────────────────────────────┐
- *   │ SensorHub_PIO/               │  Production rig: load (ADC1 on AIN2/3)
+ *   │ Firmware_SensorHub_PIO/               │  Production rig: load (ADC1 on AIN2/3)
  *   │   + load + laser dual-stream │                  + laser (ADC2 on AIN4/5)
  *   └──────────────────────────────┘  Untouched by the calibration workflow.
  *
@@ -56,7 +56,7 @@
  *   - Bare TI ADS1263 EVM
  *   - External REF7050 (+5 V) on AIN0(+) / AIN1(-)            [Cable 2]
  *   - Keyence IL-030 analog out  on AIN4(+) / AIN5(-)         [Cable 4]
- *     (per doc/MEMO_cable_map.md, matching SensorHub_PIO production wiring,
+ *     (per doc/MEMO_cable_map.md, matching Firmware_SensorHub_PIO production wiring,
  *      so calibration constants apply directly to the production rig.)
  *
  * Signal chain (this build):
@@ -68,7 +68,7 @@
  *
  * Driver provenance:
  *   lib/ADS1263/ was copied from LaserHead_PIO/lib/ADS1263/ on 2026-05-26.
- *   That driver in turn came from SensorHub_PIO and carries both bug fixes
+ *   That driver in turn came from Firmware_SensorHub_PIO and carries both bug fixes
  *   (RDATA2 6-byte frame, ADC2CFG REF2/GAIN2 field order) and the Mid Carrier
  *   pin defines (PA_8/PC_6/PC_7). See doc/ADS1263_H7_Integration_Notes.md
  *   §4 addenda for bug write-ups.
@@ -84,7 +84,7 @@
  *
  * What cross-compare DOES catch:
  *   - ADC2-specific driver bugs (e.g. the RDATA2 5-vs-6 byte frame issue
- *     fixed in SensorHub_PIO 2026-05-25, ADC2CFG field swap fixed same day)
+ *     fixed in Firmware_SensorHub_PIO 2026-05-25, ADC2CFG field swap fixed same day)
  *   - ADC2 register-config errors (wrong DR2 / GAIN2, accidentally landing
  *     on the internal 2.5 V reference instead of REF7050)
  *   - Any asymmetric handling of the same physical signal
@@ -156,7 +156,7 @@ void setup() {
     RPC.begin();     // boots M4 core
 
     // Banner identifies this as the calibration build so the operator
-    // knows they didn't flash LaserHead_PIO or SensorHub_PIO by mistake.
+    // knows they didn't flash LaserHead_PIO or Firmware_SensorHub_PIO by mistake.
     Serial.println("[M7] bridge up — ring-buffer IPC, forwarding to USB Serial (Calibrate_LaserHead)");
 }
 
@@ -272,7 +272,7 @@ void setup() {
 
     // Drive the ADS1263 pins BEFORE adc.begin() so we can localise any
     // pinMode/port-clock hang. Pins per the driver header — Mid Carrier
-    // J15 positions, matching SensorHub_PIO + LaserHead_PIO.
+    // J15 positions, matching Firmware_SensorHub_PIO + LaserHead_PIO.
     pinMode(ADS1263_CS_PIN, OUTPUT);
     CP(2, "pinMode CS (PA_8 / J15-25 / PWM_0) done");
 
@@ -304,7 +304,7 @@ void setup() {
     // ── Configure ADC1 ─────────────────────────────────────────────────
     // ADC1 set to the SAME input pair as ADC2 (AIN4/AIN5) so both ADCs
     // digitise the IL-030 signal in parallel. PGA in path at gain=1
-    // (matches SensorHub_PIO production load-cell config — same noise
+    // (matches Firmware_SensorHub_PIO production load-cell config — same noise
     // floor characteristics, ~1.3 µV RMS at 400 SPS). VBIAS keeps AINCOM
     // at AVDD/2 ≈ 2.6 V so the IL-030 input common-mode sits inside
     // the PGA's [0.3, AVDD-0.3] window.
@@ -329,7 +329,7 @@ void setup() {
     // ── Configure ADC2 ─────────────────────────────────────────────────
     // Production routing: Keyence IL-030 laser controller analog output on
     // AIN4(+) / AIN5(-) (Cable 4 in doc/MEMO_cable_map.md). Mirrors the
-    // SensorHub_PIO production firmware byte-for-byte so calibration
+    // Firmware_SensorHub_PIO production firmware byte-for-byte so calibration
     // constants apply directly to the production rig with no signal-chain
     // translation.
     //   ADC2MUX = 0x45 → AIN4(+) / AIN5(-)

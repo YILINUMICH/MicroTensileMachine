@@ -34,7 +34,7 @@
  * Where this fits in the project firmware family:
  *
  *   ┌──────────────────────────────┐
- *   │ SensorHub_PIO/               │  Production rig: load (ADC1 on AIN2/3)
+ *   │ Firmware_SensorHub_PIO/               │  Production rig: load (ADC1 on AIN2/3)
  *   │   + load + laser dual-stream │                  + laser (ADC2 on AIN4/5)
  *   └──────────────────────────────┘  Untouched by the calibration workflow.
  *
@@ -58,7 +58,7 @@
  *   - Bare TI ADS1263 EVM
  *   - External REF7050 (+5 V) on AIN0(+) / AIN1(-)            [Cable 2]
  *   - LCA-9PC load cell amp output on AIN2(+) / AIN3(-)       [Cable 3]
- *     (per doc/MEMO_cable_map.md, matching SensorHub_PIO production wiring
+ *     (per doc/MEMO_cable_map.md, matching Firmware_SensorHub_PIO production wiring
  *      for the load cell channel, so calibration constants apply directly
  *      to the production rig.)
  *
@@ -71,7 +71,7 @@
  *
  * Driver provenance:
  *   lib/ADS1263/ was copied from Calibrate_LaserHead_PIO/lib/ADS1263/ on
- *   2026-05-27. That driver in turn came from SensorHub_PIO and carries
+ *   2026-05-27. That driver in turn came from Firmware_SensorHub_PIO and carries
  *   both bug fixes (RDATA2 6-byte frame, ADC2CFG REF2/GAIN2 field order)
  *   and the Mid Carrier pin defines (PA_8/PC_6/PC_7). See
  *   doc/ADS1263_H7_Integration_Notes.md §4 addenda for bug write-ups.
@@ -87,7 +87,7 @@
  *
  * What cross-compare DOES catch:
  *   - ADC2-specific driver bugs (e.g. the RDATA2 5-vs-6 byte frame issue
- *     fixed in SensorHub_PIO 2026-05-25, ADC2CFG field swap fixed same day)
+ *     fixed in Firmware_SensorHub_PIO 2026-05-25, ADC2CFG field swap fixed same day)
  *   - ADC2 register-config errors (wrong DR2 / GAIN2, accidentally landing
  *     on the internal 2.5 V reference instead of REF7050)
  *   - Any asymmetric handling of the same physical signal
@@ -158,7 +158,7 @@ void setup() {
     RPC.begin();     // boots M4 core
 
     // Banner identifies this as the load cell calibration build so the
-    // operator knows they didn't flash LaserHead_PIO or SensorHub_PIO.
+    // operator knows they didn't flash LaserHead_PIO or Firmware_SensorHub_PIO.
     Serial.println("[M7] bridge up — ring-buffer IPC, forwarding to USB Serial (Calibrate_LoadCell)");
 }
 
@@ -272,7 +272,7 @@ void setup() {
 
     // Drive the ADS1263 pins BEFORE adc.begin() so we can localise any
     // pinMode/port-clock hang. Pins per the driver header — Mid Carrier
-    // J15 positions, matching SensorHub_PIO + LaserHead_PIO.
+    // J15 positions, matching Firmware_SensorHub_PIO + LaserHead_PIO.
     pinMode(ADS1263_CS_PIN, OUTPUT);
     CP(2, "pinMode CS (PA_8 / J15-25 / PWM_0) done");
 
@@ -304,7 +304,7 @@ void setup() {
     // ── Configure ADC1 ─────────────────────────────────────────────────
     // ADC1 (32-bit, primary) set to AIN2/AIN3 — the LCA-9PC load cell
     // amplifier output. Same pair as ADC2 for cross-compare. PGA in path
-    // at gain=1 (matches SensorHub_PIO production load-cell config —
+    // at gain=1 (matches Firmware_SensorHub_PIO production load-cell config —
     // same noise floor characteristics, ~1.3 µV RMS at 400 SPS). VBIAS
     // keeps AINCOM at AVDD/2 ≈ 2.6 V so the LCA-9PC input common-mode
     // sits inside the PGA's [0.3, AVDD-0.3] window.

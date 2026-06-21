@@ -2,7 +2,7 @@
 # LaserHead Calibration — Experiment Parameters
 # =============================================================================
 # These are experiment parameters for a single calibration sweep.
-# Hardware configuration for the Zaber stage lives in ZaberStage/*.json —
+# Hardware configuration for the Zaber stage lives in Driver_ZaberStage/*.json —
 # do NOT duplicate it here.
 #
 # All distances are in millimeters, all times in seconds.
@@ -43,7 +43,7 @@ passes: 2                          # number of full sweeps to run back-to-back.
 # digital-path check. Requires LaserHead_PIO flashed with ENABLE_ADC1=1 and
 # ENABLE_ADC2=1 (both ADCs muxed to AIN4/AIN5 — current default after the
 # 2026-05-26 firmware update). Set to false if running against
-# SensorHub_PIO production firmware or any single-channel laser build.
+# Firmware_SensorHub_PIO production firmware or any single-channel laser build.
 xcompare: true
 
 # --- Timing ------------------------------------------------------------------
@@ -66,7 +66,7 @@ portenta_baud: 115200
 
 # Zaber stage. The JSON config holds position limits + device metadata; we
 # override the port here because safety_config.json has port="auto".
-zaber_config_path: ../ZaberStage/safety_config.json
+zaber_config_path: ../Driver_ZaberStage/safety_config.json
 zaber_port: "COM5"
 
 # --- Run metadata ------------------------------------------------------------

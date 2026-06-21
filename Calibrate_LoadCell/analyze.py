@@ -69,7 +69,7 @@ def save_calibration(fit: "FitResult", checks_passed: bool,
                      override: Optional[dict] = None) -> Path:
     """
     Write calibration.json. This is the canonical file that downstream
-    modules (SMA_CharacterizationV2, SensorHub_PIO host scripts) read
+    modules (Experiment_SMACharacterizationV2, Firmware_SensorHub_PIO host scripts) read
     to convert load cell voltages to force.
 
     Extended payload (added 2026-05-28):

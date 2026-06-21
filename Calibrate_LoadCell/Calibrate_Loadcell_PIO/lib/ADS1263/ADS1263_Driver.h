@@ -3,7 +3,7 @@
  * @brief ADS1263 dual-ADC driver — Portenta H7 (M4 core) — Mid Carrier / EVM
  *
  * The ADS1263 has two independent ADCs on one die. Production channel
- * assignment (Phase 4, derived 2026-05-24 — see SensorHub_PIO/README.md
+ * assignment (Phase 4, derived 2026-05-24 — see Firmware_SensorHub_PIO/README.md
  * §Recommended configuration):
  *
  *   ADC1 — 32-bit, Sinc1-4 or FIR, up to 38 400 SPS. Used here for the

@@ -83,7 +83,7 @@ def save_calibration(fit: "FitResult",
                      out_path: Path = _CALIBRATION_JSON) -> Path:
     """
     Write (or overwrite) the canonical calibration.json used by downstream
-    modules (e.g. SMA_CharacterizationV2).
+    modules (e.g. Experiment_SMACharacterizationV2).
 
     Fields
     ------
