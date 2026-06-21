@@ -1,0 +1,459 @@
+#!/usr/bin/env python3
+"""
+analyze_sma.py — offline analysis + visualization for a V3 SMA session.
+
+Reads a session directory produced by sma_recorder.py (per-phase CSVs +
+meta.json), applies the calibration coefficients from meta.json (the
+RECORDER logs raw data only — all unit conversion happens here), joins the
+streams on the host clock, and renders a multi-panel PNG dashboard plus a
+joined CSV.
+
+Usage:
+    python analyze_sma.py --session data/sma_20260621_153000
+    python analyze_sma.py --session <dir> --phase raw
+    python analyze_sma.py --session <dir> --k -0.1171 --v0 566.957 \\
+                          --load-scale 50.0 --load-offset 0.0
+
+Streams (per phase CSV):
+    *_lcr.csv    host_ts, monotonic, primary(Ls,H), secondary(Rs,Ω), status
+    *_h7.csv     host_ts, monotonic, fw_us, src, channel, value, raw, hw_us, seq
+                   channel ∈ {laser, load, sma_v, sma_i, sma_r}
+                   value: V for laser/load/sma_v, A for sma_i, Ω for sma_r
+    *_stage.csv  host_ts, monotonic, position_mm
+
+De-embedding (LCR, auto-selected from available phases):
+    OPEN+SHORT (2-term):
+        Y_open  = mean(1/(R+jωL))            over OPEN
+        Z_short = mean(R)+jω·mean(L)         over SHORT
+        Z_meas  = R_raw + jω·L_raw           on RAW
+        Z_dut   = 1/(1/(Z_meas−Z_short) − Y_open)
+    SHORT-only:  Z_dut = Z_meas − Z_short
+    Q = |Im/Re|,  phase = atan2(Im, Re)
+
+Conversions (skipped, left raw, if the coefficient is null):
+    displacement_um = (value·1000 − V0_mV) / k_mV_per_um      [laser]
+    force_N         = scale_N_per_V · (value − offset_V)      [load cell]
+
+Author: Yilin Ma — HDR Lab, University of Michigan
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import logging
+import math
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import numpy as np
+
+_HAS_MPL = True
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+except ImportError:
+    _HAS_MPL = False
+
+log = logging.getLogger("analyze_sma")
+
+H7_CHANNELS = ("laser", "load", "sma_v", "sma_i", "sma_r")
+
+
+# ---------------------------------------------------------------------------
+# CSV loaders
+# ---------------------------------------------------------------------------
+@dataclass
+class LcrArrays:
+    t: np.ndarray          # host_timestamp_s
+    Ls: np.ndarray         # primary (H)
+    Rs: np.ndarray         # secondary (Ω)
+    status: np.ndarray
+
+
+def _read_csv_rows(path: Path) -> List[dict]:
+    if not path.exists():
+        return []
+    with open(path, newline="") as f:
+        return list(csv.DictReader(f))
+
+
+def load_lcr(path: Path) -> Optional[LcrArrays]:
+    rows = _read_csv_rows(path)
+    if not rows:
+        return None
+    t, Ls, Rs, st = [], [], [], []
+    for r in rows:
+        try:
+            t.append(float(r["host_timestamp_s"]))
+            Ls.append(float(r["primary"]))
+            Rs.append(float(r["secondary"]))
+            st.append(int(float(r.get("status", 0) or 0)))
+        except (ValueError, KeyError):
+            continue
+    if not t:
+        return None
+    return LcrArrays(np.array(t), np.array(Ls), np.array(Rs), np.array(st))
+
+
+def load_h7(path: Path) -> Dict[str, dict]:
+    """Return {channel: {'t': array, 'value': array, 'raw': array}}."""
+    rows = _read_csv_rows(path)
+    out: Dict[str, dict] = {ch: {"t": [], "value": [], "raw": []} for ch in H7_CHANNELS}
+    for r in rows:
+        ch = (r.get("channel") or "").strip()
+        if ch not in out:
+            continue
+        try:
+            out[ch]["t"].append(float(r["host_timestamp_s"]))
+            out[ch]["value"].append(float(r["value"]))
+            raw = r.get("raw_code", "")
+            out[ch]["raw"].append(float(raw) if raw not in ("", None) else math.nan)
+        except (ValueError, KeyError):
+            continue
+    # numpy-ify, drop empty channels
+    res: Dict[str, dict] = {}
+    for ch, d in out.items():
+        if d["t"]:
+            res[ch] = {k: np.array(v) for k, v in d.items()}
+    return res
+
+
+def load_stage(path: Path) -> Optional[dict]:
+    rows = _read_csv_rows(path)
+    if not rows:
+        return None
+    t, pos = [], []
+    for r in rows:
+        try:
+            t.append(float(r["host_timestamp_s"]))
+            pos.append(float(r["position_mm"]))
+        except (ValueError, KeyError):
+            continue
+    if not t:
+        return None
+    return {"t": np.array(t), "position_mm": np.array(pos)}
+
+
+# ---------------------------------------------------------------------------
+# LCR de-embedding
+# ---------------------------------------------------------------------------
+@dataclass
+class DeembedResult:
+    method: str                 # "open_short" | "short_only" | "none"
+    t: np.ndarray
+    R_dut: np.ndarray
+    X_dut: np.ndarray           # reactance Im(Z)
+    L_dut: np.ndarray           # series inductance (H), X/ω
+    Q: np.ndarray
+    phase_rad: np.ndarray
+
+
+def deembed(raw: LcrArrays,
+            short: Optional[LcrArrays],
+            open_: Optional[LcrArrays],
+            freq_hz: float) -> DeembedResult:
+    w = 2.0 * math.pi * freq_hz
+    Z_meas = raw.Rs + 1j * w * raw.Ls
+
+    if short is not None and open_ is not None:
+        Z_short = np.mean(short.Rs) + 1j * w * np.mean(short.Ls)
+        Y_open = np.mean(1.0 / (open_.Rs + 1j * w * open_.Ls))
+        Y_dut = 1.0 / (Z_meas - Z_short) - Y_open
+        Z_dut = 1.0 / Y_dut
+        method = "open_short"
+    elif short is not None:
+        Z_short = np.mean(short.Rs) + 1j * w * np.mean(short.Ls)
+        Z_dut = Z_meas - Z_short
+        method = "short_only"
+    else:
+        Z_dut = Z_meas
+        method = "none"
+
+    R = np.real(Z_dut)
+    X = np.imag(Z_dut)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        Q = np.abs(X / R)
+        L = X / w
+    phase = np.arctan2(X, R)
+    return DeembedResult(method, raw.t, R, X, L, Q, phase)
+
+
+# ---------------------------------------------------------------------------
+# Calibration conversions
+# ---------------------------------------------------------------------------
+def laser_to_um(value_V: np.ndarray, k_mV_per_um: Optional[float],
+                V0_mV: Optional[float]) -> Optional[np.ndarray]:
+    if k_mV_per_um is None or V0_mV is None or k_mV_per_um == 0:
+        return None
+    return (value_V * 1000.0 - V0_mV) / k_mV_per_um
+
+
+def load_to_N(value_V: np.ndarray, scale_N_per_V: Optional[float],
+              offset_V: float) -> Optional[np.ndarray]:
+    if scale_N_per_V is None:
+        return None
+    return scale_N_per_V * (value_V - offset_V)
+
+
+# ---------------------------------------------------------------------------
+# Plot
+# ---------------------------------------------------------------------------
+def _rel(t: np.ndarray, t0: float) -> np.ndarray:
+    return t - t0
+
+
+def make_dashboard(out_png: Path, title: str, t0: float,
+                   h7: Dict[str, dict],
+                   disp_um: Optional[np.ndarray],
+                   force_N: Optional[np.ndarray],
+                   deemb: Optional[DeembedResult],
+                   stage: Optional[dict]) -> None:
+    if not _HAS_MPL:
+        log.warning("matplotlib not available — skipping dashboard PNG")
+        return
+
+    panels = []
+    panels.append("disp")
+    panels.append("force")
+    if "sma_r" in h7 or "sma_v" in h7 or "sma_i" in h7:
+        panels.append("sma")
+    if deemb is not None and deemb.method != "none":
+        panels.append("lcr")
+    if stage is not None:
+        panels.append("stage")
+    if disp_um is not None and force_N is not None:
+        panels.append("fx")
+
+    n = len(panels)
+    ncol = 2
+    nrow = (n + ncol - 1) // ncol
+    fig, axes = plt.subplots(nrow, ncol, figsize=(13, 3.2 * nrow))
+    axes = np.atleast_1d(axes).ravel()
+    for ax in axes[n:]:
+        ax.axis("off")
+
+    for ax, key in zip(axes, panels):
+        if key == "disp":
+            if disp_um is not None and "laser" in h7:
+                ax.plot(_rel(h7["laser"]["t"], t0), disp_um, lw=0.8, color="C0")
+                ax.set_ylabel("displacement (µm)")
+            elif "laser" in h7:
+                ax.plot(_rel(h7["laser"]["t"], t0), h7["laser"]["value"],
+                        lw=0.8, color="C0")
+                ax.set_ylabel("laser (V) [uncal]")
+            ax.set_title("Displacement"); ax.set_xlabel("t (s)")
+        elif key == "force":
+            if force_N is not None and "load" in h7:
+                ax.plot(_rel(h7["load"]["t"], t0), force_N, lw=0.8, color="C3")
+                ax.set_ylabel("force (N)")
+            elif "load" in h7:
+                ax.plot(_rel(h7["load"]["t"], t0), h7["load"]["value"],
+                        lw=0.8, color="C3")
+                ax.set_ylabel("load (V) [uncal]")
+            ax.set_title("Force"); ax.set_xlabel("t (s)")
+        elif key == "sma":
+            if "sma_r" in h7:
+                ax.plot(_rel(h7["sma_r"]["t"], t0), h7["sma_r"]["value"],
+                        lw=0.9, color="C2", label="R (Ω)")
+                ax.set_ylabel("R (Ω)")
+            ax2 = ax.twinx()
+            if "sma_v" in h7:
+                ax2.plot(_rel(h7["sma_v"]["t"], t0), h7["sma_v"]["value"],
+                         lw=0.7, color="C1", alpha=0.7, label="V (V)")
+            if "sma_i" in h7:
+                ax2.plot(_rel(h7["sma_i"]["t"], t0), h7["sma_i"]["value"],
+                         lw=0.7, color="C4", alpha=0.7, label="I (A)")
+            ax2.set_ylabel("V (V) / I (A)")
+            ax.set_title("SMA drive (R / V / I)"); ax.set_xlabel("t (s)")
+        elif key == "lcr" and deemb is not None:
+            ax.plot(_rel(deemb.t, t0), deemb.R_dut, lw=0.8, color="C5", label="R_dut (Ω)")
+            ax2 = ax.twinx()
+            ax2.plot(_rel(deemb.t, t0), deemb.L_dut * 1e6, lw=0.8, color="C6",
+                     alpha=0.7, label="L_dut (µH)")
+            ax.set_ylabel("R_dut (Ω)"); ax2.set_ylabel("L_dut (µH)")
+            ax.set_title(f"De-embedded Z ({deemb.method})"); ax.set_xlabel("t (s)")
+        elif key == "stage" and stage is not None:
+            ax.plot(_rel(stage["t"], t0), stage["position_mm"], lw=0.8, color="C7")
+            ax.set_ylabel("position (mm)"); ax.set_title("Stage"); ax.set_xlabel("t (s)")
+        elif key == "fx":
+            # F-vs-x on a common timeline (interp force onto laser t).
+            tl = h7["laser"]["t"]; tf = h7["load"]["t"]
+            f_on_l = np.interp(tl, tf, force_N)
+            ax.plot(disp_um, f_on_l, lw=0.6, color="k")
+            ax.set_xlabel("displacement (µm)"); ax.set_ylabel("force (N)")
+            ax.set_title("Force – displacement")
+
+    fig.suptitle(title, fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    fig.savefig(out_png, dpi=130)
+    plt.close(fig)
+    log.info("Wrote %s", out_png)
+
+
+# ---------------------------------------------------------------------------
+# Joined CSV (resampled onto a uniform grid)
+# ---------------------------------------------------------------------------
+def write_joined_csv(out_csv: Path, t0: float, n: int,
+                     t_grid: np.ndarray,
+                     series: Dict[str, tuple]) -> None:
+    """series: name -> (t_array, value_array). Each is interpolated onto t_grid."""
+    cols = {"t_rel_s": t_grid - t0}
+    for name, (t, v) in series.items():
+        if t is None or v is None or len(t) < 2:
+            continue
+        order = np.argsort(t)
+        cols[name] = np.interp(t_grid, t[order], v[order])
+    names = list(cols.keys())
+    with open(out_csv, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(names)
+        for i in range(len(t_grid)):
+            w.writerow([f"{cols[name][i]:.8g}" for name in names])
+    log.info("Wrote %s (%d rows, cols=%s)", out_csv, len(t_grid), names)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+def _cfg_get(meta: dict, *keys, default=None):
+    d = meta
+    for k in keys:
+        if not isinstance(d, dict) or k not in d:
+            return default
+        d = d[k]
+    return d
+
+
+def analyze_session(session_dir: Path, phase: str, args) -> int:
+    meta_path = session_dir / "meta.json"
+    meta = {}
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text())
+    else:
+        log.warning("No meta.json in %s — using CLI args / raw output", session_dir)
+
+    freq = args.frequency or _cfg_get(meta, "lcr", "frequency_hz", default=1.0e6)
+    k = args.k if args.k is not None else _cfg_get(meta, "calibration", "laser", "k_mV_per_um")
+    v0 = args.v0 if args.v0 is not None else _cfg_get(meta, "calibration", "laser", "V0_mV")
+    lscale = (args.load_scale if args.load_scale is not None
+              else _cfg_get(meta, "calibration", "load_cell", "scale_N_per_V"))
+    loff = (args.load_offset if args.load_offset is not None
+            else _cfg_get(meta, "calibration", "load_cell", "offset_V", default=0.0))
+
+    # Load the RAW (experiment) phase + OPEN/SHORT for de-embed.
+    raw_lcr = load_lcr(session_dir / f"{phase}_lcr.csv")
+    short_lcr = load_lcr(session_dir / "short_lcr.csv")
+    open_lcr = load_lcr(session_dir / "open_lcr.csv")
+    h7 = load_h7(session_dir / f"{phase}_h7.csv")
+    stage = load_stage(session_dir / f"{phase}_stage.csv")
+
+    if not h7 and raw_lcr is None and stage is None:
+        log.error("No data found for phase '%s' in %s", phase, session_dir)
+        return 2
+
+    # Time origin = earliest sample across all streams.
+    t0_candidates = []
+    if raw_lcr is not None:
+        t0_candidates.append(raw_lcr.t.min())
+    for ch in h7.values():
+        t0_candidates.append(ch["t"].min())
+    if stage is not None:
+        t0_candidates.append(stage["t"].min())
+    t0 = min(t0_candidates) if t0_candidates else 0.0
+
+    # Conversions.
+    disp_um = laser_to_um(h7["laser"]["value"], k, v0) if "laser" in h7 else None
+    force_N = load_to_N(h7["load"]["value"], lscale, loff) if "load" in h7 else None
+
+    # De-embed.
+    deemb = None
+    if raw_lcr is not None and not args.no_deembed:
+        deemb = deembed(raw_lcr, short_lcr, open_lcr, freq)
+        log.info("LCR de-embed method: %s (f=%.3g Hz)", deemb.method, freq)
+
+    # Dashboard.
+    out_dir = Path(args.out) if args.out else session_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    title = f"{session_dir.name} — phase '{phase}'"
+    make_dashboard(out_dir / f"{phase}_dashboard.png", title, t0,
+                   h7, disp_um, force_N, deemb, stage)
+
+    # Joined CSV on a uniform 100 Hz grid spanning the phase.
+    t_end_candidates = []
+    if raw_lcr is not None:
+        t_end_candidates.append(raw_lcr.t.max())
+    for ch in h7.values():
+        t_end_candidates.append(ch["t"].max())
+    if stage is not None:
+        t_end_candidates.append(stage["t"].max())
+    if t_end_candidates:
+        t_end = max(t_end_candidates)
+        grid = np.arange(t0, t_end, 0.01)  # 100 Hz
+        if len(grid) >= 2:
+            series: Dict[str, tuple] = {}
+            if disp_um is not None:
+                series["displacement_um"] = (h7["laser"]["t"], disp_um)
+            elif "laser" in h7:
+                series["laser_V"] = (h7["laser"]["t"], h7["laser"]["value"])
+            if force_N is not None:
+                series["force_N"] = (h7["load"]["t"], force_N)
+            elif "load" in h7:
+                series["load_V"] = (h7["load"]["t"], h7["load"]["value"])
+            for ch in ("sma_v", "sma_i", "sma_r"):
+                if ch in h7:
+                    series[ch] = (h7[ch]["t"], h7[ch]["value"])
+            if deemb is not None and deemb.method != "none":
+                series["R_dut_ohm"] = (deemb.t, deemb.R_dut)
+                series["L_dut_uH"] = (deemb.t, deemb.L_dut * 1e6)
+                series["Q"] = (deemb.t, deemb.Q)
+            if stage is not None:
+                series["stage_mm"] = (stage["t"], stage["position_mm"])
+            write_joined_csv(out_dir / f"{phase}_joined.csv", t0, len(grid),
+                             grid, series)
+
+    # Console summary.
+    print(f"\nSession: {session_dir.name}  phase={phase}")
+    print(f"  H7 channels present: {sorted(h7.keys())}")
+    print(f"  displacement: {'calibrated (µm)' if disp_um is not None else 'raw (no k/V0)'}")
+    print(f"  force:        {'calibrated (N)' if force_N is not None else 'raw (no scale)'}")
+    if deemb is not None:
+        print(f"  LCR de-embed: {deemb.method}  (f={freq:.4g} Hz)")
+        if deemb.method != "none" and len(deemb.R_dut):
+            print(f"    R_dut mean={np.nanmean(deemb.R_dut):.4g} Ω  "
+                  f"L_dut mean={np.nanmean(deemb.L_dut)*1e6:.4g} µH")
+    if stage is not None:
+        print(f"  stage: {len(stage['t'])} pts, "
+              f"{stage['position_mm'].min():.3f}–{stage['position_mm'].max():.3f} mm")
+    print(f"  outputs in: {out_dir}\n")
+    return 0
+
+
+def _main() -> int:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    p = argparse.ArgumentParser(description="Analyze + visualize a V3 SMA session")
+    p.add_argument("--session", required=True, help="session directory")
+    p.add_argument("--phase", default="raw", choices=("raw", "open", "short"),
+                   help="which phase to analyze (default: raw)")
+    p.add_argument("--out", default=None, help="output dir (default: session dir)")
+    p.add_argument("--no-deembed", action="store_true")
+    p.add_argument("--frequency", type=float, default=None)
+    p.add_argument("--k", type=float, default=None, help="laser k_mV_per_um override")
+    p.add_argument("--v0", type=float, default=None, help="laser V0_mV override")
+    p.add_argument("--load-scale", type=float, default=None)
+    p.add_argument("--load-offset", type=float, default=None)
+    args = p.parse_args()
+
+    session_dir = Path(args.session)
+    if not session_dir.exists():
+        print(f"ERROR: session dir not found: {session_dir}", file=sys.stderr)
+        return 2
+    return analyze_session(session_dir, args.phase, args)
+
+
+if __name__ == "__main__":
+    sys.exit(_main())

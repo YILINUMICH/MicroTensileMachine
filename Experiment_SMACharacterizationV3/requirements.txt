@@ -1,0 +1,8 @@
+# Experiment_SMACharacterizationV3 — host-side deps
+pyvisa>=1.13          # Keysight E4980 LCR (needs a VISA backend)
+pyserial>=3.5         # H7 USB-CDC + Zaber serial fallback
+zaber-motion>=7.0     # Zaber X-LSQ300A-E01 linear stage
+pyyaml>=6.0           # config.yaml
+numpy>=1.24
+matplotlib>=3.7       # analyze_sma.py dashboards (Agg, headless)
+readchar>=4.0         # operator_io keypress prompts

@@ -34,6 +34,7 @@ import argparse
 import logging
 import re
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from typing import Iterator, List, Optional
@@ -48,17 +49,38 @@ except ImportError as e:
 # ---------------------------------------------------------------------------
 # Data types
 # ---------------------------------------------------------------------------
+# `src` column values — the firmware sample_ring.h reservation table.
+#   1,2 come from the M4 ADS1263 (laser / load).
+#   3,4,5 come from the M7 SMA drive path (Firmware_SMASensorHub_PIO),
+#   emitted as untagged sensor-TSV lines during `drive`/`fire`. For these,
+#   the `voltage_V` column carries the channel's natural unit:
+#     src=3 → volts (V_ldo),  src=4 → amps (I),  src=5 → ohms (R = V/I).
+SRC_LASER = 1   # laser displacement  [V]   (ADS1263 ADC1, M4)
+SRC_LOAD  = 2   # load cell force     [V]   (ADS1263 ADC2, M4)
+SRC_SMA_V = 3   # SMA drive voltage   [V]   (M7 on-chip ADC; raw_code = DAC code)
+SRC_SMA_I = 4   # SMA current         [A]   (INA296A; value in voltage_V)
+SRC_SMA_R = 5   # SMA resistance      [ohm] (V/I;   value in voltage_V)
+
+SRC_NAMES = {1: "laser", 2: "load", 3: "sma_v", 4: "sma_i", 5: "sma_r"}
+SMA_SRCS  = (SRC_SMA_V, SRC_SMA_I, SRC_SMA_R)
+
+
 @dataclass
 class Sample:
     """One ADC sample parsed from the Portenta stream."""
     timestamp_us: int          # microseconds since firmware boot
     voltage_V: float           # already scaled by firmware (0–5 V range)
-    raw_code: Optional[int] = None   # only set by the current (TSV) firmware
-    adc_source: Optional[int] = None # 1 or 2 if the firmware emits the
-                                     # 4-col dual-stream form (Firmware_SensorHub_PIO,
-                                     # or LaserHead_PIO with ENABLE_ADC1=1).
+    raw_code: Optional[int] = None   # only set by the current (TSV) firmware;
+                                     # for src=3 this is the DAC code.
+    adc_source: Optional[int] = None # src column when the firmware emits the
+                                     # 4-col dual/multi-stream form:
+                                     #   1 laser, 2 load (M4 ADS1263);
+                                     #   3 SMA V, 4 SMA I, 5 SMA R (M7 SMA path,
+                                     #   Firmware_SMASensorHub_PIO). See SRC_*.
                                      # None for 3-col single-channel builds
                                      # or the plan-spec CSV format.
+                                     # NOTE: for src=4/5, voltage_V holds the
+                                     # current [A] / resistance [ohm], not volts.
     hw_us: Optional[int] = None      # Phase 5: M4-side microsecond
                                      # timestamp captured at DRDY ISR /
                                      # poll instant. ~µs resolution,
@@ -74,6 +96,16 @@ class Sample:
         """Plan §2 canonical serialisation."""
         return f"{self.timestamp_us},{self.voltage_V:.8f}"
 
+    @property
+    def channel(self) -> Optional[str]:
+        """Human-readable channel name for the src ('laser', 'sma_i', ...)."""
+        return SRC_NAMES.get(self.adc_source) if self.adc_source is not None else None
+
+    @property
+    def is_sma(self) -> bool:
+        """True for the M7 SMA-path channels (src=3/4/5)."""
+        return self.adc_source in SMA_SRCS
+
 
 # ---------------------------------------------------------------------------
 # Line parsing
@@ -86,9 +118,11 @@ class Sample:
 #                                                hw_us + seq; older firmware
 #                                                omits them — both parse.
 #   2. "<t_ms>\t<src>\t<raw>\t<voltage>[\t<hw_us>\t<seq>]"
-#                                              — dual-ADC build (ADC1 & ADC2
-#                                                interleaved; filter by
-#                                                adc_source in the reader).
+#                                              — dual/multi-stream build; src in
+#                                                1..5 (1 laser, 2 load from M4;
+#                                                3 SMA V, 4 SMA I, 5 SMA R from
+#                                                M7's SMA path). Filter by
+#                                                adc_source in the reader.
 #                                                Same Phase 5 hw_us+seq tail.
 #   3. "<t_us>,<voltage>"                       — plan-spec CSV format
 #
@@ -100,7 +134,7 @@ _FLOAT_RE = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 # Optional 2-column tail: "\t<hw_us>\t<seq>" added by Phase 5 firmware.
 _TAIL_RE  = r"(?:\s+(\d+)\s+(\d+))?"
 _TSV_3COL = re.compile(rf"^\s*(\d+)\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
-_TSV_4COL = re.compile(rf"^\s*(\d+)\s+([12])\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
+_TSV_4COL = re.compile(rf"^\s*(\d+)\s+([1-5])\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
 _CSV_PLAN = re.compile(rf"^\s*(\d+)\s*,\s*({_FLOAT_RE})\s*$")
 
 
@@ -112,12 +146,15 @@ def parse_line(line: str,
 
     Args:
         line: raw line from the Portenta, newline already stripped.
-        adc_source: filter for the 4-column dual-stream form.
-                    - 1 → keep only ADC1 samples (load or x-compare)
-                    - 2 → keep only ADC2 samples (laser, primary)
+        adc_source: filter for the 4-column dual/multi-stream form.
+                    - 1 → keep only laser samples (ADC1)
+                    - 2 → keep only load samples (ADC2)
+                    - 3/4/5 → keep only SMA V / I / R samples
+                              (Firmware_SMASensorHub_PIO)
                     - None → keep ALL samples; caller demuxes via
-                             Sample.adc_source. Use this for the
-                             cross-compare mode where both ADCs read
+                             Sample.adc_source (or .channel). Use this to
+                             log sensors + SMA feedback together, or for
+                             the cross-compare mode where both ADCs read
                              the same input.
                     Ignored for the 3-col TSV and CSV-plan formats
                     (those don't carry a src tag).
@@ -226,6 +263,7 @@ class PortentaReader:
         self.timeout_s = timeout_s
         self.adc_source = adc_source
         self._ser: Optional[serial.Serial] = None
+        self._write_lock = threading.Lock()
         self.logger = logging.getLogger("PortentaReader")
 
     # -- lifecycle ----------------------------------------------------------
@@ -294,6 +332,29 @@ class PortentaReader:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
+
+    # -- writing (command channel to the combined firmware) ----------------
+    def send_command(self, cmd: str) -> None:
+        """
+        Send one newline-terminated command to the Portenta over the same
+        USB-CDC port used for reading (e.g. 'gain 10', 'drive 1.0 500').
+
+        Thread-safe: USB-CDC TX is independent of RX, so this may be called
+        from a different thread than the one running iter_samples(); a lock
+        serialises concurrent writers. No-op if the port is not open.
+
+        The combined firmware (Firmware_SMASensorHub_PIO) replies with
+        '[SMA] '-tagged lines, which parse_line() drops — so command
+        responses never pollute the sample stream.
+        """
+        if self._ser is None or not self._ser.is_open:
+            self.logger.warning("send_command(%r) ignored — port not open", cmd)
+            return
+        payload = (cmd.rstrip("\r\n") + "\n").encode("utf-8")
+        with self._write_lock:
+            self._ser.write(payload)
+            self._ser.flush()
+        self.logger.debug("sent command: %s", cmd.strip())
 
     # -- reading ------------------------------------------------------------
     def _readline(self) -> str:
