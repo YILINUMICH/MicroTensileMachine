@@ -1,0 +1,26 @@
+2026-06-22 14:45:58,469  INFO   run_experiment    Plan: drive 2.0 1000 | wdt=5000 | planned=3.0 s
+2026-06-22 14:45:58,470  INFO   LCRMeter          Auto-detecting E4980A/AL LCR meter...
+2026-06-22 14:45:58,471  INFO   run_experiment    Waiting up to 10 s for the H7 stream...
+2026-06-22 14:45:58,472  INFO   PortentaReader    Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-06-22 14:45:58,750  INFO   LCRMeter          Using VISA backend: system
+2026-06-22 14:45:58,780  INFO   LCRMeter          Found 1 instruments
+2026-06-22 14:45:58,839  ERROR  LCRMeter          No E4980A/AL found
+2026-06-22 14:45:58,846  ERROR  LcrWorker         LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 108, in run
+    self._main_loop()
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 142, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-22 14:45:58,847  INFO   LcrWorker         LCR worker exit  (pushed=0, dropped=0)
+2026-06-22 14:45:59,727  INFO   Driver_ZaberStage  Configuration saved to zaber_config.json
+2026-06-22 14:45:59,758  INFO   Driver_ZaberStage  Connected to X-LSQ300A-E01 on COM5
+2026-06-22 14:45:59,774  INFO   ZaberWorker       Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-22 14:45:59,949  INFO   Driver_ZaberStage  Disconnected
+2026-06-22 14:45:59,949  INFO   ZaberWorker       Zaber worker exit  (pushed=0, dropped=0)
+2026-06-22 14:46:02,495  INFO   PortentaReader    boot banner (3 lines):
+2026-06-22 14:46:02,495  INFO   PortentaReader      [STATUS] t_ms=53281 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:46:02,495  INFO   PortentaReader      [STATUS] t_ms=54281 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:46:02,495  INFO   PortentaReader      [STATUS] t_ms=55281 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:46:02,495  WARNING  PortentaReader    Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-06-22 14:46:02,551  INFO   H7Worker          H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']

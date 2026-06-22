@@ -52,7 +52,9 @@ QUEUE_MAXSIZE = 10_000
 
 def _setup_logging(log_path: Path, verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.INFO
-    fh = logging.FileHandler(log_path, mode="w")
+    # encoding=utf-8 — Windows defaults to cp1252 and chokes on non-ASCII
+    # (arrows/box chars) in log messages with UnicodeEncodeError.
+    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
     fh.setFormatter(logging.Formatter(
         "%(asctime)s  %(levelname)-5s  %(name)-18s  %(message)s"))
     root = logging.getLogger()

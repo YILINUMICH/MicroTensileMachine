@@ -1,0 +1,88 @@
+{
+  "session_id": "exp_20260622_145423",
+  "schema": "sma_v3_experiment",
+  "kind": "run_experiment",
+  "actuation": {
+    "mode": "drive",
+    "command": "drive 2.0 1000",
+    "wdt_ms": 5000,
+    "params": {
+      "v": 2.0,
+      "hold_ms": 1000
+    },
+    "planned_s": 3.0
+  },
+  "counts": {
+    "h7": 303,
+    "lcr": 0,
+    "stage": 0
+  },
+  "lcr": {
+    "enabled": true,
+    "resource": null,
+    "function": "LSRS",
+    "frequency_hz": 1000000,
+    "voltage_V": 0.5,
+    "integration": "SHORT",
+    "averaging": 1,
+    "poll_interval_s": 0.01,
+    "active": true,
+    "idn": null
+  },
+  "h7": {
+    "enabled": true,
+    "port": "COM8",
+    "baud": 115200,
+    "channels": [
+      "laser",
+      "load",
+      "sma_v",
+      "sma_i",
+      "sma_r"
+    ],
+    "startup_commands": [],
+    "active": true,
+    "n_dropped": 0
+  },
+  "stage": {
+    "enabled": true,
+    "port": "COM5",
+    "position_limits_mm": [
+      5,
+      40
+    ],
+    "max_velocity_mm_s": 10.0,
+    "reading_rate_hz": 100,
+    "home_on_start": false,
+    "move_to_zero_on_start": false,
+    "zero_mm": 10.0,
+    "poll_interval_s": 0.02,
+    "active": true,
+    "info": "DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)"
+  },
+  "calibration": {
+    "laser": {
+      "k_mV_per_um": null,
+      "V0_mV": null
+    },
+    "load_cell": {
+      "scale_N_per_V": null,
+      "offset_V": 0.0
+    },
+    "current_sense": {
+      "gain_V_per_V": 10.0,
+      "shunt_ohm": 0.1,
+      "ioffset_V": 0.0
+    }
+  },
+  "run": {
+    "operator": "",
+    "notes": "",
+    "output_dir": "data"
+  },
+  "ended_at_utc": "2026-06-22T18:54:30Z",
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  }
+}

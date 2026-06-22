@@ -1,0 +1,37 @@
+2026-06-22 14:48:25,139  INFO   run_experiment    Experiment exp_20260622_144825 -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\exp_20260622_144825
+2026-06-22 14:48:25,139  INFO   run_experiment    Plan: drive 2.0 1000 | wdt=5000 | planned=3.0 s
+2026-06-22 14:48:25,140  INFO   LCRMeter          Auto-detecting E4980A/AL LCR meter...
+2026-06-22 14:48:25,141  INFO   run_experiment    Waiting up to 10 s for the H7 stream...
+2026-06-22 14:48:25,142  INFO   PortentaReader    Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-06-22 14:48:25,166  INFO   LCRMeter          Using VISA backend: system
+2026-06-22 14:48:25,170  INFO   LCRMeter          Found 1 instruments
+2026-06-22 14:48:25,180  ERROR  LCRMeter          No E4980A/AL found
+2026-06-22 14:48:25,181  ERROR  LcrWorker         LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 108, in run
+    self._main_loop()
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 142, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-22 14:48:25,183  INFO   LcrWorker         LCR worker exit  (pushed=0, dropped=0)
+2026-06-22 14:48:26,375  INFO   Driver_ZaberStage  Configuration saved to zaber_config.json
+2026-06-22 14:48:26,406  INFO   Driver_ZaberStage  Connected to X-LSQ300A-E01 on COM5
+2026-06-22 14:48:26,422  INFO   ZaberWorker       Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-22 14:48:26,592  INFO   Driver_ZaberStage  Disconnected
+2026-06-22 14:48:26,592  INFO   ZaberWorker       Zaber worker exit  (pushed=0, dropped=0)
+2026-06-22 14:48:29,167  INFO   PortentaReader    boot banner (4 lines):
+2026-06-22 14:48:29,167  INFO   PortentaReader      [STATUS] t_ms=194281 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:48:29,167  INFO   PortentaReader      [STATUS] t_ms=195281 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:48:29,167  INFO   PortentaReader      [STATUS] t_ms=196281 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:48:29,167  INFO   PortentaReader      [STATUS] t_ms=197281 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:48:29,167  WARNING  PortentaReader    Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-06-22 14:48:29,227  INFO   H7Worker          H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-06-22 14:48:35,151  INFO   run_experiment    H7 healthy (0 samples). Starting actuation.
+2026-06-22 14:48:35,151  INFO   run_experiment    H7 <- wdt 5000
+2026-06-22 14:48:35,202  INFO   run_experiment    H7 <- drive 2.0 1000
+2026-06-22 14:48:35,203  ERROR  run_experiment    Worker crashed: {'LcrWorker': "RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')"}
+2026-06-22 14:48:35,204  INFO   run_experiment    H7 <- stop
+2026-06-22 14:48:35,210  INFO   H7Worker          H7 worker exit  (pushed=0, dropped=0, filtered=0)
+2026-06-22 14:48:35,334  INFO   run_experiment    Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\exp_20260622_144825\meta.json (H7=0 LCR=0 STG=0)
+2026-06-22 14:48:35,334  WARNING  PortentaReader    send_command('stop') ignored — port not open
+2026-06-22 14:48:35,334  INFO   run_experiment    H7 <- stop

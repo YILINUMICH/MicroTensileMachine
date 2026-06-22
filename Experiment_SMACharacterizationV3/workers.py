@@ -191,6 +191,11 @@ class H7Worker(threading.Thread):
         self.n_filtered = 0
         self.error: Optional[BaseException] = None
         self.reader: Optional[PortentaReader] = None
+        # Set once the port is open + drained and the reader is ready to
+        # accept commands / stream. Consumers wait on this instead of
+        # gating on sample count (the combined firmware emits NO sample
+        # lines while idle — SMA src=3/4/5 only appear during actuation).
+        self.ready = threading.Event()
         self.logger = logging.getLogger("H7Worker")
 
     def run(self) -> None:
@@ -222,6 +227,7 @@ class H7Worker(threading.Thread):
                     self.logger.warning("H7 startup_command %r failed: %s", cmd, e)
             self.logger.info("H7 ready: port=%s baud=%d channels=%s",
                              self.cfg.port, self.cfg.baud, sorted(keep))
+            self.ready.set()
             for s in reader.iter_samples():
                 if self.stop_event.is_set():
                     break

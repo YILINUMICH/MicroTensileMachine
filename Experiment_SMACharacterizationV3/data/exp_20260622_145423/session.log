@@ -1,0 +1,40 @@
+2026-06-22 14:54:23,047  INFO   run_experiment    Experiment exp_20260622_145423 -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\exp_20260622_145423
+2026-06-22 14:54:23,048  INFO   run_experiment    Plan: drive 2.0 1000 | wdt=5000 | planned=3.0 s
+2026-06-22 14:54:23,048  INFO   LCRMeter          Auto-detecting E4980A/AL LCR meter...
+2026-06-22 14:54:23,049  INFO   run_experiment    Waiting up to 10 s for the H7 port to open...
+2026-06-22 14:54:23,051  INFO   PortentaReader    Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-06-22 14:54:23,080  INFO   LCRMeter          Using VISA backend: system
+2026-06-22 14:54:23,084  INFO   LCRMeter          Found 1 instruments
+2026-06-22 14:54:23,093  ERROR  LCRMeter          No E4980A/AL found
+2026-06-22 14:54:23,094  ERROR  LcrWorker         LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 108, in run
+    self._main_loop()
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 142, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-22 14:54:23,095  INFO   LcrWorker         LCR worker exit  (pushed=0, dropped=0)
+2026-06-22 14:54:24,278  INFO   Driver_ZaberStage  Configuration saved to zaber_config.json
+2026-06-22 14:54:24,309  INFO   Driver_ZaberStage  Connected to X-LSQ300A-E01 on COM5
+2026-06-22 14:54:24,325  INFO   ZaberWorker       Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-22 14:54:24,490  INFO   Driver_ZaberStage  Disconnected
+2026-06-22 14:54:24,490  INFO   ZaberWorker       Zaber worker exit  (pushed=0, dropped=0)
+2026-06-22 14:54:27,103  INFO   PortentaReader    boot banner (4 lines):
+2026-06-22 14:54:27,103  INFO   PortentaReader      [STATUS] t_ms=162279 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:54:27,103  INFO   PortentaReader      [STATUS] t_ms=163279 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:54:27,103  INFO   PortentaReader      [STATUS] t_ms=164279 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:54:27,103  INFO   PortentaReader      [STATUS] t_ms=165279 hwm=0 cap=1024 dropped=0 dropped_total=1024 rate1=0 rate2=0 prod1=0 prod2=0 sma_state=0 m4_loops_per_s=0
+2026-06-22 14:54:27,103  WARNING  PortentaReader    Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-06-22 14:54:27,164  INFO   H7Worker          H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-06-22 14:54:27,164  INFO   run_experiment    H7 port ready (idle pre-samples=0). Starting actuation.
+2026-06-22 14:54:27,164  INFO   run_experiment    No idle sensor samples — M4 sampler not streaming (fine for a resistor/SMA-only test; flash portenta_m4 for laser/load).
+2026-06-22 14:54:27,164  INFO   run_experiment    H7 <- wdt 5000
+2026-06-22 14:54:27,215  INFO   run_experiment    H7 <- drive 2.0 1000
+2026-06-22 14:54:27,216  WARNING  run_experiment    LcrWorker failed (continuing without it): RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')
+2026-06-22 14:54:28,226  INFO   run_experiment    H7 <- ping
+2026-06-22 14:54:29,233  INFO   run_experiment    H7 <- ping
+2026-06-22 14:54:30,240  INFO   run_experiment    H7 <- stop
+2026-06-22 14:54:30,373  INFO   run_experiment    Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\exp_20260622_145423\meta.json (H7=303 LCR=0 STG=0)
+2026-06-22 14:54:30,374  INFO   run_experiment    H7 <- stop
+2026-06-22 14:54:36,452  INFO   analyze_sma       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\exp_20260622_145423\raw_dashboard.png
+2026-06-22 14:54:36,453  INFO   analyze_sma       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\exp_20260622_145423\raw_joined.csv (104 rows, cols=['t_rel_s', 'sma_v', 'sma_i', 'sma_r'])

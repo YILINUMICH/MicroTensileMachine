@@ -90,6 +90,40 @@ sma:
   wdt_ms: 5000
 ```
 
+## One-shot automated experiment — `run_experiment.py`
+
+For an **actual drive run without the interactive OPEN/SHORT ceremony**, use
+`run_experiment.py` — it configures the instruments, fires the firmware's
+on-M7 actuation, logs every enabled stream with a watchdog heartbeat, and
+auto-runs the analyzer. It reuses the same workers + CSV schema + analyzer
+(no duplicated logic) and respects the `enabled:` flags.
+
+```sh
+# cycle defined in config.yaml's sma: block
+python run_experiment.py
+
+# override the cycle on the CLI
+python run_experiment.py --v-high 3.0 --fire-ms 1500 --cool-ms 6000 --n 5
+
+# a single drive (good for the resistor smoke test)
+python run_experiment.py --drive 2.0 --hold-ms 1000
+
+# continuous cycle for a fixed window
+python run_experiment.py --n 0 --duration 60
+
+# preview the plan, touch no hardware
+python run_experiment.py --drive 2.0 --hold-ms 1000 --dry-run
+```
+
+Output: `data/exp_<timestamp>/` with `raw_h7.csv` (+ `raw_lcr.csv` /
+`raw_stage.csv` if those streams are enabled), `meta.json`, `session.log`,
+and the analyzer's dashboard. For the **resistor smoke test**, set
+`lcr.enabled: false` and `stage.enabled: false` and run with `--drive`.
+
+`run_experiment.py` vs `sma_recorder.py`: the recorder is the **interactive,
+calibrated** workflow (OPEN→SHORT→RAW prompts, LCR de-embed references);
+`run_experiment.py` is the **non-interactive one-shot** drive+log+analyze.
+
 ## Analyze + visualize
 
 ```sh
@@ -117,7 +151,8 @@ Experiment_SMACharacterizationV3/
 ├── config.py              typed dataclasses (lcr/h7/stage/phases/calibration/run)
 ├── workers.py             LcrWorker, H7Worker (multi-channel), ZaberWorker
 ├── session.py             OPEN→SHORT→RAW controller, sole CSV writer
-├── sma_recorder.py        entry point (builds enabled streams)
+├── sma_recorder.py        interactive OPEN→SHORT→RAW entry point
+├── run_experiment.py      non-interactive one-shot drive/log/analyze
 ├── operator_io.py         terminal prompts / progress / banners
 └── analyze_sma.py         offline de-embed + raw→physical + dashboards
 ```
