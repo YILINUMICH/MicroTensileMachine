@@ -140,6 +140,65 @@ def load_stage(path: Path) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# events.csv — segmentation markers (console layout)
+# ---------------------------------------------------------------------------
+def load_events(path: Path) -> List[dict]:
+    """Return events.csv rows as dicts with float host_timestamp_s/monotonic_s
+    and str kind/detail. Empty list if the file is absent."""
+    rows = _read_csv_rows(path)
+    out: List[dict] = []
+    for r in rows:
+        try:
+            out.append({
+                "host_timestamp_s": float(r["host_timestamp_s"]),
+                "monotonic_s": float(r.get("monotonic_s", "nan") or "nan"),
+                "kind": (r.get("kind") or "").strip(),
+                "detail": (r.get("detail") or "").strip(),
+            })
+        except (ValueError, KeyError):
+            continue
+    return out
+
+
+def ref_windows(events: List[dict], kind: str,
+                window_s: float) -> List[tuple]:
+    """Build (t_start, t_end) host-clock windows for each marker of `kind`.
+
+    Each marker opens a window of `window_s` seconds, but a window is cut short
+    by the NEXT event of ANY kind so two back-to-back references never overlap.
+    """
+    marks = sorted(e["host_timestamp_s"] for e in events if e["kind"] == kind)
+    all_ts = sorted(e["host_timestamp_s"] for e in events)
+    windows: List[tuple] = []
+    for t in marks:
+        t_end = t + window_s
+        nxt = [s for s in all_ts if s > t]
+        if nxt:
+            t_end = min(t_end, nxt[0])
+        windows.append((t, t_end))
+    return windows
+
+
+def slice_lcr(arr: Optional[LcrArrays], windows: List[tuple],
+              inside: bool) -> Optional[LcrArrays]:
+    """Restrict an LcrArrays to (inside=True) or exclude (inside=False) a set of
+    time windows. Returns None if nothing is left (or the input was None)."""
+    if arr is None:
+        return None
+    if not windows:
+        # No windows: "inside" selects nothing; "outside" keeps everything.
+        return None if inside else arr
+    mask = np.zeros(arr.t.shape, dtype=bool)
+    for (t0, t1) in windows:
+        mask |= (arr.t >= t0) & (arr.t < t1)
+    if not inside:
+        mask = ~mask
+    if not mask.any():
+        return None
+    return LcrArrays(arr.t[mask], arr.Ls[mask], arr.Rs[mask], arr.status[mask])
+
+
+# ---------------------------------------------------------------------------
 # LCR de-embedding
 # ---------------------------------------------------------------------------
 @dataclass
@@ -329,14 +388,13 @@ def _cfg_get(meta: dict, *keys, default=None):
     return d
 
 
-def analyze_session(session_dir: Path, phase: str, args) -> int:
+def _read_meta_and_cal(session_dir: Path, args):
     meta_path = session_dir / "meta.json"
     meta = {}
     if meta_path.exists():
         meta = json.loads(meta_path.read_text())
     else:
         log.warning("No meta.json in %s — using CLI args / raw output", session_dir)
-
     freq = args.frequency or _cfg_get(meta, "lcr", "frequency_hz", default=1.0e6)
     k = args.k if args.k is not None else _cfg_get(meta, "calibration", "laser", "k_mV_per_um")
     v0 = args.v0 if args.v0 is not None else _cfg_get(meta, "calibration", "laser", "V0_mV")
@@ -344,16 +402,20 @@ def analyze_session(session_dir: Path, phase: str, args) -> int:
               else _cfg_get(meta, "calibration", "load_cell", "scale_N_per_V"))
     loff = (args.load_offset if args.load_offset is not None
             else _cfg_get(meta, "calibration", "load_cell", "offset_V", default=0.0))
+    return meta, freq, k, v0, lscale, loff
 
-    # Load the RAW (experiment) phase + OPEN/SHORT for de-embed.
-    raw_lcr = load_lcr(session_dir / f"{phase}_lcr.csv")
-    short_lcr = load_lcr(session_dir / "short_lcr.csv")
-    open_lcr = load_lcr(session_dir / "open_lcr.csv")
-    h7 = load_h7(session_dir / f"{phase}_h7.csv")
-    stage = load_stage(session_dir / f"{phase}_stage.csv")
 
+def _run_analysis(out_dir: Path, label: str, args,
+                  raw_lcr: Optional[LcrArrays],
+                  short_lcr: Optional[LcrArrays],
+                  open_lcr: Optional[LcrArrays],
+                  h7: Dict[str, dict],
+                  stage: Optional[dict],
+                  freq: float, k, v0, lscale, loff) -> int:
+    """Shared downstream: conversions -> de-embed -> dashboard -> joined CSV ->
+    summary. Both the per-phase and the continuous-console loaders feed this."""
     if not h7 and raw_lcr is None and stage is None:
-        log.error("No data found for phase '%s' in %s", phase, session_dir)
+        log.error("No data found for '%s'", label)
         return 2
 
     # Time origin = earliest sample across all streams.
@@ -376,14 +438,12 @@ def analyze_session(session_dir: Path, phase: str, args) -> int:
         deemb = deembed(raw_lcr, short_lcr, open_lcr, freq)
         log.info("LCR de-embed method: %s (f=%.3g Hz)", deemb.method, freq)
 
-    # Dashboard.
-    out_dir = Path(args.out) if args.out else session_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    title = f"{session_dir.name} — phase '{phase}'"
-    make_dashboard(out_dir / f"{phase}_dashboard.png", title, t0,
+    title = f"{out_dir.name} — {label}"
+    make_dashboard(out_dir / f"{label}_dashboard.png", title, t0,
                    h7, disp_um, force_N, deemb, stage)
 
-    # Joined CSV on a uniform 100 Hz grid spanning the phase.
+    # Joined CSV on a uniform 100 Hz grid spanning the data.
     t_end_candidates = []
     if raw_lcr is not None:
         t_end_candidates.append(raw_lcr.t.max())
@@ -413,11 +473,11 @@ def analyze_session(session_dir: Path, phase: str, args) -> int:
                 series["Q"] = (deemb.t, deemb.Q)
             if stage is not None:
                 series["stage_mm"] = (stage["t"], stage["position_mm"])
-            write_joined_csv(out_dir / f"{phase}_joined.csv", t0, len(grid),
+            write_joined_csv(out_dir / f"{label}_joined.csv", t0, len(grid),
                              grid, series)
 
     # Console summary.
-    print(f"\nSession: {session_dir.name}  phase={phase}")
+    print(f"\nSession: {out_dir.name}  ({label})")
     print(f"  H7 channels present: {sorted(h7.keys())}")
     print(f"  displacement: {'calibrated (µm)' if disp_um is not None else 'raw (no k/V0)'}")
     print(f"  force:        {'calibrated (N)' if force_N is not None else 'raw (no scale)'}")
@@ -433,12 +493,60 @@ def analyze_session(session_dir: Path, phase: str, args) -> int:
     return 0
 
 
+def analyze_session(session_dir: Path, phase: str, args) -> int:
+    """Legacy per-phase layout (sma_recorder.py): {phase}_{lcr,h7,stage}.csv
+    plus dedicated open_lcr.csv / short_lcr.csv for de-embed references."""
+    _meta, freq, k, v0, lscale, loff = _read_meta_and_cal(session_dir, args)
+    raw_lcr = load_lcr(session_dir / f"{phase}_lcr.csv")
+    short_lcr = load_lcr(session_dir / "short_lcr.csv")
+    open_lcr = load_lcr(session_dir / "open_lcr.csv")
+    h7 = load_h7(session_dir / f"{phase}_h7.csv")
+    stage = load_stage(session_dir / f"{phase}_stage.csv")
+    out_dir = Path(args.out) if args.out else session_dir
+    return _run_analysis(out_dir, phase, args, raw_lcr, short_lcr, open_lcr,
+                         h7, stage, freq, k, v0, lscale, loff)
+
+
+def analyze_console_session(session_dir: Path, args) -> int:
+    """Continuous-console layout (sma_console.py): one lcr.csv / h7.csv /
+    stage.csv for the whole run, segmented by events.csv markers. The OPEN and
+    SHORT de-embed references are the LCR samples in the `--ref-window` seconds
+    that follow each `ref_open` / `ref_short` marker; the RAW (actuation) trace
+    is every LCR sample OUTSIDE those reference windows."""
+    _meta, freq, k, v0, lscale, loff = _read_meta_and_cal(session_dir, args)
+    events = load_events(session_dir / "events.csv")
+    open_win = ref_windows(events, "ref_open", args.ref_window)
+    short_win = ref_windows(events, "ref_short", args.ref_window)
+    log.info("events.csv: %d markers — %d OPEN window(s), %d SHORT window(s)",
+             len(events), len(open_win), len(short_win))
+
+    full_lcr = load_lcr(session_dir / "lcr.csv")
+    open_lcr = slice_lcr(full_lcr, open_win, inside=True)
+    short_lcr = slice_lcr(full_lcr, short_win, inside=True)
+    # The actuation trace excludes the reference windows so de-embedded RAW
+    # values aren't polluted by the OPEN/SHORT captures.
+    raw_lcr = slice_lcr(full_lcr, open_win + short_win, inside=False)
+
+    h7 = load_h7(session_dir / "h7.csv")
+    stage = load_stage(session_dir / "stage.csv")
+    out_dir = Path(args.out) if args.out else session_dir
+    return _run_analysis(out_dir, "console", args, raw_lcr, short_lcr, open_lcr,
+                         h7, stage, freq, k, v0, lscale, loff)
+
+
 def _main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     p = argparse.ArgumentParser(description="Analyze + visualize a V3 SMA session")
     p.add_argument("--session", required=True, help="session directory")
+    p.add_argument("--mode", default="auto", choices=("auto", "console", "phase"),
+                   help="layout: 'console' (continuous + events.csv), 'phase' "
+                        "(legacy OPEN/SHORT/RAW files), or 'auto' (default)")
     p.add_argument("--phase", default="raw", choices=("raw", "open", "short"),
-                   help="which phase to analyze (default: raw)")
+                   help="phase-mode only: which phase to analyze (default: raw)")
+    p.add_argument("--ref-window", type=float, default=10.0,
+                   help="console-mode only: seconds of LCR after each "
+                        "ref_open/ref_short marker to use as the de-embed "
+                        "reference (default: 10)")
     p.add_argument("--out", default=None, help="output dir (default: session dir)")
     p.add_argument("--no-deembed", action="store_true")
     p.add_argument("--frequency", type=float, default=None)
@@ -452,6 +560,21 @@ def _main() -> int:
     if not session_dir.exists():
         print(f"ERROR: session dir not found: {session_dir}", file=sys.stderr)
         return 2
+
+    mode = args.mode
+    if mode == "auto":
+        # Console layout has events.csv + continuous h7.csv; legacy has
+        # per-phase files like raw_h7.csv. Prefer console when present.
+        is_console = ((session_dir / "events.csv").exists()
+                      and (session_dir / "h7.csv").exists())
+        is_phase = any((session_dir / f"{ph}_h7.csv").exists()
+                       for ph in ("raw", "open", "short"))
+        mode = "console" if (is_console and not is_phase) else (
+            "phase" if is_phase else "console")
+        log.info("auto-detected layout: %s", mode)
+
+    if mode == "console":
+        return analyze_console_session(session_dir, args)
     return analyze_session(session_dir, args.phase, args)
 
 

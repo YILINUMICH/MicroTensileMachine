@@ -1,0 +1,383 @@
+2026-06-24 17:15:53,302  INFO   root                Session: console_20260624_171553
+2026-06-24 17:15:53,302  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260624_171553
+2026-06-24 17:15:53,303  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\config.yaml  headless=False
+2026-06-24 17:15:54,481  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-24 17:15:54,481  ERROR  H7Worker            H7 worker crashed: could not open port 'COM8': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 215, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 230, in _main_loop
+    with reader:
+         ^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 330, in __enter__
+    self.open()
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 284, in open
+    self._ser = serial.Serial(
+                ^^^^^^^^^^^^^^
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialwin32.py", line 33, in __init__
+    super(Serial, self).__init__(*args, **kwargs)
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialutil.py", line 244, in __init__
+    self.open()
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialwin32.py", line 64, in open
+    raise SerialException("could not open port {!r}: {!r}".format(self.portstr, ctypes.WinError()))
+serial.serialutil.SerialException: could not open port 'COM8': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+2026-06-24 17:15:54,507  INFO   H7Worker            H7 worker exit  (pushed=0, dropped=0, filtered=0)
+2026-06-24 17:15:54,880  INFO   LCRMeter            Using VISA backend: @py
+2026-06-24 17:15:55,759  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-06-24 17:15:55,790  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-06-24 17:15:55,805  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-24 17:15:55,917  INFO   LCRMeter            Found 1 instruments
+2026-06-24 17:15:55,917  ERROR  LCRMeter            No E4980A/AL found
+2026-06-24 17:15:55,917  ERROR  LcrWorker           LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 117, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 151, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-24 17:15:55,918  INFO   LcrWorker           LCR worker exit  (pushed=0, dropped=0)
+2026-06-24 17:15:55,982  INFO   Driver_ZaberStage   Disconnected
+2026-06-24 17:15:55,982  INFO   ZaberWorker         Zaber worker exit  (pushed=0, dropped=0)
+2026-06-24 17:16:02,489  INFO   RecordingCore       Running 10.0 s full system check...
+2026-06-24 17:16:02,489  WARNING  RecordingCore       health H7    FAIL (0) — worker error SerialException("could not open port 'COM8': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)")
+2026-06-24 17:16:02,490  WARNING  RecordingCore       health LCR   FAIL (0) — worker error RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')
+2026-06-24 17:16:02,490  WARNING  RecordingCore       health stage FAIL (0) — only 0 reads (need >=3)
+2026-06-24 17:16:06,269  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-06-24 17:16:08,274  WARNING  RecordingCore       HEALTH WARNING: LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:08,275  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,337  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,399  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,462  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,525  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,587  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,650  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,712  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,775  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,838  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,899  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:08,963  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,025  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,087  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,149  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,212  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,275  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,338  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,400  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,463  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,526  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,587  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,651  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,713  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,775  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,838  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,901  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:09,963  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,026  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,089  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,151  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,213  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,275  WARNING  RecordingCore       HEALTH WARNING: LCR silent 5.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:10,276  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,339  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,402  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,465  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,528  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,592  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,655  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,717  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,780  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,844  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,890  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:10,954  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,016  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,079  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,142  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,205  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,269  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,332  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,395  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,458  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,520  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,583  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,645  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,706  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,769  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,832  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,893  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:11,956  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,020  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,082  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,145  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,208  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,271  WARNING  RecordingCore       HEALTH WARNING: LCR silent 7.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:12,272  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,335  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,398  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,461  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,524  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,585  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,649  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,712  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,775  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,837  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,898  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:12,961  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,026  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,088  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,150  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,214  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,277  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,341  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,404  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,466  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,528  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,590  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,653  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,716  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,778  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,840  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,901  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:13,965  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,027  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,089  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,153  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,214  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,277  WARNING  RecordingCore       HEALTH WARNING: LCR silent 9.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:14,278  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,340  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,394  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,454  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,528  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,590  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,652  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,716  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,778  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,840  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,898  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:14,957  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,018  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,084  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,144  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,204  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,272  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,332  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,392  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,467  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,530  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,592  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,655  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,707  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,767  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,835  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,896  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:15,955  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,022  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,082  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,142  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,210  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,278  WARNING  RecordingCore       HEALTH WARNING: LCR silent 11.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:16,279  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,341  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,404  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,467  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,528  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,592  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,654  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,717  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,780  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,843  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,904  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:16,966  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,030  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,093  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,156  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,219  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,282  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,344  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,408  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,471  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,534  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,597  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,659  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,721  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,783  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,846  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,909  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:17,971  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,032  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,096  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,159  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,220  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,284  WARNING  RecordingCore       HEALTH WARNING: LCR silent 13.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:18,285  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,346  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,411  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,473  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,537  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,599  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,662  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,724  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,787  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,850  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,913  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:18,974  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,037  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,100  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,163  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,225  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,291  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,345  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,412  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,478  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,531  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,600  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,660  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,720  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,787  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,847  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,906  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:19,974  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,035  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,095  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,168  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,222  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,281  WARNING  RecordingCore       HEALTH WARNING: LCR silent 15.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:20,282  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,350  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,410  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,470  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,537  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,596  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,670  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,734  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,796  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,859  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,920  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:20,969  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,033  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,096  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,159  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,220  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,284  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,346  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,408  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,472  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,534  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,596  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,659  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,722  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,786  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,849  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,911  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:21,975  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,039  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,100  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,164  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,227  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,288  WARNING  RecordingCore       HEALTH WARNING: LCR silent 17.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:22,289  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,352  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,416  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,478  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,654  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,660  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,732  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,795  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,857  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,919  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:22,983  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,047  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,094  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,157  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,222  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,282  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,345  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,407  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,470  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,534  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,598  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,661  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,724  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,787  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,849  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,910  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:23,974  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,002  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,038  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,100  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,163  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,220  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,286  WARNING  RecordingCore       HEALTH WARNING: LCR silent 19.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:24,287  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,347  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,407  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,478  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,539  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,602  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,665  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,728  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,791  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,854  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,918  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:24,979  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,042  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,105  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,168  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,230  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,292  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,355  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,416  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,479  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,541  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,603  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,666  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,729  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,792  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,933  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:25,975  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,035  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,095  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,157  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,223  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,281  WARNING  RecordingCore       HEALTH WARNING: LCR silent 21.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:26,282  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,349  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,417  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,470  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,537  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,597  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,667  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,724  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,795  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,857  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,919  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:26,982  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,044  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,100  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,160  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,220  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,282  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,346  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,407  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,482  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,545  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,608  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,656  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,733  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,782  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,850  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,910  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:27,970  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,036  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,097  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,157  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,225  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,285  WARNING  RecordingCore       HEALTH WARNING: LCR silent 23.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-24 17:16:28,286  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,356  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,418  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,480  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,543  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,667  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,672  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-24 17:16:28,694  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260624_171553\meta.json

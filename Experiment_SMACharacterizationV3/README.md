@@ -1,12 +1,18 @@
-> **Status: WIP / To-Test** — code-complete, offline analyzer verified on synthetic data; not yet bench-run. See [STATUS.md](STATUS.md). Project map: [../README.md](../README.md).
+> **Status: WIP / To-Test** — code-complete, offline analyzer + offscreen GUI + headless flow verified on synthetic data; not yet bench-run. See [STATUS.md](STATUS.md). Project map: [../README.md](../README.md).
 
-# Experiment_SMACharacterizationV3 — multi-instrument SMA recorder + analyzer
+# Experiment_SMACharacterizationV3 — multi-instrument SMA console + analyzer
 
 V3 extends the V2 recorder into a full multi-instrument session: **one
-config file** sets every instrument and sensor parameter, the recorder logs
-**raw** streams from the LCR, the combined-firmware H7 (sensors *and* SMA),
-and the Zaber stage, and an **offline analyzer** converts raw→physical and
-renders dashboards.
+config file** sets every instrument and sensor parameter, a **single
+continuously-logging console** (`sma_console.py`) records **raw** streams
+from the LCR, the combined-firmware H7 (sensors *and* SMA), and the Zaber
+stage while controlling all three, and an **offline analyzer** converts
+raw→physical and renders dashboards.
+
+The console (GUI or `--headless`) replaces the rigid OPEN→SHORT→RAW phase
+flow with **continuous logging + event markers**: instead of swapping files
+at phase boundaries, every command and reference is timestamped into
+`events.csv`, which the analyzer uses to segment the run.
 
 ## Architecture (same backbone as V2)
 
@@ -53,17 +59,53 @@ raw to one `*_h7.csv` per phase (with `src`/`channel` columns). For
 `src=4/5` the `value` column carries **amps / ohms** (firmware-computed),
 not volts.
 
-## Run a session
+## Run a session — `sma_console.py` (primary entry point)
 
 ```sh
-pip install -r requirements.txt
-python sma_recorder.py                       # uses config.yaml
-python sma_recorder.py --session-id flexinol_run01
+pip install -r requirements.txt          # + PySide6 or PyQt5 for the GUI
+python sma_console.py                     # GUI console (layout A)
+python sma_console.py --headless          # scripted run, no GUI (Ctrl+C to stop)
+python sma_console.py --session-id flexinol_run01
 ```
 
-Output: `data/<session_id>/` with `{open,short,raw}_{lcr,h7,stage}.csv`,
-`meta.json`, `session.log`. The operator is walked through OPEN → SHORT →
-RAW; RAW records until Ctrl+C.
+One window (or one headless loop) controls the **stage, LCR, and SMA** and
+continuously logs every enabled stream. Layout A: top status bar
+(H7/LCR/stage connection dots + `REC` + a persistent red **DISARM**), left
+control rail (SMA arm/disarm, fire↔cycle, start/stop, live `V/I/R`; stage
+position/target; LCR `Ls/Rs` + `ref open`/`ref short`), three stacked live
+plots (displacement+force / SMA V·I·R / LCR Ls·Rs), and a bottom event log.
+
+A 20 Hz timer is the heartbeat: drain queues → append CSVs → update
+readouts/plots → run the staleness monitor → auto-`disarm` on a critical
+stall. **The MOSFET is armed only around an actuation** and `DISARM` is
+always live.
+
+Output: `data/console_<session_id>/` with continuous `lcr.csv` / `h7.csv` /
+`stage.csv` / `status.csv`, plus **`events.csv`** (`host_timestamp_s,
+monotonic_s, kind, detail`; `kind` ∈ `session/cmd/arm/disarm/ref_open/
+ref_short/warn/error`), `meta.json`, and `session.log`.
+
+**Critical vs auxiliary streams:** the **H7** sensor hub is critical — a
+startup failure aborts and a >3 s mid-run stall auto-disarms. The **LCR** and
+**Zaber stage** are **auxiliary**: a failure or stall WARNS (and is logged to
+`events.csv` / `meta.errors`) but never stops the SMA run.
+
+The startup **full-system check** (identity + streaming + sane values) runs
+once before recording; `ref open` / `ref short` drop on-demand de-embed
+reference markers — no separate OPEN/SHORT phases.
+
+### Headless mode
+
+`--headless` drives the same `recording_core.RecordingCore` with no Qt
+dependency: it opens outputs, runs the startup check, optionally starts the
+`config.sma` cycle (arm + cycle + 1 Hz `ping`), records until Ctrl+C, then
+stops + disarms + writes `meta.json`. Use it for scripted/automated runs.
+
+### Legacy recorder — `sma_recorder.py`
+
+The older interactive OPEN→SHORT→RAW recorder is still present (backed by
+`session.py` / `operator_io.py`) and writes the per-phase
+`{open,short,raw}_{lcr,h7,stage}.csv` layout. The console supersedes it.
 
 ### SMA actuation — the state machine runs on M7
 
@@ -90,56 +132,43 @@ sma:
   wdt_ms: 5000
 ```
 
-## One-shot automated experiment — `run_experiment.py`
+## One-shot automated experiment — `run_experiment.py` (RETIRED)
 
-For an **actual drive run without the interactive OPEN/SHORT ceremony**, use
-`run_experiment.py` — it configures the instruments, fires the firmware's
-on-M7 actuation, logs every enabled stream with a watchdog heartbeat, and
-auto-runs the analyzer. It reuses the same workers + CSV schema + analyzer
-(no duplicated logic) and respects the `enabled:` flags.
+`run_experiment.py` is **retired** — it is now a stub that refuses to run. It
+built firmware command strings inline and never sent `arm`, which the rebuilt
+`Firmware_SMASensorHub_PIO` rejects. Its drive/cycle one-shot is just the
+console with `n` set; use:
 
 ```sh
-# cycle defined in config.yaml's sma: block
-python run_experiment.py
-
-# override the cycle on the CLI
-python run_experiment.py --v-high 3.0 --fire-ms 1500 --cool-ms 6000 --n 5
-
-# a single drive (good for the resistor smoke test)
-python run_experiment.py --drive 2.0 --hold-ms 1000
-
-# continuous cycle for a fixed window
-python run_experiment.py --n 0 --duration 60
-
-# preview the plan, touch no hardware
-python run_experiment.py --drive 2.0 --hold-ms 1000 --dry-run
+python sma_console.py --headless        # scripted drive+log (Ctrl+C to stop)
 ```
 
-Output: `data/exp_<timestamp>/` with `raw_h7.csv` (+ `raw_lcr.csv` /
-`raw_stage.csv` if those streams are enabled), `meta.json`, `session.log`,
-and the analyzer's dashboard. For the **resistor smoke test**, set
-`lcr.enabled: false` and `stage.enabled: false` and run with `--drive`.
-
-`run_experiment.py` vs `sma_recorder.py`: the recorder is the **interactive,
-calibrated** workflow (OPEN→SHORT→RAW prompts, LCR de-embed references);
-`run_experiment.py` is the **non-interactive one-shot** drive+log+analyze.
+The cycle still comes from `config.yaml`'s `sma:` block. The original
+implementation remains in git history.
 
 ## Analyze + visualize
 
 ```sh
-python analyze_sma.py --session data/sma_20260621_153000
-python analyze_sma.py --session <dir> --phase raw \
-                      --k -0.1171 --v0 566.957 --load-scale 50.0
+# console layout (events.csv) and legacy per-phase layout both auto-detect
+python analyze_sma.py --session data/console_20260624_153000
+python analyze_sma.py --session <dir> --ref-window 8          # console refs
+python analyze_sma.py --session <dir> --mode phase --phase raw  # legacy
+python analyze_sma.py --session <dir> --k -0.1171 --v0 566.957 --load-scale 50.0
 ```
 
-Produces, in the session dir:
+`--mode auto` (default) picks **console** when `events.csv` + `h7.csv` are
+present, else the **legacy per-phase** layout. Produces, in the session dir:
 
-- `<phase>_dashboard.png` — multi-panel: displacement, force, SMA R/V/I,
-  de-embedded LCR R/L, stage position, and force-vs-displacement.
-- `<phase>_joined.csv` — all streams interpolated onto a uniform 100 Hz grid.
+- `<label>_dashboard.png` — multi-panel: displacement, force, SMA R/V/I,
+  de-embedded LCR R/L, stage position, and force-vs-displacement
+  (`<label>` = `console` or the phase name).
+- `<label>_joined.csv` — all streams interpolated onto a uniform 100 Hz grid.
 
-Conversions are applied only where the coefficient is present in
-`meta.json` (or overridden on the CLI); otherwise the channel is plotted
+In **console mode** the OPEN/SHORT de-embed references are the LCR samples in
+the `--ref-window` seconds (default 10) after each `ref_open`/`ref_short`
+marker in `events.csv`; the actuation trace is every LCR sample *outside*
+those windows. Conversions are applied only where the coefficient is present
+in `meta.json` (or overridden on the CLI); otherwise the channel is plotted
 raw. LCR de-embedding auto-selects OPEN+SHORT (2-term) or SHORT-only.
 
 ## Files
@@ -150,11 +179,14 @@ Experiment_SMACharacterizationV3/
 ├── config.yaml            every instrument + sensor parameter
 ├── config.py              typed dataclasses (lcr/h7/stage/phases/calibration/run)
 ├── workers.py             LcrWorker, H7Worker (multi-channel), ZaberWorker
-├── session.py             OPEN→SHORT→RAW controller, sole CSV writer
-├── sma_recorder.py        interactive OPEN→SHORT→RAW entry point
-├── run_experiment.py      non-interactive one-shot drive/log/analyze
-├── operator_io.py         terminal prompts / progress / banners
-└── analyze_sma.py         offline de-embed + raw→physical + dashboards
+├── h7_commands.py         firmware command builders (single source of truth)
+├── recording_core.py      RecordingCore — UI-agnostic continuous recorder/control
+├── sma_console.py         PRIMARY entry — GUI console + --headless
+├── session.py             legacy OPEN→SHORT→RAW controller, sole CSV writer
+├── sma_recorder.py        legacy interactive OPEN→SHORT→RAW entry point
+├── run_experiment.py      RETIRED stub (use sma_console.py --headless)
+├── operator_io.py         terminal prompts / progress / banners (legacy recorder)
+└── analyze_sma.py         offline de-embed + raw→physical + dashboards (console + phase)
 ```
 
 Cross-module drivers are imported via `sys.path` shims (canonical sources:

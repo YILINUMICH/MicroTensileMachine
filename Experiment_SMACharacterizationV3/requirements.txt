@@ -5,4 +5,8 @@ zaber-motion>=7.0     # Zaber X-LSQ300A-E01 linear stage
 pyyaml>=6.0           # config.yaml
 numpy>=1.24
 matplotlib>=3.7       # analyze_sma.py dashboards (Agg, headless)
-readchar>=4.0         # operator_io keypress prompts
+readchar>=4.0         # operator_io keypress prompts (legacy recorder)
+pyqtgraph>=0.13       # sma_console.py live plots (GUI mode only)
+PySide6>=6.5          # GUI Qt binding for sma_console.py (PyQt5 also works;
+                      #   pyqtgraph picks up whichever is installed). Not
+                      #   needed for --headless or the analyzer.
