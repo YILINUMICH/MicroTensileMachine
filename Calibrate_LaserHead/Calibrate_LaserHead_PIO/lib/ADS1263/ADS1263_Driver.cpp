@@ -114,13 +114,20 @@ bool ADS1263_Driver::begin() {
     DRV_LOG.print(F("ADS1263 found. ID=0x"));
     DRV_LOG.println(id, HEX);
 
-    // POWER: INTREF on (bit 0) + VBIAS on (bit 1) — VBIAS biases AINCOM to
-    // mid-supply (AVDD/2 ≈ +2.5 V) so the PGA has the headroom it needs at
-    // gain > 1. Leave VBIAS asserted even at gain = 1 so a future operating-
-    // mode change (e.g. dropping LCA-9PC amp gain and turning ADS1263 PGA
-    // up) doesn't introduce a surprise. Datasheet §9.6.2; settling time ≤
-    // 0.22 ms at 0.1 µF (the EVM's 150 pF on AINCOM is much less, so faster).
-    writeRegister(ADS1263_REG_POWER, 0x13);
+    // POWER (Table 9-36, reset = 0x11): VBIAS on (bit 1), INTREF OFF
+    // (bit 0), RESET indicator cleared (bit 4 = 0)  →  0x02.
+    //   - VBIAS biases AINCOM to mid-supply (AVDD/2 ≈ +2.5 V) so the PGA
+    //     keeps common-mode headroom for a possible future gain > 1
+    //     (e.g. dropping the LCA-9PC amp gain and raising the ADS1263 PGA).
+    //   - INTREF (internal 2.5 V) is OFF: per datasheet it is only required
+    //     by the IDAC or the temperature sensor, both unused here.
+    //     Measurement runs on the external REF7050 selected via REFMUX, so
+    //     the internal reference is redundant.
+    //   - Bit 4 written 0 CLEARS the reset indicator, so the STATUS/POWER
+    //     RESET flag can detect a NEW device reset mid-run (datasheet:
+    //     "Clear this bit to detect the next device reset").
+    // §9.6.2: VBIAS settling ≤ 0.22 ms at 0.1 µF (EVM's 150 pF → faster).
+    writeRegister(ADS1263_REG_POWER, 0x02);
     delay(150);
 
     // INTERFACE: STATUS + CHK enabled for both ADC1 and ADC2 reads.
@@ -238,9 +245,17 @@ ADC_Reading ADS1263_Driver::readADC1Direct() {
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
     if (!chk_ok) {
-        DRV_LOG.print(F("[ADC1] checksum mismatch (status=0x"));
-        DRV_LOG.print(status, HEX);
-        DRV_LOG.println(F(")"));
+        // Throttle to 1 Hz: on a sustained fault this would fire per read
+        // (up to 400/s) over RPC on M4 and back up the RPC channel, which can
+        // stall M4 — the overload that retired RPC as the sample path.
+        static uint32_t last_crc1_log_ms = 0;
+        uint32_t crc1_now = millis();
+        if (crc1_now - last_crc1_log_ms >= 1000) {
+            last_crc1_log_ms = crc1_now;
+            DRV_LOG.print(F("[ADC1] checksum mismatch (status=0x"));
+            DRV_LOG.print(status, HEX);
+            DRV_LOG.println(F(")"));
+        }
     }
     logStatusAlarms(status, "ADC1");
     return r;
@@ -264,9 +279,17 @@ ADC_Reading ADS1263_Driver::readADC1Poll(uint32_t poll_ms) {
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
     if (!chk_ok) {
-        DRV_LOG.print(F("[ADC1] checksum mismatch (status=0x"));
-        DRV_LOG.print(status, HEX);
-        DRV_LOG.println(F(")"));
+        // Throttle to 1 Hz: on a sustained fault this would fire per read
+        // (up to 400/s) over RPC on M4 and back up the RPC channel, which can
+        // stall M4 — the overload that retired RPC as the sample path.
+        static uint32_t last_crc1_log_ms = 0;
+        uint32_t crc1_now = millis();
+        if (crc1_now - last_crc1_log_ms >= 1000) {
+            last_crc1_log_ms = crc1_now;
+            DRV_LOG.print(F("[ADC1] checksum mismatch (status=0x"));
+            DRV_LOG.print(status, HEX);
+            DRV_LOG.println(F(")"));
+        }
     }
     logStatusAlarms(status, "ADC1");
 
@@ -336,9 +359,17 @@ ADC_Reading ADS1263_Driver::readADC2Direct() {
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
     if (!chk_ok) {
-        DRV_LOG.print(F("[ADC2] checksum mismatch (status=0x"));
-        DRV_LOG.print(status, HEX);
-        DRV_LOG.println(F(")"));
+        // Throttle to 1 Hz: on a sustained fault this would fire per read
+        // (up to 400/s) over RPC on M4 and back up the RPC channel, which can
+        // stall M4 — the overload that retired RPC as the sample path.
+        static uint32_t last_crc2_log_ms = 0;
+        uint32_t crc2_now = millis();
+        if (crc2_now - last_crc2_log_ms >= 1000) {
+            last_crc2_log_ms = crc2_now;
+            DRV_LOG.print(F("[ADC2] checksum mismatch (status=0x"));
+            DRV_LOG.print(status, HEX);
+            DRV_LOG.println(F(")"));
+        }
     }
     logStatusAlarms(status, "ADC2");
     return r;
@@ -362,9 +393,17 @@ ADC_Reading ADS1263_Driver::readADC2Poll(uint32_t poll_ms) {
     r.voltage_uV = r.voltage_V * 1e6f;
     r.timestamp_us = micros();
     if (!chk_ok) {
-        DRV_LOG.print(F("[ADC2] checksum mismatch (status=0x"));
-        DRV_LOG.print(status, HEX);
-        DRV_LOG.println(F(")"));
+        // Throttle to 1 Hz: on a sustained fault this would fire per read
+        // (up to 400/s) over RPC on M4 and back up the RPC channel, which can
+        // stall M4 — the overload that retired RPC as the sample path.
+        static uint32_t last_crc2_log_ms = 0;
+        uint32_t crc2_now = millis();
+        if (crc2_now - last_crc2_log_ms >= 1000) {
+            last_crc2_log_ms = crc2_now;
+            DRV_LOG.print(F("[ADC2] checksum mismatch (status=0x"));
+            DRV_LOG.print(status, HEX);
+            DRV_LOG.println(F(")"));
+        }
     }
     logStatusAlarms(status, "ADC2");
 

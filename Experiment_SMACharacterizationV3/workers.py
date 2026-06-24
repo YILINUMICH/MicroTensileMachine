@@ -84,6 +84,15 @@ class StageSample:
     position_mm: float                   # absolute stage position
 
 
+@dataclass
+class StatusSample:
+    host_timestamp_s: float              # time.time() at host parse
+    monotonic_s: float                   # time.monotonic() at host parse
+    fields: dict                         # parsed [STATUS] key=value: dropped,
+                                         #   crc_err, overrun, m7_us, m4_us,
+                                         #   vdd, offset, aref, rate1/2, ...
+
+
 # ---------------------------------------------------------------------------
 # LCR worker (unchanged from V2)
 # ---------------------------------------------------------------------------
@@ -181,12 +190,15 @@ class H7Worker(threading.Thread):
 
     def __init__(self, cfg: H7Config,
                  out_queue: "queue.Queue[H7Sample]",
-                 stop_event: threading.Event):
+                 stop_event: threading.Event,
+                 status_queue: "Optional[queue.Queue[StatusSample]]" = None):
         super().__init__(name="H7Worker", daemon=True)
         self.cfg = cfg
         self.out_queue = out_queue
+        self.status_queue = status_queue
         self.stop_event = stop_event
         self.n_pushed = 0
+        self.n_status = 0
         self.n_dropped = 0
         self.n_filtered = 0
         self.error: Optional[BaseException] = None
@@ -228,9 +240,21 @@ class H7Worker(threading.Thread):
             self.logger.info("H7 ready: port=%s baud=%d channels=%s",
                              self.cfg.port, self.cfg.baud, sorted(keep))
             self.ready.set()
-            for s in reader.iter_samples():
+            for kind, item in reader.iter_events():
                 if self.stop_event.is_set():
                     break
+                if kind == "status":
+                    if self.status_queue is not None:
+                        try:
+                            self.status_queue.put_nowait(StatusSample(
+                                host_timestamp_s=time.time(),
+                                monotonic_s=time.monotonic(),
+                                fields=item))
+                            self.n_status += 1
+                        except queue.Full:
+                            pass
+                    continue
+                s = item
                 ch = s.channel  # None for srcless 3-col legacy builds
                 if keep and ch is not None and ch not in keep:
                     self.n_filtered += 1

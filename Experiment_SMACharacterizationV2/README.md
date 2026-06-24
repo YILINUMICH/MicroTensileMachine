@@ -1,3 +1,5 @@
+> **⚠ DEPRECATED — superseded by [`../Experiment_SMACharacterizationV3/`](../Experiment_SMACharacterizationV3/).** V3 is a strict superset: multi-channel H7 (`src=1..5`, including the SMA `src=3/4/5` feedback), Zaber position telemetry, and working **`arm`-gated** SMA actuation against the current `Firmware_SMASensorHub_PIO`. V2's SMA command path was already a no-op (it calls `send_command()` on a reader that lacks it) and does **not** match the rebuilt firmware. Use V3 — `sma.enabled=false` makes it a pure logger, exactly like V2. Kept for reference only; move to `Archieve/` when convenient.
+>
 > **Status: To-Test** — current SMA recorder, just refactored to consume `../Driver_KeysightLCR/` directly (the local `lcr_reader.py` was deleted). Needs a smoke recording on real hardware before flipping back to Stable. Supersedes `../SMA_Characterization/`. See [STATUS.md](STATUS.md). See [../README.md](../README.md) for project overview.
 
 # SMA Characterization Recorder

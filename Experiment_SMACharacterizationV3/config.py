@@ -20,6 +20,8 @@ from typing import Any, List, Optional
 
 import yaml
 
+import h7_commands as h7
+
 
 # ---------------------------------------------------------------------------
 # Instrument sub-configs
@@ -83,16 +85,19 @@ class SmaConfig:
     start of the RAW phase, `ping` each second, and `stop` at the end.
     """
     enabled: bool = False
-    v_high: float = 3.0          # heating/actuation voltage
-    v_low: float = 0.0           # cooling-phase voltage (0 = off)
-    fire_ms: int = 2000          # heating duration per cycle
-    cool_ms: int = 8000          # cooling duration per cycle
+    v_high: float = 3.0          # heating / actuation voltage
+    v_low: float = 0.5           # idle / cooling level = v_idle (the LDO can't
+                                 #   reach 0 V; firmware rests here between heats)
+    fire_ms: int = 2000          # heat (t_high) duration per cycle
+    cool_ms: int = 8000          # cool (t_idle) duration per cycle
     n_cycles: int = 10           # 0 = continuous until RAW stop
-    wdt_ms: int = 5000           # M7 heartbeat timeout (0 = watchdog off)
+    wdt_ms: int = 5000           # M7 heat-watchdog timeout (0 = watchdog off)
 
     def cycle_command(self) -> str:
-        return (f"cycle {self.v_high} {self.v_low} "
-                f"{int(self.fire_ms)} {int(self.cool_ms)} {int(self.n_cycles)}")
+        # Firmware: cycle <v_high> <v_idle> <t_high_ms> <t_idle_ms> <n>.
+        # v_low is the idle/cooling level (v_idle); the arg order is unchanged.
+        return h7.cycle(self.v_high, self.v_low,
+                        self.fire_ms, self.cool_ms, self.n_cycles)
 
 
 @dataclass

@@ -164,7 +164,7 @@ See [docs/README.md](docs/README.md) for the per-PDF index and the operator memo
 | Re-calibrate the laser head before a run | [`Calibrate_LaserHead/`](Calibrate_LaserHead/) — `python run_calibration.py` |
 | Re-calibrate the load cell before a run | [`Calibrate_LoadCell/`](Calibrate_LoadCell/) — `python run_calibration.py` |
 | Flash/modify the production sensing firmware | [`Firmware_SensorHub_PIO/`](Firmware_SensorHub_PIO/) |
-| Drive / actuate the SMA coil (`set <V>`, `drive <V> <ms>`, `fire`) | [`Firmware_SMASensorHub_PIO/`](Firmware_SMASensorHub_PIO/) (combined w/ sensing) — or [`Firmware_SMADriver_PIO/`](Firmware_SMADriver_PIO/) (SMA-only reference) |
+| Drive / actuate the SMA coil (`arm`, then `drive <V> <ms>` / `fire <V>` / `cycle …`) | [`Firmware_SMASensorHub_PIO/`](Firmware_SMASensorHub_PIO/) (combined w/ sensing) — or [`Firmware_SMADriver_PIO/`](Firmware_SMADriver_PIO/) (SMA-only reference) |
 | Run sensing **and** SMA drive together on one H7 | [`Firmware_SMASensorHub_PIO/`](Firmware_SMASensorHub_PIO/) |
 | Characterize the LDO dynamic response (settling/ripple) | [`Experiment_LDOCharacterization/`](Experiment_LDOCharacterization/) — `python run_experiment.py` |
 | Validate laser + load cell together against a spring | [`Experiment_SpringSmokeTest/`](Experiment_SpringSmokeTest/) |
@@ -178,4 +178,61 @@ See [docs/README.md](docs/README.md) for the per-PDF index and the operator memo
 ## Top-level conventions
 
 - **One master README per module** (not scattered Plan/Memo/Status files). The root README + each module's `README.md` is the canonical source; per-module `STATUS.md` is a short status header.
-- **Datasheets and operator memos** live under [`docs/`](docs/) only. No sub-module dupli
+- **Datasheets and operator memos** live under [`docs/`](docs/) only. No sub-module duplicates — a module's own `doc/` folder holds only module-development notes, never copies of the datasheets. **Routing rule:** for a *system-level* question check the root `docs/`; for a *module-level* question check that module's own `doc/`.
+- **`Archieve/` is read-only and excluded from project understanding.** The misspelling is intentional and preserved to avoid breaking path references. It holds fully superseded modules kept only for git-blame — never read, edit, or propose changes there.
+- **Every module carries a status label** (Stable / WIP / To-Test / Diagnostic / Archived — see the legend above). "To-Test" means it builds but has not been bench-verified end-to-end; treat its output skeptically.
+- **Per-module environment, not repo-wide.** Each host-side module has its own `requirements.txt` (`pip install -r requirements.txt`). Module configuration is a per-module `config.yaml` loaded into a typed dataclass. Common stack: `pyserial`, `pyvisa` (LCR), `zaber-motion` (stage), `numpy`/`matplotlib`, `pyyaml`.
+
+### Firmware conventions (PlatformIO, Portenta H7)
+
+- The H7 has two cores and **the M4 has no direct USB**, so M4 serial output is bridged through the M7 over Arduino RPC. Most firmware ships **two images compiled from the same `src/main.cpp`**, with an `#ifdef CORE_CMx` guard selecting per-core code. (`Firmware_SMADriver_PIO/` is the exception — M7-only, no M4/RPC/ring.)
+- **Power-cycle the rig (USB + EVM supply) after every upload.** The DFU reset does not cleanly re-power the EVM's analog rails; skip the cycle and the ADS1263 comes up with `ID=0x00`.
+- **COM8 = Portenta H7, COM5 = Zaber stage.** `upload_port`/`monitor_port` are pinned to COM8 in every `platformio.ini` so PIO doesn't auto-pick the Zaber and wedge the stage. On a different host run `pio device list` and edit the `.ini` or override with `--upload-port COMx`.
+- **The ADS1263 driver (`lib/ADS1263/`) is manually copied, not shared.** The canonical/live copy is in `Firmware_SensorHub_PIO/`. If you fix the driver in one project, propagate the fix to every sibling copy — there is no shared library target.
+- **M4→M7 sample transport is a lock-free SPSC ring buffer in SRAM4** (`sample_ring.h`). `AdcSample` is a fixed 24-byte struct at a fixed SRAM4 address; the `src` ID column identifies each stream (1=laser, 2=load cell, 3/4/5=SMA V/I/R [deferred], 0xF0+=state-machine events). Change the struct layout and the host serial parser must change in lockstep.
+
+---
+
+## Build & run quickstart
+
+**Firmware (dual-core projects):**
+```
+pio run                                   # build default env (portenta_m4)
+pio run -e portenta_m7_bridge -t upload   # flash the M7 bridge ONCE
+pio run -e portenta_m4        -t upload   # flash the M4 application
+pio device monitor                        # 115200 baud; M4 output via M7
+# Power-cycle the rig after every upload.
+```
+
+**Firmware (`Firmware_SMADriver_PIO/`, M7-only):**
+```
+pio run -e portenta_m4_idle -t upload     # wipe leftover M4 image (then power-cycle)
+pio run -e portenta_m7      -t upload
+```
+
+**Host-side Python (common entry points):**
+```
+python Experiment_SMACharacterizationV2/sma_recorder.py            # run an SMA characterization session
+python Experiment_SMACharacterizationV2/analyze_sma.py --session data/<id>   # offline de-embed + plot
+python Calibrate_LaserHead/run_calibration.py                      # laser calibration sweep (Zaber)
+python Calibrate_LoadCell/run_calibration.py                       # load-cell dead-weight calibration
+python Driver_KeysightLCR/test_lcr_meter.py --quick                # LCR connection smoke test
+python <module>/portenta_reader.py                                 # H7 serial-stream sanity check
+```
+
+---
+
+## Cross-cutting TODO
+
+Module-local TODOs live in each module's `STATUS.md`; the items below span more than one module.
+
+- **Wire the current calibration JSONs into the recorder.** `Experiment_SMACharacterizationV2/session.py` still carries the legacy constants (`k = -0.1171 mV/µm`, `V₀ = 566.957 mV`) that came through a now-removed Waveshare HAT ~4.4× attenuator and are **invalid on the bare EVM**. Feed `Calibrate_LaserHead/` and `Calibrate_LoadCell/` `calibration.json` outputs in instead.
+- **Bench re-verify the finalized ADC↔sensor mapping** (ADC1=laser/AIN4-5, ADC2=load/AIN2-3) before flipping `Firmware_SensorHub_PIO/` to Stable. Some firmware comments still describe the older "ADC1=load / ADC2=laser" assignment — the swap is the one remaining To-Test item.
+- **Bench-verify `Firmware_SMASensorHub_PIO/` end-to-end** (the combined sensing + SMA-drive merge is code-complete/reviewed but not yet run on hardware).
+- **Add a `ScopeWorker` for `Experiment_SMACharacterizationV2/`** so the Siglent scope drops into the same worker pattern as the LCR + H7.
+- **Trim the SMA LDO for absolute-voltage accuracy** — calibrate `vdd`/`offset` against a meter (dynamics are already verified; absolute V deferred).
+- **Verify `codes_per_div = 25.0`** in `Experiment_LDOCharacterization/` against the scope Programming Guide before trusting absolute voltage / overshoot %.
+- **Validate the `Driver_RedPitaya/` SCPI driver against the E4980** before using it as an LCR replacement.
+- **Wire the host parser to `src = 3/4/5`** — the firmware now streams SMA V/I/R (stamped on the M4 clock) and reports `crc_err`/`overrun`/`m7_us`/`m4_us`/`vdd`/`offset`/`aref` in `[STATUS]`; `portenta_reader.py`/the recorder need to consume them (the M7 SMA state machine was also consolidated onto one `arm`-gated heat/cool engine — see `Firmware_SMASensorHub_PIO/`).
+- **Fill in the operator memos** under `docs/` (`MEMO_cable_map.md` partial; `MEMO_carrier_config.md`, `MEMO_sensor_setup.md`, `MEMO_bias_tee.md`, `MEMO_lcr_setup.md` are empty placeholders).
+- **Formalize the module taxonomy** — the role buckets (firmware / driver / calibration / experiment) are newer than some folder names; reconcile naming.

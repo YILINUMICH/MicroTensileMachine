@@ -2,18 +2,20 @@
  * @file ADS1263_Driver.h
  * @brief ADS1263 dual-ADC driver — Portenta H7 (M4 core) — Mid Carrier / EVM
  *
- * The ADS1263 has two independent ADCs on one die. Production channel
- * assignment (Phase 4, derived 2026-05-24 — see Firmware_SensorHub_PIO/README.md
- * §Recommended configuration):
+ * The ADS1263 has two independent ADCs on one die.
  *
- *   ADC1 — 32-bit, Sinc1-4 or FIR, up to 38 400 SPS. Used here for the
- *          LCA-9PC load cell amp output on **AIN2(+) / AIN3(-)**.
- *          Operating point: 400 SPS, Sinc3, PGA enabled (gain = 1).
+ * Per-ADC PRODUCTION roles (finalized 2026-05-28). The authoritative
+ * channel config is whatever each module's main.cpp passes to
+ * configureADC1 / configureADC2 — the Calibrate_* modules, for instance,
+ * point BOTH ADCs at a single sensor pair for cross-compare — so consult
+ * main.cpp, not this comment, for the channels actually in use:
  *
- *   ADC2 — 24-bit, Sinc3 only, up to 800 SPS. Used here for the Keyence
- *          IL-030 laser controller analog output on **AIN4(+) / AIN5(-)**.
- *          Operating point: 400 SPS, gain = 1. The controller already
- *          drives the full ±5 V range, so no external amplifier.
+ *   ADC1 — 32-bit, Sinc1-4 or FIR, up to 38 400 SPS. Keyence IL-030 laser
+ *          controller output on **AIN4(+) / AIN5(-)**, 400 SPS, Sinc3,
+ *          PGA in path (gain = 1).
+ *
+ *   ADC2 — 24-bit, Sinc3 only, up to 800 SPS. LCA-9PC load cell amplifier
+ *          output on **AIN2(+) / AIN3(-)**, 400 SPS, gain = 1.
  *
  * Both ADCs share an external REF7050 (+5 V) reference wired to
  * **AIN0(+REF) / AIN1(-REF)** — REFMUX = 0x09 for ADC1, REF2 = 001b for

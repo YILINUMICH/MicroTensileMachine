@@ -102,6 +102,7 @@ def _main() -> None:
     lcr_worker = lcr_q = None
     h7_worker = h7_q = None
     stage_worker = stage_q = None
+    status_q = None
 
     if cfg.lcr.enabled:
         lcr_q = queue.Queue(maxsize=QUEUE_MAXSIZE)
@@ -111,7 +112,8 @@ def _main() -> None:
 
     if cfg.h7.enabled:
         h7_q = queue.Queue(maxsize=QUEUE_MAXSIZE)
-        h7_worker = H7Worker(cfg.h7, h7_q, stop_event)
+        status_q = queue.Queue(maxsize=QUEUE_MAXSIZE)
+        h7_worker = H7Worker(cfg.h7, h7_q, stop_event, status_queue=status_q)
     else:
         logging.info("H7 stream disabled in config")
 
@@ -135,6 +137,7 @@ def _main() -> None:
         cfg=cfg, paths=paths,
         lcr_worker=lcr_worker, h7_worker=h7_worker, stage_worker=stage_worker,
         lcr_queue=lcr_q, h7_queue=h7_q, stage_queue=stage_q,
+        status_queue=status_q,
         stop_event=stop_event,
     )
     sys.exit(session.run())

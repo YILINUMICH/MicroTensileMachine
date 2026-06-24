@@ -112,7 +112,14 @@ static const uint32_t RING_MASK     = RING_CAPACITY - 1;
 struct SampleRing {
     // Producer-only fields (M4 writes, M7 reads-only)
     volatile uint32_t write_idx;          // M4 increments after slot write
-    volatile uint32_t dropped;            // M4 increments on overflow
+    volatile uint32_t dropped;            // M4 increments on ring overflow
+    volatile uint32_t crc_err;            // M4 increments per checksum-invalid read
+                                          //   (sample discarded, never pushed → no seq)
+    volatile uint32_t overrun;            // M4 publishes its DRDY-overrun count
+                                          //   (DRDY arrived before prior sample serviced)
+    volatile uint32_t m4_now_us;          // M4 publishes live micros() each loop; M7
+    volatile uint32_t m4_now_ms;          //   stamps src=3/4/5 with these → all lines
+                                          //   share the M4 timeline (clock alignment)
     volatile uint32_t hwm;                // M4 tracks high-water mark;
                                           //   M7 reads-and-clears each [STATUS] window
     volatile uint32_t seq_per_src[8];     // M4-only seq counters (index by src)
@@ -127,8 +134,8 @@ struct SampleRing {
     AdcSample         samples[RING_CAPACITY];
 };
 
-// Header: 4 + 4 + 4 + 32 + 4 + 4 = 52 bytes. Samples: 24 576 bytes.
-// Total: 24 628 bytes ≈ 24 KB. Fits in the 32 KB SRAM4 partition.
+// Header: 4 + 4 + 4 + 4 + 4 + 4 + 4 + 32 + 4 + 4 = 68 bytes. Samples: 24 576 bytes.
+// Total: 24 644 bytes ≈ 24 KB. Fits in the 32 KB SRAM4 partition.
 static_assert(sizeof(SampleRing) <= 32768,
               "SampleRing must fit in the upper 32 KB of SRAM4");
 

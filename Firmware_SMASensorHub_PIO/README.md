@@ -59,8 +59,11 @@ drops any line containing `[`, so all three demultiplex cleanly:
 | **`[STATUS]`** (1 Hz) | `[STATUS] t_ms=… hwm=… dropped=… rate1=… sma_state=0 …` | M7 bridge telemetry |
 | **`[SMA]`** | `[SMA] V_LDO=2.5012V I=0.00mA …` | M7 SMA controller |
 
-`sma_state=` was added to the `[STATUS]` frame (0 = IDLE) so the host can
-see when an SMA op is running.
+The `[STATUS]` frame also carries `sma_state=` (0 = IDLE), the M4-side loss
+counters `crc_err=`/`overrun=` (so `dropped=0` truly means zero data loss),
+the clock-check pair `m7_us=`/`m4_us=`, and the LDO model params
+`vdd=`/`offset=`/`aref=` (so the host can compute `V_pred` from the `src=3`
+DAC code and flag an abnormal LDO).
 
 ## Pin map — why the merge is safe (no overlap)
 
@@ -112,69 +115,82 @@ the M4-owned SPSC ring is untouched. The per-row `[SMA]` text is dropped to
 avoid duplicating the data; the human-readable `[DRIVE]`/`[FIRE]`
 start/done banners stay.
 
-> **Clock note:** `t_ms`/`hw_us` on `src=3/4/5` lines are M7's clock,
-> distinct from the M4 laser/load lines (the cores boot at different
-> times). The host joins all streams on its own arrival clock; the
-> embedded stamps are for per-stream jitter/drop detection only.
+> **Clock note:** `src=3/4/5` lines are stamped with **M4's live clock**
+> (published in the ring header), so they share one timeline with the
+> `src=1`/`2` sensor lines. `[STATUS]` carries both `m7_us` and `m4_us`
+> each second so the host can verify the alignment.
 >
 > **Host TODO:** the parser in `Calibrate_LaserHead/portenta_reader.py`
-> currently selects `src=1`/`2`; extend it to keep `src=3/4/5` to log SMA
-> feedback.
+> currently selects `src=1`/`2`; extend it to keep `src=3/4/5`.
 
 ## Commands (115200 baud, `[SMA]`-tagged replies)
 
 ```
+arm                    Close the MOSFET return path (enable current)
+disarm                 Open it immediately — hard cutoff (DAC→idle, TRIG low)
+idle <V>               Set the idle / cool / rest level (default 0.5 V)
 set <V> | <number>     Set LDO output to V volts (analytical inverse)
 code <N>               Set raw DAC code 0–4095 (predicted + measured)
 read                   LDO out, SMA current (INA296A), V_sma, R_sma
-drive <V> <ms>         Apply V for ms, then DAC→0 + MOSFET off. Logs every 10 ms.
-fire <code>[ms][from]  Scope-triggered step: TRIG edge at the DAC write.
-cycle <v_high> <v_low> <fire_ms> <cool_ms> <n>
-                       Autonomous heat/cool actuation cycle (see below). n=0 = continuous.
-ping                   Heartbeat — resets the cycle watchdog (silent)
-stop                   Graceful stop of a running cycle → safe state
-wdt <ms>               Cycle watchdog timeout (0 = disabled)
+drive <V> <ms>         Heat at V for ms, then return to idle.  Needs `arm`.
+fire <v_high> [ms]     Single heat (n=1) + clean scope-trigger edge.  Needs `arm`.
+cycle <v_high> <v_idle> <t_high_ms> <t_idle_ms> <n>
+                       Autonomous heat/cool actuation (see below). n=0 = continuous. Needs `arm`.
+ping                   Heartbeat — resets the heat watchdog (silent)
+stop                   Graceful stop → idle-low (still armed)
+wdt <ms>               Heat watchdog timeout (0 = disabled)
 step <code>[ms]        Log the LDO settle transient (10 ms cadence)
 sweep|csv [step]       Raw-code sweep, predicted vs measured
-mosfet on|off          Load-enable MOSFET
-abort                  Interrupt any running op → safe state (DAC 0, MOSFET off)
+mosfet on|off          Alias for arm / disarm
+abort                  Immediate disarm (MOSFET off, DAC idle)
 gain|shunt|ioffset <x> INA296A current-sense trims
 vdd|offset|aref <V>    Transfer-function / ADC-ref trims
 info | reset           State dump / safe-state soft reboot
 ```
 
-`read`, `info`, `abort`, `ping`, `stop`, `wdt`, `mosfet`, and the trim
-setters work **any time** (including mid-`drive`/`cycle`). The motion
-commands (`set`/`code`/`drive`/`fire`/`step`/`sweep`/`cycle`) are rejected
-while another op runs (`abort`/`stop` first) or if no MCP4728 is present.
+`arm`/`disarm`/`idle`, `read`, `info`, `abort`, `ping`, `stop`, `wdt`, and the
+trim setters work **any time** (including mid-actuation). The actuation
+commands (`drive`/`fire`/`cycle`) require an `arm` first and are rejected
+while another op runs (`abort`/`stop` first). `set`/`code`/`step`/`sweep`
+characterize the LDO and can run disarmed (no coil current).
 
-## Cyclic actuation — the experiment state machine on M7
+## Actuation — one HEAT/COOL engine (drive / fire / cycle)
 
-`cycle <v_high> <v_low> <fire_ms> <cool_ms> <n>` runs the heat/cool profile
-**autonomously on M7**:
+`drive`, `fire`, and `cycle` are all **presets of a single heat/cool engine**
+that runs **autonomously on M7**:
 
 ```
-IDLE → HEAT (V_high for fire_ms, TRIG high)
-     → COOL (V_low for cool_ms, TRIG low) → repeat n times → IDLE (safe)
+IDLE → HEAT (v_high for t_high, TRIG high)
+     → COOL (v_idle for t_idle, TRIG low) → repeat n times → idle-low
                                               (n = 0 → forever until `stop`)
 ```
 
+- **`drive <V> <ms>`** = one HEAT (n=1, no cool) → idle.
+- **`fire <v_high> [ms]`** = one HEAT (n=1) with a clean scope-trigger edge.
+- **`cycle …`** = the general repeated case.
+
 All phase timing comes from M7's own `millis()`, so it is **deterministic
 and independent of host/USB latency** — the PC is never in the timing loop.
-The host only sets the parameters (`cycle …`) and sends a periodic `ping`
-heartbeat. V/I/R keep streaming as `src=3/4/5` throughout, and each
-transition is emitted as a `[SMA] [CYCLE] …` event.
+The host sets the parameters once and sends a periodic `ping`. V/I/R keep
+streaming as `src=3/4/5` throughout, and each transition emits an `[ACT]` event.
 
-**Heartbeat watchdog (safety).** While cycling, if no `ping` arrives within
-`wdt <ms>` (default 5000 ms; `wdt 0` disables), M7 aborts to a safe state
-(DAC 0, MOSFET off). This protects an unattended SMA wire if the host
-crashes or disconnects mid-run. For manual bench use, either `ping`
-periodically, raise/disable the timeout with `wdt`, or just let it
-safe-stop. `Experiment_SMACharacterizationV3` drives this automatically:
-it sends `cycle` at RAW start, `ping` every second, and `stop` at the end.
+**MOSFET = arm / disarm.** The low-side MOSFET is the master enable: `arm`
+closes the return path, `disarm` opens it — the only true zero-current state,
+since the LDO can't reach 0 V. Actuation only modulates the **voltage**
+between `v_high` and the idle-low level; it never toggles the MOSFET. The
+resting state between and after runs is **idle-low, still armed**
+(relaunch-able).
 
-Example: `cycle 3.0 0.0 2000 8000 10` — ten cycles of 2 s heat at 3 V then
-8 s cool at 0 V; `stop` to end early, `abort` for an emergency stop.
+**Heat watchdog (safety).** Only while HEATing, if no `ping` arrives within
+`wdt <ms>` (default 5000; `wdt 0` disables), M7 drops to **idle-low (still
+armed)** — the coil cools but the rig stays ready to relaunch. This protects
+an unattended wire if the host crashes mid-heat. COOL is unguarded (idle-low
+is self-cooling). `disarm`/`abort` is the hard emergency cutoff.
+`Experiment_SMACharacterizationV3` drives this automatically: `arm` + `cycle`
+at RAW start, `ping` every second, `stop`/`disarm` at the end.
+
+Example: `arm` then `cycle 3.0 0.5 2000 8000 10` — ten cycles of 2 s heat at
+3 V then 8 s cool at 0.5 V; `stop` to end early, `disarm` for emergency off.
 
 ## Flash & run
 

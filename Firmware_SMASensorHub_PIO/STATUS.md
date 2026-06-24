@@ -17,6 +17,26 @@
 - **INA296A current sense (A1)** is enabled, primed, read, and exposed (`read`/`info`/drive feedback; `gain`/`shunt`/`ioffset` tunable).
 - **Cyclic actuation state machine on M7** (`cycle <v_high> <v_low> <fire_ms> <cool_ms> <n>`): autonomous heat/cool profile timed entirely by M7's `millis()` — deterministic, host out of the timing loop. `ping` heartbeat + `wdt` watchdog safe-stops if the host goes silent; `stop`/`abort` end it. The PC only sends parameters + heartbeat.
 
+## Review changes (2026-06-23)
+
+Code-review pass over M4 + M7. Applied:
+
+- **ADS1263 driver (all 4 live copies):** `POWER` `0x13` → **`0x02`** (external ref → INTREF off, VBIAS on, reset-flag cleared); per-read checksum-mismatch log **throttled to 1 Hz** (was unthrottled over RPC → could stall M4); stale channel-map header comment corrected.
+- **M4 loss visibility:** fixed `m4_loops_per_s` (was reporting cumulative as a rate); checksum-invalid reads now counted (`crc_err`) and DRDY overruns published (`overrun`), both in `[STATUS]` — so `dropped=0` now means zero data loss.
+- **Clock alignment:** M4 publishes a live clock; M7 stamps `src=3/4/5` with it so all stream lines share the M4 timeline. `[STATUS]` adds `m7_us`/`m4_us` for host verification.
+- **LDO health:** `[STATUS]` adds `vdd`/`offset`/`aref` so the host can compute `V_pred` from the `src=3` DAC code and flag an abnormal LDO.
+- **Cleanups:** `startDrive` warns on clamp; `static_assert` enforces both ADCs for the `src=3/4/5` format; redundant M4 init removed; corrected the state-machine blocking comment.
+
+**SMA state-machine rebuild (consolidation).** `drive`/`fire`/`cycle` collapsed onto **one HEAT/COOL actuation engine** (`SMA_ACT_HEAT`/`SMA_ACT_COOL`); the old `SMA_DRIVING`/`SMA_FIRE_*`/`SMA_CYCLE_*` states and their per-op MOSFET/teardown code are gone. New model:
+
+- **MOSFET = arm/disarm** (master enable). `arm` closes the return path; `disarm` is the immediate hard cutoff. All hardware writes go through `arm`/`disarm`/`setLevel` only.
+- **Actuation = voltage modulation** between `v_high` (heat) and `V_IDLE` (cool/rest); the LDO never reaches 0 V, so MOSFET-off is the only true zero-current state.
+- **Safety = the `wdt` heartbeat, generalized**: only while HEATing, no `ping` within `wdt_ms` → drop to **idle-low, still armed** (relaunch-able). `disarm`/`abort` = hard off.
+
+**Breaking command changes** (operator + host `portenta_reader.py`/recorder): new `arm` / `disarm` / `idle <V>`; `drive`/`fire`/`cycle` now require `arm` first; **`fire` takes volts** now (`fire <v_high> [t_high_ms]`, was codes); `cycle <v_high> <v_idle> <t_high_ms> <t_idle_ms> <n>` (renamed args); `mosfet on|off` kept as an arm/disarm alias.
+
+Open: **compile pass** (`pio run`) — not built here; bench-verify the heat/cool/arm/wdt paths; optionally lighten `readADC`; propagate `crc_err`/`overrun` to `Firmware_SensorHub_PIO`; `V_IDLE` default (0.5 V) to confirm against the measured LDO idle.
+
 ## Module TODOs
 
 - [ ] **Bench-verify the combined image** end-to-end (dual stream + SMA `drive`/`fire`, zero drops, `[STATUS]` hwm < 50%).

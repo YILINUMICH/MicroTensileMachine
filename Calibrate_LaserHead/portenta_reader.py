@@ -218,24 +218,24 @@ def parse_line(line: str,
 # want the diagnostics can match this prefix and call parse_status_line.
 
 _STATUS_PREFIX = "[STATUS] "
-_STATUS_KV     = re.compile(r"(\w+)=(-?\d+)")
+# key=value where value is an int OR a float — vdd/offset/aref are floats.
+_STATUS_KV     = re.compile(r"(\w+)=(-?\d+(?:\.\d+)?)")
 
 def parse_status_line(line: str) -> Optional[dict]:
-    """Parse a [STATUS] diagnostic frame into a dict of integers, or None.
+    """Parse a [STATUS] diagnostic frame into a dict of numbers, or None.
 
-    Returns e.g. {'t_ms': 12345, 'hwm': 237, 'cap': 1024,
-                  'dropped': 0, 'rate1': 400, 'rate2': 400, ...}.
-    Unknown keys are kept as-is so this stays forward-compatible with
-    any future field additions in the firmware.
+    Returns e.g. {'t_ms': 12345, 'hwm': 237, 'dropped': 0, 'crc_err': 0,
+                  'overrun': 0, 'm7_us': 9123456, 'm4_us': 9120011,
+                  'vdd': 5.5, 'offset': 0.31, 'aref': 3.145, ...}.
+    Integer fields come back as int; float fields (vdd/offset/aref) as float.
+    Unknown keys are kept as-is so this stays forward-compatible with future
+    field additions in the firmware.
     """
     if not line or not line.startswith(_STATUS_PREFIX):
         return None
     out: dict = {}
     for k, v in _STATUS_KV.findall(line[len(_STATUS_PREFIX):]):
-        try:
-            out[k] = int(v)
-        except ValueError:
-            pass
+        out[k] = float(v) if ("." in v) else int(v)
     return out or None
 
 
@@ -404,6 +404,22 @@ class PortentaReader:
             s = parse_line(line, adc_source=self.adc_source)
             if s is not None:
                 yield s
+
+    def iter_events(self):
+        """Yield ('sample', Sample) and ('status', dict) tuples so a single
+        consumer can capture BOTH the sample stream and the [STATUS] frames
+        from the one USB port. Additive — iter_samples() is unchanged."""
+        while True:
+            line = self._readline()
+            if not line:
+                continue
+            st = parse_status_line(line)
+            if st is not None:
+                yield ("status", st)
+                continue
+            s = parse_line(line, adc_source=self.adc_source)
+            if s is not None:
+                yield ("sample", s)
 
     def read_samples(self, n: int, timeout_s: Optional[float] = None) -> List[Sample]:
         """
