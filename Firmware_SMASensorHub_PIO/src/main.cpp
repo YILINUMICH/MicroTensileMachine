@@ -1086,6 +1086,30 @@ void loop()  { __WFI(); }
 
 ADS1263_Driver adc;
 
+// ── Laser-freeze bench-test toggles (2026-06-26) ──────────────────────────
+// Investigating ADC1/laser LATCHING its power-up reading (the value never
+// tracks the target). Flip each toggle independently, re-flash M4
+//   pio run -e portenta_m4 -t upload   (then power-cycle USB + EVM),
+// and watch whether the laser value starts tracking. Set BOTH to 0 to
+// restore production behaviour. Watch `pio device monitor` at boot for the
+// "[M4] REGDUMP ..." line to confirm what's actually programmed.
+//   TEST_ADC1_PGA_BYPASS  : 1 = bypass ADC1's PGA → full 0..VREF input range,
+//                           removes the PGA common-mode restriction.
+//   TEST_ADC_POWER_INTREF : 1 = write POWER=0x13 (re-enable internal 2.5 V
+//                           ref + VBIAS) instead of production 0x02.
+#define TEST_ADC1_PGA_BYPASS    0
+#define TEST_ADC_POWER_INTREF   0
+
+//   TEST_POLL_NEWDATA     : 1 = sample by POLLING the STATUS new-data flags
+//                           in loop() (bit6=ADC1, bit7=ADC2), independent of
+//                           DRDY edges. Fixes the "both streams frozen on the
+//                           boot sample" case where DRDY falling edges stop
+//                           reaching the PC_6 ISR (prod1≈prod2≈0 in [STATUS]).
+//                           0 = original DRDY-ISR path. If POLL works but ISR
+//                           doesn't, the chip IS converting and the fault is
+//                           DRDY-edge delivery (wiring/pin/ISR), not the ADC.
+#define TEST_POLL_NEWDATA       1
+
 #define CP(n, msg)  do { \
     RPC.print("[M4 cp "); RPC.print(n); RPC.print("] "); RPC.println(msg); \
 } while (0)
@@ -1126,7 +1150,7 @@ void setup() {
     // CS/RESET/DRDY pin modes, their idle levels, and SPI.begin() are all
     // owned by adc.begin() (ADS1263_Driver) — don't duplicate them here.
     CP(7, "calling adc.begin()");
-    bool ok = adc.begin();
+    bool ok = adc.begin(TEST_ADC_POWER_INTREF ? 0x13 : 0x02);
     CP(8, ok ? "adc.begin returned TRUE" : "adc.begin returned FALSE");
 
     if (!ok) {
@@ -1143,7 +1167,7 @@ void setup() {
         /*refmux     =*/ ADS1263_REFMUX_EXT_AIN01,   // 0x09 — REF7050 on AIN0/AIN1
         /*vref_V     =*/ 5.0f,
         /*rate       =*/ ADS1263_400SPS,
-        /*pga_bypass =*/ false                       // PGA in path, gain=1
+        /*pga_bypass =*/ (TEST_ADC1_PGA_BYPASS != 0)  // TEST: was false (PGA in path, gain=1)
     );
     adc.startADC1();
     CP(9, "ADC1 started on AIN4/AIN5 (laser), REF7050 on AIN0/AIN1, PGA in path gain=1");
@@ -1163,6 +1187,24 @@ void setup() {
 
     delay(100);
     adc.printConfig();
+
+    // ── Raw ADC register dump (bench diagnostic, 2026-06-26) ──────────────
+    // Reads back the bytes actually programmed so we can confirm the input
+    // mux (INPMUX/ADC2MUX), PGA+filter (MODE2/MODE1), and reference path
+    // (REFMUX/POWER/ADC2CFG) live, instead of trusting the source. Runs
+    // BEFORE the DRDY ISR attaches, so no SPI contention. The '[' prefix
+    // means the host sample parser ignores it; read it in `pio device monitor`.
+    RPC.print("[M4] REGDUMP ID=0x");      RPC.print(adc.getDeviceID(), HEX);
+    RPC.print(" POWER=0x");   RPC.print(adc.peekRegister(ADS1263_REG_POWER), HEX);
+    RPC.print(" INPMUX=0x");  RPC.print(adc.peekRegister(ADS1263_REG_INPMUX), HEX);
+    RPC.print(" MODE1=0x");   RPC.print(adc.peekRegister(ADS1263_REG_MODE1), HEX);
+    RPC.print(" MODE2=0x");   RPC.print(adc.peekRegister(ADS1263_REG_MODE2), HEX);
+    RPC.print(" REFMUX=0x");  RPC.print(adc.peekRegister(ADS1263_REG_REFMUX), HEX);
+    RPC.print(" ADC2CFG=0x"); RPC.print(adc.peekRegister(ADS1263_REG_ADC2CFG), HEX);
+    RPC.print(" ADC2MUX=0x"); RPC.print(adc.peekRegister(ADS1263_REG_ADC2MUX), HEX);
+    RPC.print(" [pga_bypass_test="); RPC.print(TEST_ADC1_PGA_BYPASS);
+    RPC.print(" intref_test=");      RPC.print(TEST_ADC_POWER_INTREF);
+    RPC.println("]");
 
     attachInterrupt(digitalPinToInterrupt(ADS1263_DRDY_PIN), drdy_isr, FALLING);
     CP(11, "DRDY interrupt attached on PC_6 (FALLING)");
@@ -1186,6 +1228,38 @@ void loop() {
     SAMPLE_RING->m4_now_ms     = millis();
 
 #if ENABLE_ADC1
+#if TEST_POLL_NEWDATA
+    // ── Independent timed polling — verbatim port of the bench-verified
+    //    stable SensorHub loop (no DRDY, no new-data-bit gating, no ADC2
+    //    piggyback). Each ADC is polled on its OWN ~2 ms timer at the same
+    //    rate; every valid read is pushed. Polling at 2 ms is faster than
+    //    the 2.5 ms (400 SPS) conversion period, so some reads re-fetch the
+    //    same data register — those are still valid and the ring absorbs
+    //    the slightly-above-Nyquist rate. This is the proven-tracking path;
+    //    the previous new-data-bit gate (bit6/bit7) is removed. ───────────
+    static uint32_t t1_last = 0;
+    if (millis() - t1_last >= 2) {
+        t1_last = millis();
+        ADC_Reading r1 = adc.readADC1Direct();
+        if (r1.valid) {
+            ring_push(SAMPLE_RING, micros(), millis(), SAMPLE_SRC_LASER, r1.raw_code, r1.voltage_V);
+        } else {
+            SAMPLE_RING->crc_err++;            // bad checksum → sample discarded
+        }
+    }
+#if ENABLE_ADC2
+    static uint32_t t2_last = 0;
+    if (millis() - t2_last >= 2) {
+        t2_last = millis();
+        ADC_Reading r2 = adc.readADC2Direct();
+        if (r2.valid) {
+            ring_push(SAMPLE_RING, micros(), millis(), SAMPLE_SRC_LOAD, r2.raw_code, r2.voltage_V);
+        } else {
+            SAMPLE_RING->crc_err++;            // bad checksum → sample discarded
+        }
+    }
+#endif
+#else  // original DRDY-ISR path
     if (adc1_pending) {
         noInterrupts();
         uint32_t hw_us = drdy_us_latest;
@@ -1213,6 +1287,7 @@ void loop() {
         }
 #endif
     }
+#endif  // TEST_POLL_NEWDATA
 #else
 #if ENABLE_ADC2
     static uint32_t t2_last = 0;

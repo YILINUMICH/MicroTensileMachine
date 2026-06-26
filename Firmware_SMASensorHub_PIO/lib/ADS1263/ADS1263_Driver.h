@@ -226,11 +226,18 @@ public:
     // Verifies device ID, writes POWER / INTERFACE, parks ADC1 mux+ref and
     // ADC2 config at inactive defaults, and disables IDAC. Neither ADC
     // starts converting until you call configureADCx() + startADCx().
-    bool begin();
+    // power_reg seeds the POWER register (0x01). Default 0x02 = production
+    // (VBIAS on, INTREF off — external REF7050). Pass 0x13 to also re-enable
+    // the internal 2.5 V reference (bench test for the laser-latch issue).
+    bool begin(uint8_t power_reg = 0x02);
     void reset();
 
     uint8_t getDeviceID();
     bool isConnected();
+
+    // Public read-back of any register (diagnostic; thin wrapper over the
+    // private readRegister). Used by the firmware's boot REGDUMP.
+    uint8_t peekRegister(uint8_t reg) { return readRegister(reg); }
 
     // ── ADC1 path (32-bit, load-cell etc.) ─────────────────────────────
     // `inpmux`  = INPMUX register value, e.g. 0x01 for AIN0(+)/AIN1(-).

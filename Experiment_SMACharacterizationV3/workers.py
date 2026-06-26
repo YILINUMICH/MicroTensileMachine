@@ -118,7 +118,11 @@ class LcrWorker(threading.Thread):
         except BaseException as e:
             self.error = e
             self.logger.exception("LCR worker crashed: %s", e)
-            self.stop_event.set()
+            # Do NOT set the shared stop_event: the LCR is auxiliary, and
+            # tripping the global stop here would cascade and kill the critical
+            # H7 stream (and the whole session). The worker just records
+            # self.error and exits; the console rebuilds it on demand via
+            # RecordingCore.restart_worker().
         finally:
             self.logger.info("LCR worker exit  (pushed=%d, dropped=%d)",
                              self.n_pushed, self.n_dropped)
@@ -201,6 +205,7 @@ class H7Worker(threading.Thread):
         self.n_status = 0
         self.n_dropped = 0
         self.n_filtered = 0
+        self.n_glitch = 0
         self.error: Optional[BaseException] = None
         self.reader: Optional[PortentaReader] = None
         # Set once the port is open + drained and the reader is ready to
@@ -216,7 +221,11 @@ class H7Worker(threading.Thread):
         except BaseException as e:
             self.error = e
             self.logger.exception("H7 worker crashed: %s", e)
-            self.stop_event.set()
+            # The H7 is critical, but DON'T tear down the shared stop_event
+            # here — that would stop the auxiliary streams too and make the
+            # worker unrecoverable. A dead/stale H7 is caught by
+            # RecordingCore.check_health() (which auto-disarms / aborts), and
+            # the operator can rebuild this worker via restart_worker().
         finally:
             self.logger.info("H7 worker exit  (pushed=%d, dropped=%d, filtered=%d)",
                              self.n_pushed, self.n_dropped, self.n_filtered)
@@ -258,6 +267,24 @@ class H7Worker(threading.Thread):
                 ch = s.channel  # None for srcless 3-col legacy builds
                 if keep and ch is not None and ch not in keep:
                     self.n_filtered += 1
+                    continue
+                # Firmware voltage-glitch guard. The combined firmware emits a
+                # laser/load sample with voltage==0 on ~every 32nd ADC1 frame
+                # while its raw ADC code is a normal non-zero value — i.e. the
+                # reported voltage is internally inconsistent with the raw code
+                # (V = code*vref/full_scale can't be 0 for code!=0). It shows
+                # up as a huge periodic spike to 0 on the plot. Drop it here;
+                # the raw code is correct, only the firmware's V field is bad.
+                # Restricted to laser/load: SMA src=4/5 legitimately carry
+                # raw_code=0, and src=3 idle voltage can be ~0.
+                if (ch in ("laser", "load") and s.voltage_V == 0.0
+                        and s.raw_code not in (None, 0)):
+                    self.n_glitch += 1
+                    if self.n_glitch == 1 or self.n_glitch % 500 == 0:
+                        self.logger.warning(
+                            "H7 dropped %d laser/load voltage-glitch sample(s) "
+                            "(V=0 with non-zero raw code — firmware bug; raw "
+                            "stream is otherwise fine)", self.n_glitch)
                     continue
                 sample = H7Sample(
                     host_timestamp_s=time.time(),
@@ -313,7 +340,9 @@ class ZaberWorker(threading.Thread):
         except BaseException as e:
             self.error = e
             self.logger.exception("Zaber worker crashed: %s", e)
-            self.stop_event.set()
+            # Auxiliary worker — do NOT set the shared stop_event (see LcrWorker
+            # note). A stage that fails to open COM5 must not take the session
+            # down with it; the console can reconnect it via restart_worker().
         finally:
             try:
                 if self._stage is not None:

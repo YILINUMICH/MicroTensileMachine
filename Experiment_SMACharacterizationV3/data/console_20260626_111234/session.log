@@ -1,0 +1,68 @@
+2026-06-26 11:12:34,158  INFO   root                Session: console_20260626_111234
+2026-06-26 11:12:34,158  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260626_111234
+2026-06-26 11:12:34,158  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\config.yaml  headless=False
+2026-06-26 11:12:34,941  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-26 11:12:34,945  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-06-26 11:12:34,952  INFO   PortentaReader      boot banner (1 lines):
+2026-06-26 11:12:34,953  INFO   PortentaReader        5336	1	670681693	1.561552	5397818	551
+2026-06-26 11:12:35,130  INFO   LCRMeter            Using VISA backend: @py
+2026-06-26 11:12:36,156  INFO   LCRMeter            Found 2 instruments
+2026-06-26 11:12:36,157  ERROR  LCRMeter            No E4980A/AL found
+2026-06-26 11:12:36,157  ERROR  LcrWorker           LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 117, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 155, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-26 11:12:36,157  INFO   LcrWorker           LCR worker exit  (pushed=0, dropped=0)
+2026-06-26 11:12:36,187  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-06-26 11:12:36,218  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-06-26 11:12:36,233  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-26 11:12:36,946  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-06-26 11:12:36,946  INFO   RecordingCore       Running 10.0 s full system check...
+2026-06-26 11:12:36,997  WARNING  RecordingCore       HEALTH: stage parked at 101.49 mm, outside the workflow window [5.0, 40.0] — move it into range before actuating
+2026-06-26 11:12:36,997  INFO   RecordingCore       health H7    PASS (54) — combined firmware, 54 samples
+2026-06-26 11:12:36,997  WARNING  RecordingCore       health LCR   FAIL (0) — worker error RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')
+2026-06-26 11:12:36,998  INFO   RecordingCore       health stage PASS (38) — 38 reads, pos~101.49 mm (outside [5.0, 40.0] — move into range)
+2026-06-26 11:12:40,077  WARNING  RecordingCore       HEALTH WARNING: LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:42,076  WARNING  RecordingCore       HEALTH WARNING: LCR silent 5.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:44,074  WARNING  RecordingCore       HEALTH WARNING: LCR silent 7.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:46,073  WARNING  RecordingCore       HEALTH WARNING: LCR silent 9.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:48,072  WARNING  RecordingCore       HEALTH WARNING: LCR silent 11.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:50,082  WARNING  RecordingCore       HEALTH WARNING: LCR silent 13.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:52,088  WARNING  RecordingCore       HEALTH WARNING: LCR silent 15.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:54,086  WARNING  RecordingCore       HEALTH WARNING: LCR silent 17.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:56,088  WARNING  RecordingCore       HEALTH WARNING: LCR silent 19.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:12:58,145  WARNING  RecordingCore       HEALTH WARNING: LCR silent 21.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:00,150  WARNING  RecordingCore       HEALTH WARNING: LCR silent 23.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:02,205  WARNING  RecordingCore       HEALTH WARNING: LCR silent 25.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:04,199  WARNING  RecordingCore       HEALTH WARNING: LCR silent 27.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:06,223  WARNING  RecordingCore       HEALTH WARNING: LCR silent 29.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:08,223  WARNING  RecordingCore       HEALTH WARNING: LCR silent 31.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:10,218  WARNING  RecordingCore       HEALTH WARNING: LCR silent 33.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:12,222  WARNING  RecordingCore       HEALTH WARNING: LCR silent 35.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:14,221  WARNING  RecordingCore       HEALTH WARNING: LCR silent 37.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:16,230  WARNING  RecordingCore       HEALTH WARNING: LCR silent 39.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:18,231  WARNING  RecordingCore       HEALTH WARNING: LCR silent 41.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:20,245  WARNING  RecordingCore       HEALTH WARNING: LCR silent 43.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:22,273  WARNING  RecordingCore       HEALTH WARNING: LCR silent 45.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:24,328  WARNING  RecordingCore       HEALTH WARNING: LCR silent 47.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:26,339  WARNING  RecordingCore       HEALTH WARNING: LCR silent 49.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:28,338  WARNING  RecordingCore       HEALTH WARNING: LCR silent 51.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:30,392  WARNING  RecordingCore       HEALTH WARNING: LCR silent 53.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:32,388  WARNING  RecordingCore       HEALTH WARNING: LCR silent 55.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:34,395  WARNING  RecordingCore       HEALTH WARNING: LCR silent 57.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:36,393  WARNING  RecordingCore       HEALTH WARNING: LCR silent 59.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:38,387  WARNING  RecordingCore       HEALTH WARNING: LCR silent 61.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:40,396  WARNING  RecordingCore       HEALTH WARNING: LCR silent 63.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:42,391  WARNING  RecordingCore       HEALTH WARNING: LCR silent 65.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:44,389  WARNING  RecordingCore       HEALTH WARNING: LCR silent 67.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:46,404  WARNING  RecordingCore       HEALTH WARNING: LCR silent 69.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:48,408  WARNING  RecordingCore       HEALTH WARNING: LCR silent 71.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:50,404  WARNING  RecordingCore       HEALTH WARNING: LCR silent 73.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:52,410  WARNING  RecordingCore       HEALTH WARNING: LCR silent 75.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:13:53,862  INFO   H7Worker            H7 worker exit  (pushed=74502, dropped=0, filtered=0)
+2026-06-26 11:13:54,029  INFO   Driver_ZaberStage   Disconnected
+2026-06-26 11:13:54,029  INFO   ZaberWorker         Zaber worker exit  (pushed=3757, dropped=0)
+2026-06-26 11:13:54,055  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260626_111234\meta.json

@@ -1,0 +1,16 @@
+2026-06-26 10:02:13,100  INFO   root                Session: console_20260626_100213
+2026-06-26 10:02:13,100  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260626_100213
+2026-06-26 10:02:13,100  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\config.yaml  headless=False
+2026-06-26 10:02:13,803  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-26 10:02:13,977  INFO   LCRMeter            Using VISA backend: @py
+2026-06-26 10:02:15,003  INFO   LCRMeter            Found 3 instruments
+2026-06-26 10:02:15,067  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-06-26 10:02:15,098  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-06-26 10:02:15,114  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-26 10:02:15,151  INFO   LCRMeter            Connected: Keysight Technologies,E4980AL,MY54414655,B.07.05
+2026-06-26 10:02:15,656  INFO   LCRMeter            Configured: 1000000Hz, 0.5V, LSRS
+2026-06-26 10:02:15,656  INFO   LcrWorker           LCR ready: Keysight Technologies,E4980AL,MY54414655,B.07.05
+2026-06-26 10:02:21,813  INFO   RecordingCore       Running 10.0 s full system check...
+2026-06-26 10:02:31,833  WARNING  RecordingCore       health H7    FAIL (0) — only 0 samples (need >=20)
+2026-06-26 10:02:31,833  INFO   RecordingCore       health LCR   PASS (1017) — E4980 ok, 1017 samples, 300 finite
+2026-06-26 10:02:31,833  WARNING  RecordingCore       health stage FAIL (823) — position 101.49..101.49 mm outside limits [5.0, 40.0]

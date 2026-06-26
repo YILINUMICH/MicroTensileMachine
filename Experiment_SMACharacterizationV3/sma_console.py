@@ -43,7 +43,8 @@ from typing import Optional
 
 from config import AppConfig
 from recording_core import (RecordingCore, StreamVerdict, make_console_paths,
-                            HEALTH_TIMEOUT_S)
+                            HEALTH_TIMEOUT_S,
+                            STREAM_H7, STREAM_LCR, STREAM_STAGE)
 from workers import (H7Worker, LcrWorker, ZaberWorker)
 
 
@@ -177,6 +178,9 @@ def run_headless(cfg: AppConfig, paths, stop_event: threading.Event) -> int:
 
     core.discard_backlog()
     core.reset_health_baseline()
+    # Headless is a scripted run — start recording immediately (the GUI gates
+    # this behind a manual "Start REC" button instead).
+    core.start_recording()
 
     sma_drive = cfg.sma.enabled
     if sma_drive:
@@ -229,9 +233,12 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
 
     # ---- small UI helpers --------------------------------------------------
     def _dot(ok: Optional[bool]) -> str:
+        # `border:none` keeps the clickable indicator buttons reading as plain
+        # status dots; harmless on the plain-label REC indicator.
         if ok is None:
-            return "color:#888"          # not enabled
-        return "color:#2ecc71" if ok else "color:#e74c3c"
+            return "border:none; color:#888"          # not enabled
+        return ("border:none; color:#2ecc71" if ok
+                else "border:none; color:#e74c3c")
 
     def _labeled_field(default: str, width: int = 70):
         e = QtWidgets.QLineEdit(str(default))
@@ -271,15 +278,30 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             bar = QtWidgets.QWidget()
             h = QtWidgets.QHBoxLayout(bar)
             h.setContentsMargins(6, 2, 6, 2)
-            self.lbl_h7 = QtWidgets.QLabel("● H7")
-            self.lbl_lcr = QtWidgets.QLabel("● LCR")
-            self.lbl_stage = QtWidgets.QLabel("● stage")
-            self.lbl_rec = QtWidgets.QLabel("REC ●")
+            # The stream indicators double as RECONNECT buttons: click a red
+            # (offline/failed) stream to rebuild its worker and retry the
+            # hardware connection. Flat buttons so they read like status dots.
+            self.lbl_h7 = QtWidgets.QPushButton("● H7")
+            self.lbl_lcr = QtWidgets.QPushButton("● LCR")
+            self.lbl_stage = QtWidgets.QPushButton("● stage")
+            self.lbl_h7.clicked.connect(lambda: self.on_reconnect(STREAM_H7))
+            self.lbl_lcr.clicked.connect(lambda: self.on_reconnect(STREAM_LCR))
+            self.lbl_stage.clicked.connect(lambda: self.on_reconnect(STREAM_STAGE))
             for w in (self.lbl_h7, self.lbl_lcr, self.lbl_stage):
+                w.setFlat(True)
+                w.setCursor(QtCore.Qt.PointingHandCursor)
+                w.setToolTip("click to (re)connect this instrument")
                 w.setStyleSheet(_dot(None))
                 h.addWidget(w)
             h.addStretch(1)
+            self.lbl_rec = QtWidgets.QLabel("REC ●")
+            self.lbl_rec.setStyleSheet(_dot(None))
             h.addWidget(self.lbl_rec)
+            self.btn_rec = QtWidgets.QPushButton("Start REC")
+            self.btn_rec.setStyleSheet(
+                "background:#27ae60; color:white; font-weight:bold; padding:4px 16px;")
+            self.btn_rec.clicked.connect(self.on_toggle_record)
+            h.addWidget(self.btn_rec)
             h.addStretch(1)
             self.btn_disarm = QtWidgets.QPushButton("DISARM")
             self.btn_disarm.setStyleSheet(
@@ -353,18 +375,28 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             return rail
 
         def _build_plots(self):
+            # Laser (displacement) and load (force) are different physical
+            # quantities on very different voltage scales — sharing one y-axis
+            # squashes one flat, so each gets its OWN auto-ranging plot. All
+            # rows share the time axis (x-linked) so they pan/zoom together.
             col = pg.GraphicsLayoutWidget()
-            self.p_mech = col.addPlot(row=0, col=0, title="displacement / force")
+            self.p_laser = col.addPlot(row=0, col=0, title="laser (displacement)")
             col.nextRow()
-            self.p_sma = col.addPlot(row=1, col=0, title="SMA  V / I / R")
+            self.p_load = col.addPlot(row=1, col=0, title="load cell (force)")
             col.nextRow()
-            self.p_lcr = col.addPlot(row=2, col=0, title="LCR  Ls / Rs")
-            for p in (self.p_mech, self.p_sma, self.p_lcr):
+            self.p_sma = col.addPlot(row=2, col=0, title="SMA  V / I / R")
+            col.nextRow()
+            self.p_lcr = col.addPlot(row=3, col=0, title="LCR  Ls / Rs")
+            for p in (self.p_laser, self.p_load, self.p_sma, self.p_lcr):
                 p.showGrid(x=True, y=True, alpha=0.3)
                 p.setLabel("bottom", "t", units="s")
                 p.addLegend(offset=(10, 5))
-            self.c_laser = self.p_mech.plot(pen="y", name="laser")
-            self.c_load = self.p_mech.plot(pen="c", name="load")
+                if p is not self.p_laser:
+                    p.setXLink(self.p_laser)
+            self.p_laser.setLabel("left", "laser", units="V")
+            self.p_load.setLabel("left", "load", units="V")
+            self.c_laser = self.p_laser.plot(pen="y", name="laser")
+            self.c_load = self.p_load.plot(pen="c", name="load")
             self.c_smav = self.p_sma.plot(pen="r", name="V")
             self.c_smai = self.p_sma.plot(pen="g", name="I")
             self.c_smar = self.p_sma.plot(pen="m", name="R")
@@ -407,7 +439,12 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             self.timer = QtCore.QTimer(self)
             self.timer.timeout.connect(self.on_tick)
             self.timer.start(GUI_TICK_MS)
-            self.append_log(f"Recording to {paths.session_dir}")
+            # Recording is NOT started automatically — live plots/readouts run
+            # now, but nothing is written to disk until the operator clicks
+            # "Start REC". (Output dir: paths.session_dir.)
+            self.append_log("Live preview running — press \"Start REC\" to "
+                            "begin recording to disk.")
+            self.append_log(f"Output (when recording): {paths.session_dir}")
 
         def _apply_verdicts(self, verdicts: "list[StreamVerdict]"):
             by = {v.label: v for v in verdicts}
@@ -429,14 +466,25 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             self._ingest(batch)
             self._refresh_readouts()
             self._refresh_plots()
+            self._refresh_indicators()
             ok, reason = self.core.check_health()
             if not ok:
                 self.append_log(f"HEALTH ABORT: {reason} — auto-disarming.")
                 self.core.disarm()
-                self.lbl_rec.setText("REC ✘")
-                self.lbl_rec.setStyleSheet(_dot(False))
-            else:
+
+        def _refresh_indicators(self):
+            """Live-update the per-stream dots (so a reconnect turns a red dot
+            green) and the REC indicator from the recording state."""
+            self.lbl_h7.setStyleSheet(_dot(self.core.stream_status(STREAM_H7)))
+            self.lbl_lcr.setStyleSheet(_dot(self.core.stream_status(STREAM_LCR)))
+            self.lbl_stage.setStyleSheet(
+                _dot(self.core.stream_status(STREAM_STAGE)))
+            if self.core.recording:
+                self.lbl_rec.setText("REC ●")
                 self.lbl_rec.setStyleSheet(_dot(True))
+            else:
+                self.lbl_rec.setText("REC ○")
+                self.lbl_rec.setStyleSheet(_dot(None))
 
         def _ingest(self, batch):
             now = time.monotonic() - self._t0
@@ -508,6 +556,40 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
         def on_disarm(self):
             if self.core:
                 self.core.disarm()
+
+        def on_toggle_record(self):
+            if not self.core:
+                return
+            if self.core.recording:
+                self.core.stop_recording()
+                self.btn_rec.setText("Start REC")
+                self.btn_rec.setStyleSheet(
+                    "background:#27ae60; color:white; font-weight:bold; "
+                    "padding:4px 16px;")
+                self.append_log("Recording stopped.")
+            else:
+                if self.core.start_recording():
+                    self.btn_rec.setText("Stop REC")
+                    self.btn_rec.setStyleSheet(
+                        "background:#7f8c8d; color:white; font-weight:bold; "
+                        "padding:4px 16px;")
+                    self.append_log("Recording started.")
+            self._refresh_indicators()
+
+        def on_reconnect(self, label: str):
+            """Click handler for the H7/LCR/stage status dots — rebuild a
+            dead/offline worker and retry the hardware connection."""
+            if not self.core:
+                return
+            status = self.core.stream_status(label)
+            if status is None:
+                self.append_log(f"{label} is disabled for this session.")
+                return
+            if status is True:
+                self.append_log(f"{label} is already connected.")
+                return
+            ok, msg = self.core.restart_worker(label)
+            self.append_log(msg if ok else f"{label} reconnect: {msg}")
 
         def on_start_actuation(self):
             if not self.core:

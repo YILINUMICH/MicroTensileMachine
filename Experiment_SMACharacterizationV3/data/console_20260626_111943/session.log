@@ -1,0 +1,275 @@
+2026-06-26 11:19:43,767  INFO   root                Session: console_20260626_111943
+2026-06-26 11:19:43,768  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260626_111943
+2026-06-26 11:19:43,768  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\config.yaml  headless=False
+2026-06-26 11:19:44,478  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-26 11:19:44,484  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-06-26 11:19:44,664  INFO   LCRMeter            Using VISA backend: @py
+2026-06-26 11:19:45,689  INFO   LCRMeter            Found 2 instruments
+2026-06-26 11:19:45,689  ERROR  LCRMeter            No E4980A/AL found
+2026-06-26 11:19:45,689  ERROR  LcrWorker           LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 117, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 155, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-26 11:19:45,690  INFO   LcrWorker           LCR worker exit  (pushed=0, dropped=0)
+2026-06-26 11:19:45,727  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-06-26 11:19:45,759  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-06-26 11:19:45,774  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-26 11:19:48,491  WARNING  PortentaReader      Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-06-26 11:19:48,556  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-06-26 11:19:48,556  INFO   RecordingCore       Running 10.0 s full system check...
+2026-06-26 11:19:58,573  WARNING  RecordingCore       HEALTH: stage parked at 101.49 mm, outside the workflow window [5.0, 40.0] — move it into range before actuating
+2026-06-26 11:19:58,573  WARNING  RecordingCore       health H7    FAIL (0) — only 0 samples (need >=20)
+2026-06-26 11:19:58,573  WARNING  RecordingCore       health LCR   FAIL (0) — worker error RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')
+2026-06-26 11:19:58,574  INFO   RecordingCore       health stage PASS (629) — 629 reads, pos~101.49 mm (outside [5.0, 40.0] — move into range)
+2026-06-26 11:20:16,567  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-06-26 11:20:18,557  WARNING  RecordingCore       HEALTH WARNING: LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:20,559  WARNING  RecordingCore       HEALTH WARNING: LCR silent 5.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:25,245  WARNING  RecordingCore       SMA send_command('disarm') failed: Write timeout
+2026-06-26 11:20:25,250  ERROR  H7Worker            H7 worker crashed: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 219, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 251, in _main_loop
+    for kind, item in reader.iter_events():
+                      ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 413, in iter_events
+    line = self._readline()
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 363, in _readline
+    raw = self._ser.readline()
+          ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialwin32.py", line 275, in read
+    raise SerialException("ClearCommError failed ({!r})".format(ctypes.WinError()))
+serial.serialutil.SerialException: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-06-26 11:20:25,252  INFO   H7Worker            H7 worker exit  (pushed=0, dropped=0, filtered=0)
+2026-06-26 11:20:25,274  WARNING  RecordingCore       HEALTH WARNING: LCR silent 9.7s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:25,276  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,328  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,385  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,453  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,514  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,577  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,638  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,702  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,764  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,825  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,887  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:25,950  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,011  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,072  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,133  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,196  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,258  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,320  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,396  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,447  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,509  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,582  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,645  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,707  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,769  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,831  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,893  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:26,956  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,018  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,079  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,139  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,203  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,265  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,327  WARNING  RecordingCore       HEALTH WARNING: LCR silent 11.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:27,328  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,389  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,451  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,508  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,575  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,637  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,698  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,759  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,820  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,897  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:27,959  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,021  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,083  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,136  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,196  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,264  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,324  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,393  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,454  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,509  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,579  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,641  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,703  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,765  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,827  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,889  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:28,950  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,013  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,074  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,136  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,199  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,261  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,320  WARNING  RecordingCore       HEALTH WARNING: LCR silent 13.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:29,321  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,387  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,448  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,509  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,569  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,636  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,696  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,764  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,833  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,895  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:29,958  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,019  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,071  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,139  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,199  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,259  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,319  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,390  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,447  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,510  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,574  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,646  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,701  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,763  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,825  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,886  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:30,947  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,009  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,070  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,131  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,209  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,271  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,332  WARNING  RecordingCore       HEALTH WARNING: LCR silent 15.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:31,333  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,395  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,451  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,511  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,571  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,643  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,706  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,759  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,819  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,886  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:31,946  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,013  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,074  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,149  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,199  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,261  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,322  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,400  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,445  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,507  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,570  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,654  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,709  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,771  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,833  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,893  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:32,956  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:33,018  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 11:20:33,026  INFO   RecordingCore       H7: reconnect requested
+2026-06-26 11:20:33,030  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-06-26 11:20:33,034  INFO   PortentaReader      boot banner (2 lines):
+2026-06-26 11:20:33,034  INFO   PortentaReader        	4741546	289
+2026-06-26 11:20:33,034  INFO   PortentaReader        4696	1	635789695	1.480313	4744039	291
+2026-06-26 11:20:33,324  WARNING  RecordingCore       HEALTH WARNING: LCR silent 17.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:34,079  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-06-26 11:20:35,022  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-06-26 11:20:35,325  WARNING  RecordingCore       HEALTH WARNING: LCR silent 19.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:37,322  WARNING  RecordingCore       HEALTH WARNING: LCR silent 21.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:39,335  WARNING  RecordingCore       HEALTH WARNING: LCR silent 23.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:41,391  WARNING  RecordingCore       HEALTH WARNING: LCR silent 25.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:43,396  WARNING  RecordingCore       HEALTH WARNING: LCR silent 27.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:45,392  WARNING  RecordingCore       HEALTH WARNING: LCR silent 29.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:47,400  WARNING  RecordingCore       HEALTH WARNING: LCR silent 31.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:49,455  WARNING  RecordingCore       HEALTH WARNING: LCR silent 33.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:51,467  WARNING  RecordingCore       HEALTH WARNING: LCR silent 35.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:53,472  WARNING  RecordingCore       HEALTH WARNING: LCR silent 37.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:55,465  WARNING  RecordingCore       HEALTH WARNING: LCR silent 39.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:57,473  WARNING  RecordingCore       HEALTH WARNING: LCR silent 41.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:20:59,472  WARNING  RecordingCore       HEALTH WARNING: LCR silent 43.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:01,467  WARNING  RecordingCore       HEALTH WARNING: LCR silent 45.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:03,467  WARNING  RecordingCore       HEALTH WARNING: LCR silent 47.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:05,478  WARNING  RecordingCore       HEALTH WARNING: LCR silent 49.9s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:07,534  WARNING  RecordingCore       HEALTH WARNING: LCR silent 52.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:09,532  WARNING  RecordingCore       HEALTH WARNING: LCR silent 54.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:11,530  WARNING  RecordingCore       HEALTH WARNING: LCR silent 56.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:13,531  WARNING  RecordingCore       HEALTH WARNING: LCR silent 58.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:15,528  WARNING  RecordingCore       HEALTH WARNING: LCR silent 60.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:17,530  WARNING  RecordingCore       HEALTH WARNING: LCR silent 62.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:19,533  WARNING  RecordingCore       HEALTH WARNING: LCR silent 64.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:21,527  WARNING  RecordingCore       HEALTH WARNING: LCR silent 66.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:23,529  WARNING  RecordingCore       HEALTH WARNING: LCR silent 68.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:25,536  WARNING  RecordingCore       HEALTH WARNING: LCR silent 70.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:27,527  WARNING  RecordingCore       HEALTH WARNING: LCR silent 72.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:29,543  WARNING  RecordingCore       HEALTH WARNING: LCR silent 74.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:31,537  WARNING  RecordingCore       HEALTH WARNING: LCR silent 76.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:33,592  WARNING  RecordingCore       HEALTH WARNING: LCR silent 78.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:35,599  WARNING  RecordingCore       HEALTH WARNING: LCR silent 80.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:37,594  WARNING  RecordingCore       HEALTH WARNING: LCR silent 82.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:39,597  WARNING  RecordingCore       HEALTH WARNING: LCR silent 84.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:41,590  WARNING  RecordingCore       HEALTH WARNING: LCR silent 86.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:43,594  WARNING  RecordingCore       HEALTH WARNING: LCR silent 88.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:45,605  WARNING  RecordingCore       HEALTH WARNING: LCR silent 90.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:47,625  WARNING  RecordingCore       HEALTH WARNING: LCR silent 92.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:49,649  WARNING  RecordingCore       HEALTH WARNING: LCR silent 94.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:51,648  WARNING  RecordingCore       HEALTH WARNING: LCR silent 96.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:53,707  WARNING  RecordingCore       HEALTH WARNING: LCR silent 98.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:55,702  WARNING  RecordingCore       HEALTH WARNING: LCR silent 100.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:57,701  WARNING  RecordingCore       HEALTH WARNING: LCR silent 102.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:21:59,725  WARNING  RecordingCore       HEALTH WARNING: LCR silent 104.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:01,736  WARNING  RecordingCore       HEALTH WARNING: LCR silent 106.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:03,745  WARNING  RecordingCore       HEALTH WARNING: LCR silent 108.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:05,773  WARNING  RecordingCore       HEALTH WARNING: LCR silent 110.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:07,773  WARNING  RecordingCore       HEALTH WARNING: LCR silent 112.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:09,782  WARNING  RecordingCore       HEALTH WARNING: LCR silent 114.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:11,778  WARNING  RecordingCore       HEALTH WARNING: LCR silent 116.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:12,458  INFO   RecordingCore       Recording STARTED
+2026-06-26 11:22:13,787  WARNING  RecordingCore       HEALTH WARNING: LCR silent 118.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:15,781  WARNING  RecordingCore       HEALTH WARNING: LCR silent 120.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:17,802  WARNING  RecordingCore       HEALTH WARNING: LCR silent 122.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:19,800  WARNING  RecordingCore       HEALTH WARNING: LCR silent 124.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:21,795  WARNING  RecordingCore       HEALTH WARNING: LCR silent 126.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:23,801  WARNING  RecordingCore       HEALTH WARNING: LCR silent 128.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:25,807  WARNING  RecordingCore       HEALTH WARNING: LCR silent 130.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:27,860  WARNING  RecordingCore       HEALTH WARNING: LCR silent 132.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:29,859  WARNING  RecordingCore       HEALTH WARNING: LCR silent 134.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:30,630  INFO   RecordingCore       Recording STOPPED
+2026-06-26 11:22:31,874  WARNING  RecordingCore       HEALTH WARNING: LCR silent 136.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:33,867  WARNING  RecordingCore       HEALTH WARNING: LCR silent 138.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:35,866  WARNING  RecordingCore       HEALTH WARNING: LCR silent 140.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:37,933  WARNING  RecordingCore       HEALTH WARNING: LCR silent 142.4s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:39,987  WARNING  RecordingCore       HEALTH WARNING: LCR silent 144.4s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:41,980  WARNING  RecordingCore       HEALTH WARNING: LCR silent 146.4s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:44,027  WARNING  RecordingCore       HEALTH WARNING: LCR silent 148.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:46,032  WARNING  RecordingCore       HEALTH WARNING: LCR silent 150.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:48,030  WARNING  RecordingCore       HEALTH WARNING: LCR silent 152.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:50,045  WARNING  RecordingCore       HEALTH WARNING: LCR silent 154.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:52,047  WARNING  RecordingCore       HEALTH WARNING: LCR silent 156.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:54,059  WARNING  RecordingCore       HEALTH WARNING: LCR silent 158.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:56,053  WARNING  RecordingCore       HEALTH WARNING: LCR silent 160.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:22:58,114  WARNING  RecordingCore       HEALTH WARNING: LCR silent 162.5s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:00,119  WARNING  RecordingCore       HEALTH WARNING: LCR silent 164.6s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:02,128  WARNING  RecordingCore       HEALTH WARNING: LCR silent 166.6s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:04,133  WARNING  RecordingCore       HEALTH WARNING: LCR silent 168.6s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:06,193  WARNING  RecordingCore       HEALTH WARNING: LCR silent 170.6s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:08,195  WARNING  RecordingCore       HEALTH WARNING: LCR silent 172.6s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:10,260  WARNING  RecordingCore       HEALTH WARNING: LCR silent 174.7s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:12,258  WARNING  RecordingCore       HEALTH WARNING: LCR silent 176.7s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:14,311  WARNING  RecordingCore       HEALTH WARNING: LCR silent 178.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:16,316  WARNING  RecordingCore       HEALTH WARNING: LCR silent 180.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:18,315  WARNING  RecordingCore       HEALTH WARNING: LCR silent 182.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:20,311  WARNING  RecordingCore       HEALTH WARNING: LCR silent 184.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:22,317  WARNING  RecordingCore       HEALTH WARNING: LCR silent 186.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:24,403  WARNING  RecordingCore       HEALTH WARNING: LCR silent 188.8s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 11:23:24,415  INFO   H7Worker            H7 worker exit  (pushed=164253, dropped=0, filtered=0)
+2026-06-26 11:23:24,613  INFO   Driver_ZaberStage   Disconnected
+2026-06-26 11:23:24,613  INFO   ZaberWorker         Zaber worker exit  (pushed=10593, dropped=0)
+2026-06-26 11:23:24,639  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260626_111943\meta.json

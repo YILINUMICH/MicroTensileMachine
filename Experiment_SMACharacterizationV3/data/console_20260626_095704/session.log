@@ -1,0 +1,85 @@
+2026-06-26 09:57:04,604  INFO   root                Session: console_20260626_095704
+2026-06-26 09:57:04,604  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260626_095704
+2026-06-26 09:57:04,604  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\config.yaml  headless=False
+2026-06-26 09:57:05,568  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-26 09:57:05,569  ERROR  H7Worker            H7 worker crashed: could not open port 'COM8': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 215, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 230, in _main_loop
+    with reader:
+         ^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 330, in __enter__
+    self.open()
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 284, in open
+    self._ser = serial.Serial(
+                ^^^^^^^^^^^^^^
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialwin32.py", line 33, in __init__
+    super(Serial, self).__init__(*args, **kwargs)
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialutil.py", line 244, in __init__
+    self.open()
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialwin32.py", line 64, in open
+    raise SerialException("could not open port {!r}: {!r}".format(self.portstr, ctypes.WinError()))
+serial.serialutil.SerialException: could not open port 'COM8': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
+2026-06-26 09:57:05,609  INFO   H7Worker            H7 worker exit  (pushed=0, dropped=0, filtered=0)
+2026-06-26 09:57:06,003  INFO   LCRMeter            Using VISA backend: @py
+2026-06-26 09:57:06,843  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-06-26 09:57:06,874  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-06-26 09:57:06,890  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-26 09:57:07,046  INFO   LCRMeter            Found 1 instruments
+2026-06-26 09:57:07,046  ERROR  LCRMeter            No E4980A/AL found
+2026-06-26 09:57:07,046  ERROR  LcrWorker           LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 117, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 151, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-26 09:57:07,047  INFO   LcrWorker           LCR worker exit  (pushed=0, dropped=0)
+2026-06-26 09:57:07,062  INFO   Driver_ZaberStage   Disconnected
+2026-06-26 09:57:07,062  INFO   ZaberWorker         Zaber worker exit  (pushed=0, dropped=0)
+2026-06-26 09:57:13,584  INFO   RecordingCore       Running 10.0 s full system check...
+2026-06-26 09:57:13,584  WARNING  RecordingCore       health H7    FAIL (0) — worker error SerialException("could not open port 'COM8': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)")
+2026-06-26 09:57:13,585  WARNING  RecordingCore       health LCR   FAIL (0) — worker error RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')
+2026-06-26 09:57:13,585  WARNING  RecordingCore       health stage FAIL (0) — only 0 reads (need >=3)
+2026-06-26 09:57:20,245  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-06-26 09:57:22,255  WARNING  RecordingCore       HEALTH WARNING: LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 09:57:22,255  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,319  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,382  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,445  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,509  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,572  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,635  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,698  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,759  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,825  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,887  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:22,951  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,014  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,074  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,133  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,202  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,265  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,327  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,392  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,454  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,509  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,576  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,636  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,696  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,764  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,833  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,895  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:23,950  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,011  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,069  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,131  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,195  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,257  WARNING  RecordingCore       HEALTH WARNING: LCR silent 5.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-26 09:57:24,258  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,334  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,382  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,469  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,473  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-06-26 09:57:24,495  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260626_095704\meta.json

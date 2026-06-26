@@ -66,7 +66,7 @@ ADS1263_Driver::ADS1263_Driver()
 //  Chip-level init
 // ══════════════════════════════════════════════════════════════════════
 
-bool ADS1263_Driver::begin() {
+bool ADS1263_Driver::begin(uint8_t power_reg) {
     pinMode(ADS1263_CS_PIN, OUTPUT);
     pinMode(ADS1263_RESET_PIN, OUTPUT);
     // DRDY pin is not read by this driver, but park it so it doesn't float.
@@ -127,7 +127,9 @@ bool ADS1263_Driver::begin() {
     //     RESET flag can detect a NEW device reset mid-run (datasheet:
     //     "Clear this bit to detect the next device reset").
     // §9.6.2: VBIAS settling ≤ 0.22 ms at 0.1 µF (EVM's 150 pF → faster).
-    writeRegister(ADS1263_REG_POWER, 0x02);
+    // power_reg defaults to 0x02 (production); main.cpp may pass 0x13 to
+    // re-enable INTREF as a bench test for the laser-latch issue.
+    writeRegister(ADS1263_REG_POWER, power_reg);
     delay(150);
 
     // INTERFACE: STATUS + CHK enabled for both ADC1 and ADC2 reads.

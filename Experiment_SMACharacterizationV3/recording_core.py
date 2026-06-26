@@ -182,7 +182,14 @@ class RecordingCore:
         self._status_f = self._events_f = None
         self._flush_counter = 0
 
-        # Sample tallies (for meta + readouts).
+        # Recording gate. Queues are ALWAYS drained (so plots stay live and the
+        # queues never overflow while idle), but sample rows are written to the
+        # CSVs only while `recording` is True. The console flips this on with an
+        # explicit "Start REC"; the headless runner turns it on automatically.
+        self.recording = False
+        self.recording_started_at: Optional[float] = None
+
+        # Sample tallies (for meta + readouts). Count only RECORDED rows.
         self.n_lcr = self.n_h7 = self.n_stage = self.n_status = 0
         self.n_events = 0
 
@@ -314,10 +321,20 @@ class RecordingCore:
                 h7_n += self._collect_drain(self.h7_queue, h7_s)
             if need_stage:
                 stage_n += self._collect_drain(self.stage_queue, stage_s)
-            done = ((not need_lcr or lcr_n >= HEALTH_MIN_LCR)
-                    and (not need_h7 or h7_n >= HEALTH_MIN_H7)
-                    and (not need_stage or stage_n >= HEALTH_MIN_STAGE))
-            if done or self._any_worker_error():
+            # A stream is "satisfied" once it has its samples OR its worker has
+            # already errored (no point waiting on a dead worker). Counting an
+            # errored aux worker as satisfied is what lets the window end as
+            # soon as the CRITICAL H7 has its 20 samples — without it, a failed
+            # LCR/Zaber (which never reaches its minimum) would stall the check
+            # for the full timeout.
+            def _done(need, n, minn, w):
+                return (not need or n >= minn
+                        or (w is not None and w.error is not None))
+            done = (_done(need_lcr, lcr_n, HEALTH_MIN_LCR, self.lcr_worker)
+                    and _done(need_h7, h7_n, HEALTH_MIN_H7, self.h7_worker)
+                    and _done(need_stage, stage_n, HEALTH_MIN_STAGE,
+                              self.stage_worker))
+            if done:
                 break
             time.sleep(0.05)
         if need_lcr:
@@ -410,10 +427,20 @@ class RecordingCore:
         pos = [s.position_mm for s in samples if math.isfinite(s.position_mm)]
         if not pos:
             return False, "no finite position reads"
+        # The Zaber worker is TELEMETRY-ONLY in V3 — it never commands motion,
+        # so the stage being parked outside the workflow window [lo, hi] is an
+        # operating state, not a hardware fault. A connected stage that streams
+        # finite positions PASSES; we only warn so the operator knows to move
+        # it into range before actuating. (Previously this returned False and
+        # the indicator showed the stage as "offline" even though COM5 was up.)
         lo, hi = self.cfg.stage.limits_tuple()
         if min(pos) < lo - 1.0 or max(pos) > hi + 1.0:
-            return False, (f"position {min(pos):.2f}..{max(pos):.2f} mm "
-                           f"outside limits [{lo}, {hi}]")
+            self._log("warning",
+                      f"HEALTH: stage parked at {pos[-1]:.2f} mm, outside the "
+                      f"workflow window [{lo}, {hi}] — move it into range "
+                      "before actuating")
+            return True, (f"{n} reads, pos~{pos[-1]:.2f} mm "
+                          f"(outside [{lo}, {hi}] — move into range)")
         return True, f"{n} reads, pos~{pos[-1]:.2f} mm"
 
     @staticmethod
@@ -520,78 +547,185 @@ class RecordingCore:
                     f.flush()
         return batch
 
+    # ------------------------------------------------------------------
+    # Recording gate (manual start/stop)
+    # ------------------------------------------------------------------
+    def start_recording(self) -> bool:
+        """Begin writing drained samples to the CSVs. Idempotent. Requires
+        open_outputs() to have run. Returns True if recording is now on."""
+        if self.recording:
+            return True
+        if self._events_w is None:
+            self._log("warning",
+                      "start_recording() called before open_outputs() — ignored")
+            return False
+        self.recording = True
+        self.recording_started_at = time.time()
+        self.log_event("session", "recording start")
+        self._log("info", "Recording STARTED")
+        return True
+
+    def stop_recording(self) -> None:
+        """Stop writing samples to the CSVs (queues keep draining for plots).
+        Does NOT touch the SMA / actuation state — use disarm() for safety."""
+        if not self.recording:
+            return
+        self.recording = False
+        self.log_event("session", "recording stop")
+        self._log("info", "Recording STOPPED")
+        for f in (self._lcr_f, self._h7_f, self._stage_f, self._status_f):
+            if f is not None:
+                with contextlib.suppress(Exception):
+                    f.flush()
+
+    # ------------------------------------------------------------------
+    # Per-stream reconnect (rebuild a dead/offline worker, reuse its queue)
+    # ------------------------------------------------------------------
+    def stream_status(self, label: str) -> Optional[bool]:
+        """Live status for an indicator dot:
+            None  -> stream disabled (not part of this session)
+            False -> worker missing, crashed (error set), or thread dead
+            True  -> worker thread alive and not errored (connected/streaming)
+        """
+        w, q = {
+            STREAM_H7: (self.h7_worker, self.h7_queue),
+            STREAM_LCR: (self.lcr_worker, self.lcr_queue),
+            STREAM_STAGE: (self.stage_worker, self.stage_queue),
+        }.get(label, (None, None))
+        if w is None or q is None:
+            return None
+        if w.error is not None:
+            return False
+        return bool(w.is_alive())
+
+    def restart_worker(self, label: str) -> "tuple[bool, str]":
+        """Rebuild and restart one stream's worker after a startup failure or a
+        mid-run disconnect, reusing its existing queue. Only acts on a stream
+        whose worker is dead/errored. Returns (started, message)."""
+        if self.finalized or self.stop_event.is_set():
+            return False, "session is shutting down"
+
+        if label == STREAM_LCR:
+            if not self.cfg.lcr.enabled or self.lcr_queue is None:
+                return False, "LCR is disabled for this session"
+            if self.lcr_worker is not None and self.lcr_worker.is_alive():
+                return False, "LCR already connected"
+            self.lcr_worker = LcrWorker(self.cfg.lcr, self.lcr_queue,
+                                        self.stop_event)
+            self.lcr_worker.start()
+        elif label == STREAM_STAGE:
+            if not self.cfg.stage.enabled or self.stage_queue is None:
+                return False, "stage is disabled for this session"
+            if self.stage_worker is not None and self.stage_worker.is_alive():
+                return False, "stage already connected"
+            self.stage_worker = ZaberWorker(self.cfg.stage, self.stage_queue,
+                                            self.stop_event)
+            self.stage_worker.start()
+        elif label == STREAM_H7:
+            if not self.cfg.h7.enabled or self.h7_queue is None:
+                return False, "H7 is disabled for this session"
+            if self.h7_worker is not None and self.h7_worker.is_alive():
+                return False, "H7 already connected"
+            self.h7_worker = H7Worker(self.cfg.h7, self.h7_queue,
+                                      self.stop_event,
+                                      status_queue=self.status_queue)
+            self.h7_worker.start()
+        else:
+            return False, f"unknown stream {label!r}"
+
+        # Clear this stream's staleness baseline so the freshly-restarted
+        # worker isn't instantly flagged silent by check_health().
+        self._hc_last_n.pop(label, None)
+        self._hc_last_adv.pop(label, None)
+        self._hc_last_warn.pop(label, None)
+        self.log_event("reconnect", f"{label} restart requested")
+        self._log("info", f"{label}: reconnect requested")
+        return True, f"{label}: reconnecting…"
+
     def _drain_lcr(self) -> list:
         out: list = []
-        if self._lcr_w is None or self.lcr_queue is None:
+        if self.lcr_queue is None:
             return out
+        write = self.recording and self._lcr_w is not None
         try:
             while True:
                 s: LcrSample = self.lcr_queue.get_nowait()
-                self._lcr_w.writerow([
-                    f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
-                    f"{s.primary:.8e}", f"{s.secondary:.8f}", s.status,
-                ])
+                if write:
+                    self._lcr_w.writerow([
+                        f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
+                        f"{s.primary:.8e}", f"{s.secondary:.8f}", s.status,
+                    ])
                 out.append(s)
         except queue.Empty:
             pass
-        self.n_lcr += len(out)
+        if write:
+            self.n_lcr += len(out)
         return out
 
     def _drain_h7(self) -> list:
         out: list = []
-        if self._h7_w is None or self.h7_queue is None:
+        if self.h7_queue is None:
             return out
+        write = self.recording and self._h7_w is not None
         try:
             while True:
                 s: H7Sample = self.h7_queue.get_nowait()
-                self._h7_w.writerow([
-                    f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
-                    s.firmware_timestamp_us,
-                    s.src if s.src is not None else "",
-                    s.channel if s.channel is not None else "",
-                    f"{s.value:.8f}",
-                    s.raw_code if s.raw_code is not None else "",
-                    s.hw_us if s.hw_us is not None else "",
-                    s.seq if s.seq is not None else "",
-                ])
+                if write:
+                    self._h7_w.writerow([
+                        f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
+                        s.firmware_timestamp_us,
+                        s.src if s.src is not None else "",
+                        s.channel if s.channel is not None else "",
+                        f"{s.value:.8f}",
+                        s.raw_code if s.raw_code is not None else "",
+                        s.hw_us if s.hw_us is not None else "",
+                        s.seq if s.seq is not None else "",
+                    ])
                 out.append(s)
         except queue.Empty:
             pass
-        self.n_h7 += len(out)
+        if write:
+            self.n_h7 += len(out)
         return out
 
     def _drain_stage(self) -> list:
         out: list = []
-        if self._stage_w is None or self.stage_queue is None:
+        if self.stage_queue is None:
             return out
+        write = self.recording and self._stage_w is not None
         try:
             while True:
                 s: StageSample = self.stage_queue.get_nowait()
-                self._stage_w.writerow([
-                    f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
-                    f"{s.position_mm:.6f}",
-                ])
+                if write:
+                    self._stage_w.writerow([
+                        f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
+                        f"{s.position_mm:.6f}",
+                    ])
                 out.append(s)
         except queue.Empty:
             pass
-        self.n_stage += len(out)
+        if write:
+            self.n_stage += len(out)
         return out
 
     def _drain_status(self) -> list:
         out: list = []
-        if self._status_w is None or self.status_queue is None:
+        if self.status_queue is None:
             return out
+        write = self.recording and self._status_w is not None
         try:
             while True:
                 s: StatusSample = self.status_queue.get_nowait()
-                self._status_w.writerow([
-                    f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
-                    json.dumps(s.fields, separators=(",", ":")),
-                ])
+                if write:
+                    self._status_w.writerow([
+                        f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
+                        json.dumps(s.fields, separators=(",", ":")),
+                    ])
                 out.append(s)
         except queue.Empty:
             pass
-        self.n_status += len(out)
+        if write:
+            self.n_status += len(out)
         return out
 
     # ------------------------------------------------------------------

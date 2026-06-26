@@ -20,6 +20,32 @@
 - `run_experiment.py` — **RETIRED** (stub): it built firmware commands inline
   and never `arm`ed, which the rebuilt firmware rejects. Use `--headless`.
 
+## Console controls (GUI)
+
+- **Manual recording.** On launch the console runs the startup health check and
+  shows live plots/readouts, but writes **nothing to disk** until the operator
+  clicks **Start REC** (queues are still drained so the buffers never overflow).
+  Click again to **Stop REC**. The `--headless` runner auto-starts recording.
+  `events.csv` boundaries: `recording start` / `recording stop`.
+- **Click-to-reconnect.** The H7 / LCR / stage status dots are buttons — click a
+  red (offline/failed) stream to rebuild its worker and retry the hardware
+  connection (reuses the same queue). Dots update live each tick.
+- **Auxiliary failures are isolated.** An LCR or Zaber worker crash no longer
+  trips the shared `stop_event` (which previously cascaded and killed the
+  critical H7 stream + whole session). Only the health monitor decides aborts.
+- **Stage health.** A connected, streaming Zaber **passes** even when parked
+  outside the workflow window `[lo, hi]` (it's telemetry-only) — that's now a
+  warning, not a `FAIL`/"offline" verdict.
+- **Laser/load voltage-glitch filter (host-side).** The combined firmware emits
+  one laser/load sample with `value==0 V` on ~every 32nd ADC1 frame while its
+  `raw_code` is a normal non-zero value (the paired load sample is also dropped
+  on those frames). It shows up as a huge periodic spike to 0 on the plot.
+  `H7Worker` drops these self-inconsistent samples (V=0 with non-zero raw),
+  counted in `n_glitch` and logged. Measured impact on a real run: removing the
+  108/8888 (1.2%) glitch samples cut laser σ from 162 mV → **0.83 mV**. **The
+  underlying firmware voltage-field bug is still open** (raw stream is correct);
+  see TODO — needs a bench rebuild to fix at the source.
+
 ## Design rules (V3)
 
 - **Recorder logs RAW data only.** It configures instruments at startup but never converts units or pushes calibration to firmware.
@@ -33,6 +59,7 @@
 - [ ] **Bench-run** a full OPEN→SHORT→RAW session against the real rig (LCR + combined-firmware H7 + Zaber).
 - [ ] **Fill calibration** in `config.yaml` from `Calibrate_LaserHead` / `Calibrate_LoadCell` fits.
 - [ ] **Verify H7 channel rates** — confirm `[STATUS]` shows no drops with all 5 src streaming during a `drive`.
+- [ ] **FIRMWARE BUG: laser/load V-field zero-glitch** (`Firmware_SMASensorHub_PIO`) — ~every 32nd ADC1 frame emits `voltage_V==0` despite a valid `raw_code` (and skips the paired ADC2/load sample). Raw codes are correct, so it's in the M4 voltage path / ADC1↔ADC2 interleave, not the ADC read. Currently masked host-side by the `H7Worker` glitch filter; fix at the source on the bench (suspect the `r1.status & 0x80` ADC2-piggyback branch around `main.cpp:1198-1214`).
 - [x] ~~**SMA scripted actuation**~~ — done 2026-06-21: recorder drives the on-M7 `cycle` state machine (params + heartbeat) when `sma.enabled`. Bench-verify the heat/cool timing + watchdog.
 - [ ] **Scripted STAGE profile** — optional RAW-phase stage motion (still telemetry-only).
 - [ ] **Stage motion during RAW** — currently telemetry-only; decide whether the recorder should command the stage.
