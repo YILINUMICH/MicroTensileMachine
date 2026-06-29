@@ -50,8 +50,8 @@
 
 // ── Enable/disable each ADC sensing path at build time ────────────────
 // Shared by M7 (output formatting) and M4 (ADC control).
-#define ENABLE_ADC1   1
-#define ENABLE_ADC2   1
+#define ENABLE_ADC1   1   // AIN4/AIN5 — Keyence IL-030 laser (displacement)
+#define ENABLE_ADC2   1   // AIN2/AIN3 — LCA-9PC load cell (force)
 
 
 // ══════════════════════════════════════════════════════════════════════
@@ -305,6 +305,12 @@ static_assert(ENABLE_ADC1 && ENABLE_ADC2,
 // sma_seq is indexed directly by src (3,4,5); indices 0-2 are unused so the
 // [src] lookup needs no offset.
 static uint32_t sma_seq[6] = {0, 0, 0, 0, 0, 0};   // per-src seq, idx by src
+
+// Freshest M4 timestamps M7 has drained from the ring (updated in pumpSensors).
+// Lets M7 stamp the SMA src=3/4/5 lines on the M4 timeline without M4 having to
+// publish a separate clock (M4 stays a pure producer).
+static uint32_t last_m4_hw_us = 0;   // newest sample hw_us (M4 micros())
+static uint32_t last_m4_ms    = 0;   // newest sample timestamp_ms (M4 millis())
 static void emitSmaSample(uint8_t src, int32_t raw, float volts,
                           uint32_t hw, uint32_t ms) {
     Serial.print(ms);        Serial.print('\t');
@@ -315,11 +321,14 @@ static void emitSmaSample(uint8_t src, int32_t raw, float volts,
     Serial.println(sma_seq[src]++);
 }
 static void streamSma(const SmaRead& s) {
-    // Pre-correct to the M4 timeline: stamp these M7-produced lines with M4's
-    // live clock (from the ring header) so src=3/4/5 share one clock with the
-    // src=1/2 sensor lines instead of M7's independent clock.
-    uint32_t hw = SAMPLE_RING->m4_now_us;
-    uint32_t ms = SAMPLE_RING->m4_now_ms;
+    // Stamp these M7-produced SMA lines with the M4 timeline so src=3/4/5 share
+    // one clock with the src=1/2 sensor lines. M4 is a pure producer (it no
+    // longer publishes a live clock into the ring header), so we use the
+    // timestamps of the freshest sample M7 drained from the ring — captured in
+    // pumpSensors() as last_m4_hw_us / last_m4_ms. At 500 SPS that's within
+    // ~2 ms of "now", plenty for correlating actuation with sensor response.
+    uint32_t hw = last_m4_hw_us;
+    uint32_t ms = last_m4_ms;
     emitSmaSample(SAMPLE_SRC_SMA_V, (int32_t)currentCode, s.v_ldo, hw, ms);
     emitSmaSample(SAMPLE_SRC_SMA_I, 0,                    s.i,     hw, ms);
     if (!isnan(s.r)) emitSmaSample(SAMPLE_SRC_SMA_R, 0,   s.r,     hw, ms);
@@ -871,13 +880,11 @@ static void dispatch(String in) {
 static uint32_t last_status_ms  = 0;
 static uint32_t last_dropped    = 0;
 static uint32_t last_crc_err    = 0;
-static uint32_t last_overrun    = 0;
 static uint32_t pop_count_src1  = 0;
 static uint32_t pop_count_src2  = 0;
 static uint32_t pop_count_other = 0;
 static uint32_t last_seq_src1   = 0;
 static uint32_t last_seq_src2   = 0;
-static uint32_t last_m4_loops   = 0;
 static const uint32_t STATUS_PERIOD_MS = 1000;
 
 // Drain boot text, drain a batch of sensor samples, emit periodic [STATUS].
@@ -905,6 +912,10 @@ static void pumpSensors() {
         Serial.print('\t');
         Serial.println(s.seq);
 
+        // Track the newest M4 clock so SMA src=3/4/5 can share the M4 timeline.
+        last_m4_hw_us = s.hw_us;
+        last_m4_ms    = s.timestamp_ms;
+
         if      (s.src == SAMPLE_SRC_LASER) pop_count_src1++;
         else if (s.src == SAMPLE_SRC_LOAD)  pop_count_src2++;
         else                                pop_count_other++;
@@ -928,16 +939,11 @@ static void pumpSensors() {
         uint32_t dropped_delta = cur_dropped - last_dropped;
         last_dropped = cur_dropped;
 
-        // M4-side losses invisible to seq-gap / ring-overflow accounting:
-        // checksum-invalid reads (discarded before they get a seq) and DRDY
-        // overruns (M4 fell behind). Report per-window deltas + running totals.
+        // Checksum-invalid reads (discarded before they get a seq) — M4 still
+        // counts these in the loop. Report per-window delta + running total.
         uint32_t cur_crc_err = SAMPLE_RING->crc_err;
         uint32_t crc_err_delta = cur_crc_err - last_crc_err;
         last_crc_err = cur_crc_err;
-
-        uint32_t cur_overrun = SAMPLE_RING->overrun;
-        uint32_t overrun_delta = cur_overrun - last_overrun;
-        last_overrun = cur_overrun;
 
         uint32_t hwm = ring_hwm_read_reset(SAMPLE_RING);
 
@@ -953,16 +959,6 @@ static void pumpSensors() {
         pop_count_src2 = 0;
         pop_count_other = 0;
 
-        // m4_loops is a free-running counter on the M4 side; report the
-        // per-window DELTA (same pattern as prod1/prod2 above). Do NOT zero
-        // seq_per_src[0] here — M4 overwrites it with the absolute counter
-        // every loop, so zeroing it just made this read back the cumulative
-        // count as if it were a 1 s rate.
-        uint32_t cur_m4_loops   = SAMPLE_RING->seq_per_src[0];
-        uint32_t m4_loops       = cur_m4_loops - last_m4_loops;
-        last_m4_loops           = cur_m4_loops;
-        uint32_t m4_loops_per_s = per_s(m4_loops);
-
         Serial.print("[STATUS] t_ms=");   Serial.print(now);
         Serial.print(" hwm=");            Serial.print(hwm);
         Serial.print(" cap=");            Serial.print(RING_CAPACITY);
@@ -970,22 +966,18 @@ static void pumpSensors() {
         Serial.print(" dropped_total=");  Serial.print(cur_dropped);
         Serial.print(" crc_err=");        Serial.print(crc_err_delta);
         Serial.print(" crc_err_total=");  Serial.print(cur_crc_err);
-        Serial.print(" overrun=");        Serial.print(overrun_delta);
-        Serial.print(" overrun_total=");  Serial.print(cur_overrun);
         Serial.print(" rate1=");          Serial.print(rate1);
         Serial.print(" rate2=");          Serial.print(rate2);
         if (rate_other) { Serial.print(" rate_other="); Serial.print(rate_other); }
         Serial.print(" prod1=");          Serial.print(prate1);
         Serial.print(" prod2=");          Serial.print(prate2);
         Serial.print(" sma_state=");      Serial.print((int)smaState);   // 0=IDLE
-        Serial.print(" m4_loops_per_s="); Serial.print(m4_loops_per_s);
-        // Clock-alignment check (host derives the M4↔M7 offset and validates the
-        // src=3/4/5 pre-correction) + LDO model params so the host can compute
-        // V_pred = offset + (code/4095)*vdd from the src=3 raw code.
+        // Clock-alignment check: M7's own clock vs the freshest M4 sample clock
+        // (lets the host derive the M4↔M7 offset for the src=3/4/5 lines) + LDO
+        // model params so the host can compute V_pred = offset + (code/4095)*vdd.
         uint32_t m7_now_us = micros();
-        uint32_t m4_pub_us = SAMPLE_RING->m4_now_us;
         Serial.print(" m7_us=");          Serial.print(m7_now_us);
-        Serial.print(" m4_us=");          Serial.print(m4_pub_us);
+        Serial.print(" m4_us=");          Serial.print(last_m4_hw_us);
         Serial.print(" vdd=");            Serial.print(VDD_MCP, 3);
         Serial.print(" offset=");         Serial.print(V_OFFSET, 4);
         Serial.print(" aref=");           Serial.print(ADC_VREF_V, 3);
@@ -1014,6 +1006,12 @@ void setup() {
     Serial.println("[M7] Firmware_SMASensorHub_PIO — ring-buffer bridge + SMA controller");
     Serial.println("[M7] sensor TSV: t_ms\\t[src\\t]raw\\tV\\thw_us\\tseq   (src=1 laser, 2 load)");
     Serial.println("[M7] [STATUS] line once/sec; SMA I/O tagged [SMA]");
+    // BUILD-ID: confirms the running image actually has the cache-line fix.
+    // Expect slot=32 cap=512 after the 2026-06-29 alignment change; slot=24
+    // cap=1024 means this core is still the OLD build (reflash / clean build).
+    Serial.print("[M7] ring build-id: slot=");   Serial.print((unsigned)sizeof(AdcSample));
+    Serial.print("B cap=");                       Serial.print((unsigned)RING_CAPACITY);
+    Serial.print(" base=0x");                     Serial.println((unsigned long)RING_BASE, HEX);
 
     // ── SMA drive-path init (non-fatal: a missing DAC must NOT kill the
     //    sensor bridge — the rig can still stream laser/load) ──────────
@@ -1086,48 +1084,22 @@ void loop()  { __WFI(); }
 
 ADS1263_Driver adc;
 
-// ── Laser-freeze bench-test toggles (2026-06-26) ──────────────────────────
-// Investigating ADC1/laser LATCHING its power-up reading (the value never
-// tracks the target). Flip each toggle independently, re-flash M4
-//   pio run -e portenta_m4 -t upload   (then power-cycle USB + EVM),
-// and watch whether the laser value starts tracking. Set BOTH to 0 to
-// restore production behaviour. Watch `pio device monitor` at boot for the
-// "[M4] REGDUMP ..." line to confirm what's actually programmed.
-//   TEST_ADC1_PGA_BYPASS  : 1 = bypass ADC1's PGA → full 0..VREF input range,
-//                           removes the PGA common-mode restriction.
-//   TEST_ADC_POWER_INTREF : 1 = write POWER=0x13 (re-enable internal 2.5 V
-//                           ref + VBIAS) instead of production 0x02.
-#define TEST_ADC1_PGA_BYPASS    0
-#define TEST_ADC_POWER_INTREF   0
-
-//   TEST_POLL_NEWDATA     : 1 = sample by POLLING the STATUS new-data flags
-//                           in loop() (bit6=ADC1, bit7=ADC2), independent of
-//                           DRDY edges. Fixes the "both streams frozen on the
-//                           boot sample" case where DRDY falling edges stop
-//                           reaching the PC_6 ISR (prod1≈prod2≈0 in [STATUS]).
-//                           0 = original DRDY-ISR path. If POLL works but ISR
-//                           doesn't, the chip IS converting and the fault is
-//                           DRDY-edge delivery (wiring/pin/ISR), not the ADC.
-#define TEST_POLL_NEWDATA       1
+// ── ADS1263 production config (settled 2026-06-29) ────────────────────────
+// POWER=0x13 (INTREF + VBIAS on) — matches the original working driver; the
+//   bare 0x02 was a regression. ADC1 PGA is IN-PATH at gain=1 (lower noise).
+// Sampling is TIMED POLLING (no DRDY ISR): each ADC is read on its own ~2 ms
+//   timer, every valid read pushed to the ring. This is the proven-tracking
+//   path (verbatim from the bench-verified stable SensorHub loop).
+// NOTE (open item): ADC1 can raise PGAL_ALM because the laser's AIN5 sits near
+//   ground (low PGA common-mode). If that becomes a problem, bypass ADC1's PGA
+//   — pass pga_bypass=true to configureADC1() below (full 0..VREF range, no
+//   common-mode restriction, ~3.5 µV vs 1.3 µV noise). See the troubleshooting
+//   doc's PGAL_ALM note.
+#define ADS1263_POWER_CFG  0x13
 
 #define CP(n, msg)  do { \
     RPC.print("[M4 cp "); RPC.print(n); RPC.print("] "); RPC.println(msg); \
 } while (0)
-
-static volatile uint32_t drdy_us_latest  = 0;
-static volatile uint32_t drdy_edge_count = 0;
-static volatile uint32_t drdy_serviced   = 0;
-static volatile bool     adc1_pending    = false;
-static uint32_t          m4_loop_counter = 0;
-static volatile uint32_t drdy_overrun_count = 0;
-
-static void drdy_isr() {
-    uint32_t t = micros();
-    drdy_us_latest = t;
-    drdy_edge_count++;
-    if (adc1_pending) drdy_overrun_count++;
-    adc1_pending = true;
-}
 
 void setup() {
     RPC.begin();
@@ -1140,8 +1112,12 @@ void setup() {
     RPC.println("[M4] *** Firmware_SMASensorHub_PIO — dual-ADC production stream ***");
     RPC.println("[M4]   ADC1 → AIN4/AIN5 (Keyence IL-030 laser)");
     RPC.println("[M4]   ADC2 → AIN2/AIN3 (LCA-9PC load cell)");
-    RPC.println("[M4] IPC: shared-memory ring buffer (sample_ring.h, 24-byte slot)");
-    RPC.println("[M4] sampling: ADC1 DRDY-ISR on PC_6; ADC2 piggy-back on STATUS.ADC2_NEW");
+    // BUILD-ID (must match the M7 banner). If M4 prints slot/cap different
+    // from M7, the two core images disagree on the ring layout → garbage.
+    RPC.print("[M4] ring build-id: slot="); RPC.print((unsigned)sizeof(AdcSample));
+    RPC.print("B cap=");                     RPC.print((unsigned)RING_CAPACITY);
+    RPC.print(" base=0x");                   RPC.println((unsigned long)RING_BASE, HEX);
+    RPC.println("[M4] sampling: timed poll (ADC1 laser; ADC2 if enabled)");
 
     RPC.println("[M4] waiting 3000 ms for ADS1263 to power up...");
     delay(3000);
@@ -1150,7 +1126,7 @@ void setup() {
     // CS/RESET/DRDY pin modes, their idle levels, and SPI.begin() are all
     // owned by adc.begin() (ADS1263_Driver) — don't duplicate them here.
     CP(7, "calling adc.begin()");
-    bool ok = adc.begin(TEST_ADC_POWER_INTREF ? 0x13 : 0x02);
+    bool ok = adc.begin(ADS1263_POWER_CFG);
     CP(8, ok ? "adc.begin returned TRUE" : "adc.begin returned FALSE");
 
     if (!ok) {
@@ -1167,7 +1143,7 @@ void setup() {
         /*refmux     =*/ ADS1263_REFMUX_EXT_AIN01,   // 0x09 — REF7050 on AIN0/AIN1
         /*vref_V     =*/ 5.0f,
         /*rate       =*/ ADS1263_400SPS,
-        /*pga_bypass =*/ (TEST_ADC1_PGA_BYPASS != 0)  // TEST: was false (PGA in path, gain=1)
+        /*pga_bypass =*/ false                        // PGA in path, gain=1 (set true if PGAL_ALM)
     );
     adc.startADC1();
     CP(9, "ADC1 started on AIN4/AIN5 (laser), REF7050 on AIN0/AIN1, PGA in path gain=1");
@@ -1201,13 +1177,10 @@ void setup() {
     RPC.print(" MODE2=0x");   RPC.print(adc.peekRegister(ADS1263_REG_MODE2), HEX);
     RPC.print(" REFMUX=0x");  RPC.print(adc.peekRegister(ADS1263_REG_REFMUX), HEX);
     RPC.print(" ADC2CFG=0x"); RPC.print(adc.peekRegister(ADS1263_REG_ADC2CFG), HEX);
-    RPC.print(" ADC2MUX=0x"); RPC.print(adc.peekRegister(ADS1263_REG_ADC2MUX), HEX);
-    RPC.print(" [pga_bypass_test="); RPC.print(TEST_ADC1_PGA_BYPASS);
-    RPC.print(" intref_test=");      RPC.print(TEST_ADC_POWER_INTREF);
-    RPC.println("]");
+    RPC.print(" ADC2MUX=0x"); RPC.println(adc.peekRegister(ADS1263_REG_ADC2MUX), HEX);
 
-    attachInterrupt(digitalPinToInterrupt(ADS1263_DRDY_PIN), drdy_isr, FALLING);
-    CP(11, "DRDY interrupt attached on PC_6 (FALLING)");
+    // Timed-poll sampling — no DRDY interrupt attached.
+    CP(11, "sampling via timed poll (no DRDY ISR)");
 
 #if ENABLE_ADC1 && ENABLE_ADC2
     RPC.println("[M4] streaming via ring buffer. format: t_ms\\tsrc\\traw\\tV\\thw_us\\tseq   (src=1 laser, src=2 load)");
@@ -1221,22 +1194,16 @@ void setup() {
 }
 
 void loop() {
-    m4_loop_counter++;
-    SAMPLE_RING->seq_per_src[0] = m4_loop_counter;
-    SAMPLE_RING->overrun       = drdy_overrun_count;   // publish for M7 [STATUS]
-    SAMPLE_RING->m4_now_us     = micros();             // live M4 clock → src=3/4/5 align
-    SAMPLE_RING->m4_now_ms     = millis();
-
+    // ── M4 = PURE SENSOR PRODUCER ─────────────────────────────────────────
+    // M4 reads the ADS1263 and ring_pushes — nothing else. No housekeeping
+    // writes into the shared ring header (clock/status are derived on M7), so
+    // M4 stays a minimal producer matching the proven-stable SensorHub model.
+    //
+    // Timed polling: each ADC on its own ~2 ms timer. 2 ms is slightly faster
+    // than the 2.5 ms (400 SPS) conversion period, so some reads re-fetch the
+    // same data register — still valid; the ring absorbs the rate. Every valid
+    // read is pushed; a bad checksum bumps crc_err and is dropped.
 #if ENABLE_ADC1
-#if TEST_POLL_NEWDATA
-    // ── Independent timed polling — verbatim port of the bench-verified
-    //    stable SensorHub loop (no DRDY, no new-data-bit gating, no ADC2
-    //    piggyback). Each ADC is polled on its OWN ~2 ms timer at the same
-    //    rate; every valid read is pushed. Polling at 2 ms is faster than
-    //    the 2.5 ms (400 SPS) conversion period, so some reads re-fetch the
-    //    same data register — those are still valid and the ring absorbs
-    //    the slightly-above-Nyquist rate. This is the proven-tracking path;
-    //    the previous new-data-bit gate (bit6/bit7) is removed. ───────────
     static uint32_t t1_last = 0;
     if (millis() - t1_last >= 2) {
         t1_last = millis();
@@ -1247,6 +1214,7 @@ void loop() {
             SAMPLE_RING->crc_err++;            // bad checksum → sample discarded
         }
     }
+#endif
 #if ENABLE_ADC2
     static uint32_t t2_last = 0;
     if (millis() - t2_last >= 2) {
@@ -1258,48 +1226,6 @@ void loop() {
             SAMPLE_RING->crc_err++;            // bad checksum → sample discarded
         }
     }
-#endif
-#else  // original DRDY-ISR path
-    if (adc1_pending) {
-        noInterrupts();
-        uint32_t hw_us = drdy_us_latest;
-        adc1_pending   = false;
-        drdy_serviced++;
-        interrupts();
-
-        uint32_t ts_ms = millis();
-
-        ADC_Reading r1 = adc.readADC1Direct();
-        if (r1.valid) {
-            ring_push(SAMPLE_RING, hw_us, ts_ms, SAMPLE_SRC_LASER, r1.raw_code, r1.voltage_V);
-        } else {
-            SAMPLE_RING->crc_err++;            // bad checksum → sample discarded
-        }
-
-#if ENABLE_ADC2
-        if (r1.status & 0x80) {
-            ADC_Reading r2 = adc.readADC2Direct();
-            if (r2.valid) {
-                ring_push(SAMPLE_RING, hw_us, ts_ms, SAMPLE_SRC_LOAD, r2.raw_code, r2.voltage_V);
-            } else {
-                SAMPLE_RING->crc_err++;        // bad checksum → sample discarded
-            }
-        }
-#endif
-    }
-#endif  // TEST_POLL_NEWDATA
-#else
-#if ENABLE_ADC2
-    static uint32_t t2_last = 0;
-    if (millis() - t2_last >= 2) {
-        t2_last = millis();
-        uint32_t hw_us = micros();
-        ADC_Reading r = adc.readADC2Direct();
-        if (r.valid) {
-            ring_push(SAMPLE_RING, hw_us, millis(), SAMPLE_SRC_LOAD, r.raw_code, r.voltage_V);
-        }
-    }
-#endif
 #endif
 }
 

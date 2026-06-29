@@ -43,8 +43,9 @@
  * The ring header also grew to carry an M4-tracked high-water mark
  * (`hwm`) which the M7 [STATUS] frame emits and resets every second.
  *
- * Ring capacity unchanged (1024 slots). 1024 × 24 B = 24 KB, still
- * comfortably inside the 32 KB SRAM4 partition.
+ * Slot later padded 24 → 32 B (one M7 cache line) and capacity set to 512
+ * (2026-06-29 torn-read fix); 512 × 32 B = 16 KB, comfortably inside the
+ * 32 KB SRAM4 partition. See the AdcSample comment below.
  */
 
 #ifndef SAMPLE_RING_H
@@ -84,7 +85,16 @@
 //  Sample struct — one ADC reading
 // ══════════════════════════════════════════════════════════════════════
 
-struct AdcSample {
+// CACHE-LINE SIZED (2026-06-29). The Cortex-M7 D-cache line is 32 bytes. A
+// 24-byte slot straddles cache-line boundaries and lets adjacent slots
+// false-share a line, so M7's cached view of a slot M4 just wrote (M4 is
+// cacheless, writes straight to SRAM4) reads partly stale → TORN reads
+// (the `1024`/`1` field bleed-through + crash-reboot loop documented in
+// docs/TROUBLESHOOTING_ADS1263_frozen_reading.md). Padding each slot to a
+// full 32-byte cache line + aligning the array (below) makes every slot own
+// exactly one line: no straddle, no false-sharing. The text the host parses
+// is emitted by M7 field-by-field, so this binary change is host-transparent.
+struct __attribute__((aligned(32))) AdcSample {
     uint32_t hw_us;           // free-running µs at sample acquisition
     uint32_t seq;             // per-src monotonic sequence number
     uint32_t timestamp_ms;    // millis() at read time (legacy / host parser)
@@ -92,10 +102,11 @@ struct AdcSample {
     uint8_t  _pad8[3];        // explicit padding (raw_code aligned to 4)
     int32_t  raw_code;        // signed ADC code
     float    voltage_V;       // scaled voltage
+    uint8_t  _pad32[8];       // pad 24 → 32 so one slot == one M7 cache line
 };
 
-// 4 + 4 + 4 + 1 + 3 + 4 + 4 = 24 bytes — naturally aligned, no waste.
-static_assert(sizeof(AdcSample) == 24, "AdcSample must be 24 bytes");
+// 4 + 4 + 4 + 1 + 3 + 4 + 4 + 8 = 32 bytes — exactly one Cortex-M7 cache line.
+static_assert(sizeof(AdcSample) == 32, "AdcSample must be 32 bytes (one M7 cache line)");
 
 
 // ══════════════════════════════════════════════════════════════════════
@@ -103,10 +114,12 @@ static_assert(sizeof(AdcSample) == 24, "AdcSample must be 24 bytes");
 // ══════════════════════════════════════════════════════════════════════
 
 // Capacity must be a power of 2 for efficient masking.
-// 1024 slots × 24 bytes = 24 KB of sample data.
-// At 2 kSPS combined (1 kSPS per ADC) the ring buffers ~0.5 s of data
-// before overflow — plenty of headroom for USB-CDC hiccups on M7.
-static const uint32_t RING_CAPACITY = 1024;
+// 256 (8 KB) — ACCEPTED config (2026-06-29). Fits the top ~12 KB of SRAM4 that
+// is clear of OpenAMP's active footprint (see RING_BASE). hwm stays at 1 in
+// practice (M7 never backs up), so 256 is already deep insurance — capacity is
+// not a limiting factor. 512 would need a base ≤ 0x3800BFA0, back down toward
+// OpenAMP's reserved/active memory, so we deliberately stay at 256 up high.
+static const uint32_t RING_CAPACITY = 256;
 static const uint32_t RING_MASK     = RING_CAPACITY - 1;
 
 struct SampleRing {
@@ -127,22 +140,40 @@ struct SampleRing {
     // Consumer-only fields (M7 writes, M4 reads-only)
     volatile uint32_t read_idx;           // M7 increments after slot consume
 
-    // Padding to keep samples[] aligned to 8 bytes (AdcSample's largest
-    // field is 4 bytes, so 4-byte alignment is required; 8 is safer).
-    uint32_t          _pad[1];
-
-    AdcSample         samples[RING_CAPACITY];
+    // samples[] is 32-byte (cache-line) aligned so slot N sits at a line
+    // boundary and never straddles. The compiler inserts padding here to push
+    // the array to the next 32-byte boundary (header is 68 B → array at 96 B).
+    // RING_BASE itself is 32-byte aligned, so the in-RAM slots are line-aligned.
+    __attribute__((aligned(32))) AdcSample samples[RING_CAPACITY];
 };
 
-// Header: 4 + 4 + 4 + 4 + 4 + 4 + 4 + 32 + 4 + 4 = 68 bytes. Samples: 24 576 bytes.
-// Total: 24 644 bytes ≈ 24 KB. Fits in the 32 KB SRAM4 partition.
+// Header 68 B → padded to 96 B (samples[] aligned to 32). Samples: 256 × 32 =
+// 8 192 B. Total ≈ 8 288 B ≈ 8 KB.
 static_assert(sizeof(SampleRing) <= 32768,
-              "SampleRing must fit in the upper 32 KB of SRAM4");
+              "SampleRing must fit in SRAM4");
 
-// Ring base address: 32 KB into SRAM4.
-// 0x38000000 – 0x38007FFF → reserved for OpenAMP / Arduino-RPC
-// 0x38008000 – 0x3800FFFF → our ring buffer (32 KB available, need ~24 KB)
-static const uintptr_t RING_BASE = 0x38008000;
+// ── Ring base address — ACCEPTED PLACEMENT (2026-06-29) ───────────────────
+// SRAM4 is 0x38000000–0x3800FFFF (64 KB). The linker reserves ALL of it for
+// OpenAMP/RPC (`__OPENAMP_region_start__=0x38000400` .. `__OPENAMP_region_end__
+// =0x38010000`), but OpenAMP only *actively* writes the bottom (its vrings +
+// rpmsg buffer pool, near 0x38000400). The ring sat at 0x38008000 and got
+// corrupted by that active region (torn reads → M4 crash-loop). Moving it HIGH
+// to 0x3800D000 — well above OpenAMP's active footprint — fixed it completely
+// (dropped=0, rate1=512, hwm=1). We keep this; it rides OpenAMP's non-cacheable
+// MPU region (which is why no cache maintenance is needed here).
+//
+//   ring : 0x3800D000 – 0x3800F060  (8 KB, cap 256)
+//
+// ⚠ RESIDUAL RISK (accepted): this is inside OpenAMP's *reserved* region. If
+// OpenAMP's active footprint ever grows past ~0x3800D000 (e.g. an mbed/RPC
+// version bump, larger rpmsg buffer pool, or much heavier RPC traffic), it can
+// collide again. CANARY: the boot `ring build-id` line + dropped_total/rate_other
+// in [STATUS]. SYMPTOM TO WATCH: torn sample fields (small/index-like values
+// like 1024 bleeding into raw/hw_us/seq) + t_ms resetting (M4 reboot loop).
+// FIX IF IT RECURS: raise RING_BASE further / shrink cap, or disable OpenAMP and
+// own the whole SRAM4 (needs bootM4() + self-managed cache coherency). See
+// docs/TROUBLESHOOTING_ADS1263_frozen_reading.md.
+static const uintptr_t RING_BASE = 0x3800D000;
 static const uintptr_t SRAM4_END = 0x38010000;   // 0x38000000 + 64 KB
 
 static_assert(RING_BASE + sizeof(SampleRing) <= SRAM4_END,
