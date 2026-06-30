@@ -1,0 +1,113 @@
+2026-06-29 18:30:27,448  INFO   root                Session: console_20260629_183027
+2026-06-29 18:30:27,448  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260629_183027
+2026-06-29 18:30:27,448  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\config.yaml  headless=False
+2026-06-29 18:30:28,342  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-29 18:30:28,346  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-06-29 18:30:28,351  INFO   PortentaReader      boot banner (1 lines):
+2026-06-29 18:30:28,352  INFO   PortentaReader        8	475383253	232532
+2026-06-29 18:30:28,430  INFO   LCRMeter            Using VISA backend: @py
+2026-06-29 18:30:29,454  INFO   LCRMeter            Found 2 instruments
+2026-06-29 18:30:29,454  ERROR  LCRMeter            No E4980A/AL found
+2026-06-29 18:30:29,455  ERROR  LcrWorker           LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 117, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 155, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-29 18:30:29,455  INFO   LcrWorker           LCR worker exit  (pushed=0, dropped=0)
+2026-06-29 18:30:29,588  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-06-29 18:30:29,619  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-06-29 18:30:29,635  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-06-29 18:30:30,346  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-06-29 18:30:30,346  INFO   RecordingCore       Running 10.0 s full system check...
+2026-06-29 18:30:30,397  INFO   RecordingCore       health H7    PASS (55) — combined firmware, 55 samples
+2026-06-29 18:30:30,397  WARNING  RecordingCore       health LCR   FAIL (0) — worker error RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')
+2026-06-29 18:30:30,398  INFO   RecordingCore       health stage PASS (38) — 38 reads, pos~27.60 mm
+2026-06-29 18:30:33,489  WARNING  RecordingCore       HEALTH WARNING: LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:33,652  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-29 18:30:33,653  INFO   RecordingCore       LCR: reconnect requested
+2026-06-29 18:30:33,662  INFO   LCRMeter            Using VISA backend: @py
+2026-06-29 18:30:34,699  INFO   LCRMeter            Found 2 instruments
+2026-06-29 18:30:34,700  ERROR  LCRMeter            No E4980A/AL found
+2026-06-29 18:30:34,700  ERROR  LcrWorker           LCR worker crashed: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 117, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 155, in _main_loop
+    raise RuntimeError(
+RuntimeError: Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.
+2026-06-29 18:30:34,701  INFO   LcrWorker           LCR worker exit  (pushed=0, dropped=0)
+2026-06-29 18:30:36,679  WARNING  RecordingCore       HEALTH WARNING: LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:38,677  WARNING  RecordingCore       HEALTH WARNING: LCR silent 5.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:40,688  WARNING  RecordingCore       HEALTH WARNING: LCR silent 7.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:42,746  WARNING  RecordingCore       HEALTH WARNING: LCR silent 9.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:44,755  WARNING  RecordingCore       HEALTH WARNING: LCR silent 11.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:46,771  WARNING  RecordingCore       HEALTH WARNING: LCR silent 13.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:48,770  WARNING  RecordingCore       HEALTH WARNING: LCR silent 15.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:50,811  WARNING  RecordingCore       HEALTH WARNING: LCR silent 17.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:52,809  WARNING  RecordingCore       HEALTH WARNING: LCR silent 19.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:54,809  WARNING  RecordingCore       HEALTH WARNING: LCR silent 21.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:56,813  WARNING  RecordingCore       HEALTH WARNING: LCR silent 23.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:30:58,812  WARNING  RecordingCore       HEALTH WARNING: LCR silent 25.1s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:00,869  WARNING  RecordingCore       HEALTH WARNING: LCR silent 27.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:02,870  WARNING  RecordingCore       HEALTH WARNING: LCR silent 29.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:04,867  WARNING  RecordingCore       HEALTH WARNING: LCR silent 31.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:06,882  WARNING  RecordingCore       HEALTH WARNING: LCR silent 33.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:08,883  WARNING  RecordingCore       HEALTH WARNING: LCR silent 35.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:10,882  WARNING  RecordingCore       HEALTH WARNING: LCR silent 37.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:12,896  WARNING  RecordingCore       HEALTH WARNING: LCR silent 39.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:14,921  WARNING  RecordingCore       HEALTH WARNING: LCR silent 41.2s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:16,957  WARNING  RecordingCore       HEALTH WARNING: LCR silent 43.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:18,970  WARNING  RecordingCore       HEALTH WARNING: LCR silent 45.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:20,970  WARNING  RecordingCore       HEALTH WARNING: LCR silent 47.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:22,968  WARNING  RecordingCore       HEALTH WARNING: LCR silent 49.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:24,970  WARNING  RecordingCore       HEALTH WARNING: LCR silent 51.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:26,989  WARNING  RecordingCore       HEALTH WARNING: LCR silent 53.3s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:29,038  WARNING  RecordingCore       HEALTH WARNING: LCR silent 55.4s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:31,048  WARNING  RecordingCore       HEALTH WARNING: LCR silent 57.4s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:33,056  WARNING  RecordingCore       HEALTH WARNING: LCR silent 59.4s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:31:33,864  INFO   LCRMeter            Auto-detecting E4980A/AL LCR meter...
+2026-06-29 18:31:33,864  INFO   RecordingCore       LCR: reconnect requested
+2026-06-29 18:31:33,892  INFO   LCRMeter            Using VISA backend: @py
+2026-06-29 18:31:34,915  INFO   LCRMeter            Found 3 instruments
+2026-06-29 18:31:35,056  INFO   LCRMeter            Connected: Keysight Technologies,E4980AL,MY54414655,B.07.05
+2026-06-29 18:31:35,578  INFO   LCRMeter            Configured: 1000000Hz, 0.5V, LSRS
+2026-06-29 18:31:35,578  INFO   LcrWorker           LCR ready: Keysight Technologies,E4980AL,MY54414655,B.07.05
+2026-06-29 18:32:03,882  WARNING  LCRMeter            Read error #1 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:03,986  WARNING  LCRMeter            Read error #2 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,087  WARNING  LCRMeter            Read error #3 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,187  WARNING  LCRMeter            Read error #4 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,289  WARNING  LCRMeter            Read error #5 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,390  WARNING  LCRMeter            Read error #6 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,494  WARNING  LCRMeter            Read error #7 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,595  WARNING  LCRMeter            Read error #8 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,697  WARNING  LCRMeter            Read error #9 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,803  WARNING  LCRMeter            Read error #10 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:04,904  WARNING  LCRMeter            Read error #11 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,025  WARNING  LCRMeter            Read error #12 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,127  WARNING  LCRMeter            Read error #13 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,228  WARNING  LCRMeter            Read error #14 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,329  WARNING  LCRMeter            Read error #15 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,430  WARNING  LCRMeter            Read error #16 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,530  WARNING  LCRMeter            Read error #17 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,633  WARNING  LCRMeter            Read error #18 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,734  WARNING  LCRMeter            Read error #19 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,835  WARNING  LCRMeter            Read error #20 on FETCH? — read_single() returned None (parse failed) (retrying)
+2026-06-29 18:32:05,835  ERROR  pyvisa              Error closing VISA link: [WinError 10054] An existing connection was forcibly closed by the remote host
+2026-06-29 18:32:05,835  ERROR  LcrWorker           LCR worker crashed: read_single() returned None (parse failed)
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 117, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\workers.py", line 162, in _main_loop
+    for m in lcr.iter_measurements(
+             ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Driver_KeysightLCR\lcr_meter.py", line 443, in iter_measurements
+    raise RuntimeError("read_single() returned None (parse failed)")
+RuntimeError: read_single() returned None (parse failed)
+2026-06-29 18:32:05,836  INFO   LcrWorker           LCR worker exit  (pushed=2358, dropped=0)
+2026-06-29 18:32:06,058  WARNING  RecordingCore       HEALTH WARNING: LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+2026-06-29 18:32:06,876  INFO   H7Worker            H7 worker exit  (pushed=95176, dropped=0, filtered=0)
+2026-06-29 18:32:07,075  INFO   Driver_ZaberStage   Disconnected
+2026-06-29 18:32:07,075  INFO   ZaberWorker         Zaber worker exit  (pushed=4683, dropped=0)
+2026-06-29 18:32:07,097  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMACharacterizationV3\data\console_20260629_183027\meta.json

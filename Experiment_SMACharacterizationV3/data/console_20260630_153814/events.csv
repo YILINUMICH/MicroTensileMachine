@@ -1,0 +1,26 @@
+host_timestamp_s,monotonic_s,kind,detail
+1782848295.520524,14960.671000,session,start console_20260630_153814
+1782848297.572016,14962.718000,warn,"LCR startup: worker error RuntimeError('Could not connect to Keysight E4980 LCR meter. Check USB/LAN cable, instrument power, and VISA backend.')"
+1782848300.636982,14965.781000,warn,LCR silent 3.0s — no new samples (auxiliary; other instruments still recording)
+1782848302.631557,14967.781000,warn,LCR silent 5.0s — no new samples (auxiliary; other instruments still recording)
+1782848304.633371,14969.781000,warn,LCR silent 7.0s — no new samples (auxiliary; other instruments still recording)
+1782848306.636163,14971.781000,warn,LCR silent 9.0s — no new samples (auxiliary; other instruments still recording)
+1782848307.834119,14972.984000,reconnect,LCR restart requested
+1782848310.092424,14975.234000,arm,arm
+1782848330.729686,14995.875000,session,recording start
+1782848337.242704,15002.390000,cmd,cycle 3 0.5 100 200 5
+1782848338.257876,15003.406000,cmd,ping
+1782848339.263865,15004.406000,cmd,ping
+1782848340.254212,15005.406000,cmd,ping
+1782848341.263988,15006.406000,cmd,ping
+1782848342.257233,15007.406000,cmd,ping
+1782848343.254076,15008.406000,cmd,ping
+1782848344.256520,15009.406000,cmd,ping
+1782848345.264614,15010.406000,cmd,ping
+1782848346.253631,15011.406000,cmd,ping
+1782848347.259144,15012.406000,cmd,ping
+1782848347.901859,15013.046000,cmd,stop
+1782848348.970278,15014.109000,session,recording stop
+1782848353.717963,15018.859000,disarm,disarm
+1782848372.905157,15038.046000,disarm,disarm
+1782848373.075127,15038.218000,session,end complete

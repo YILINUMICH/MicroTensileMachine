@@ -1,0 +1,93 @@
+{
+  "session_id": "console_20260630_144839",
+  "schema": "sma_v3_console",
+  "started_at_utc": "2026-06-30T18:48:40Z",
+  "ended_at_utc": "2026-06-30T18:50:52Z",
+  "outcome": "complete",
+  "errors": [],
+  "counts": {
+    "lcr": 0,
+    "h7": 0,
+    "stage": 0,
+    "status": 0,
+    "events": 5
+  },
+  "lcr": {
+    "enabled": true,
+    "resource": null,
+    "function": "LSRS",
+    "frequency_hz": 1000000,
+    "voltage_V": 0.5,
+    "integration": "SHORT",
+    "averaging": 1,
+    "poll_interval_s": 0.01,
+    "idn": "Keysight Technologies,E4980AL,MY54414655,B.07.05",
+    "n_dropped": 0,
+    "active": true
+  },
+  "h7": {
+    "enabled": true,
+    "port": "COM8",
+    "baud": 115200,
+    "channels": [
+      "laser",
+      "load",
+      "sma_v",
+      "sma_i",
+      "sma_r"
+    ],
+    "startup_commands": [],
+    "n_dropped": 0,
+    "active": true
+  },
+  "stage": {
+    "enabled": true,
+    "port": "COM5",
+    "position_limits_mm": [
+      5,
+      40
+    ],
+    "max_velocity_mm_s": 10.0,
+    "reading_rate_hz": 100,
+    "home_on_start": false,
+    "move_to_zero_on_start": false,
+    "zero_mm": 10.0,
+    "poll_interval_s": 0.02,
+    "info": "DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)",
+    "n_dropped": 0,
+    "active": true
+  },
+  "sma": {
+    "enabled": false,
+    "v_high": 3.0,
+    "v_low": 0.0,
+    "fire_ms": 2000,
+    "cool_ms": 8000,
+    "n_cycles": 10,
+    "wdt_ms": 5000
+  },
+  "calibration": {
+    "laser": {
+      "k_mV_per_um": null,
+      "V0_mV": null
+    },
+    "load_cell": {
+      "scale_N_per_V": null,
+      "offset_V": 0.0
+    },
+    "current_sense": {
+      "gain_V_per_V": 10.0,
+      "shunt_ohm": 0.1,
+      "ioffset_V": 0.0
+    }
+  },
+  "run": {
+    "operator": "",
+    "notes": "",
+    "output_dir": "data"
+  },
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  }
+}
