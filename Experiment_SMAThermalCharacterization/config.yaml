@@ -39,6 +39,24 @@ stage:
   zero_mm: 10.0               # mechanical zero reference (recorded in meta)
   poll_interval_s: 0.02       # ~50 Hz position poll
 
+# ── 12MP camera (adaptive-FPS video; fixed resolution) ────────────────
+# Recording is gated by the console's Start/Stop REC. Frame rate adapts to SMA
+# motion from the laser: fast while moving, heartbeat once settled (net move <
+# change_threshold_mm for stop_dwell_s). resolution + fps_fast apply on
+# (re)connect; the rest are live. Editable from the console (resolution + fast
+# fps dropdowns, transient + heartbeat fields). Auxiliary: a failure warns.
+camera:
+  enabled: true
+  index: 1                     # DirectShow index of the 12MP U3 camera
+  resolution: [1280, 720]      # dropdown: 640x360..4000x3000 (see README)
+  fps_fast: 60                 # dropdown; options adapt to resolution
+  fps_heartbeat: 1.0           # sparse rate once the SMA has settled
+  transient_guarantee_s: 10.0  # force fast this long after a heat/idle event
+  change_threshold_mm: 1.0     # net (median-filtered) laser move that counts
+  median_window_ms: 200        # laser noise/jump rejection
+  stop_dwell_s: 4.0            # no >threshold move this long -> drop to heartbeat
+  jpeg_quality: 90
+
 # ── SMA cyclic actuation (the ON-M7 experiment state machine) ─────────
 # The firmware runs the heat/cool cycle deterministically off M7's own
 # clock — the PC is NOT in the timing loop. With enabled=true the recorder

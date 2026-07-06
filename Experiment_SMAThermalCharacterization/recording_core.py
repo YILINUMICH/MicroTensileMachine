@@ -41,9 +41,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from collections import deque
+
 import h7_commands as h7
 from config import AppConfig
-from workers import (H7Sample, H7Worker, LcrSample, LcrWorker,
+from workers import (CameraWorker, H7Sample, H7Worker, LcrSample, LcrWorker,
                      StageSample, StatusSample, ZaberWorker)
 
 
@@ -62,7 +64,8 @@ WORKER_JOIN_TIMEOUT_S = 5.0
 STREAM_H7 = "H7"
 STREAM_LCR = "LCR"
 STREAM_STAGE = "stage"
-AUXILIARY_STREAMS = frozenset({STREAM_LCR, STREAM_STAGE})
+STREAM_CAMERA = "camera"
+AUXILIARY_STREAMS = frozenset({STREAM_LCR, STREAM_STAGE, STREAM_CAMERA})
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +160,7 @@ class RecordingCore:
                  stage_queue: "Optional[queue.Queue[StageSample]]",
                  stop_event: threading.Event,
                  status_queue: "Optional[queue.Queue[StatusSample]]" = None,
+                 camera_worker: Optional[CameraWorker] = None,
                  on_event: Optional[Callable[[dict], None]] = None,
                  on_log: Optional[Callable[[str, str], None]] = None):
         self.cfg = cfg
@@ -164,10 +168,17 @@ class RecordingCore:
         self.lcr_worker = lcr_worker
         self.h7_worker = h7_worker
         self.stage_worker = stage_worker
+        self.camera_worker = camera_worker
         self.lcr_queue = lcr_queue
         self.h7_queue = h7_queue
         self.stage_queue = stage_queue
         self.status_queue = status_queue
+
+        # Recent laser displacement (mm) history for the camera's motion-driven
+        # frame-rate trigger. Filled during H7 drains when calibration is set;
+        # empty otherwise (the camera then falls back to event-driven capture).
+        self._laser_hist: "deque[tuple[float, float]]" = deque(maxlen=1000)
+        self._laser_lock = threading.Lock()
         self.stop_event = stop_event
         self._on_event = on_event
         self._on_log = on_log
@@ -587,6 +598,15 @@ class RecordingCore:
             False -> worker missing, crashed (error set), or thread dead
             True  -> worker thread alive and not errored (connected/streaming)
         """
+        if label == STREAM_CAMERA:
+            # The camera has no queue (it writes its own files), so key off the
+            # worker alone.
+            w = self.camera_worker
+            if w is None:
+                return None
+            if w.error is not None:
+                return False
+            return bool(w.is_alive())
         w, q = {
             STREAM_H7: (self.h7_worker, self.h7_queue),
             STREAM_LCR: (self.lcr_worker, self.lcr_queue),
@@ -630,6 +650,14 @@ class RecordingCore:
                                       self.stop_event,
                                       status_queue=self.status_queue)
             self.h7_worker.start()
+        elif label == STREAM_CAMERA:
+            if not self.cfg.camera.enabled:
+                return False, "camera is disabled for this session"
+            if self.camera_worker is not None and self.camera_worker.is_alive():
+                return False, "camera already connected"
+            cam = CameraWorker(self.cfg.camera, self.stop_event)
+            self.bind_camera(cam)
+            cam.start()
         else:
             return False, f"unknown stream {label!r}"
 
@@ -666,6 +694,52 @@ class RecordingCore:
             return False, "stage is disabled for this session"
         return self.stage_worker.set_limits(lo_mm, hi_mm)
 
+    # -- camera support ---------------------------------------------------
+    def _laser_to_mm(self, v_volts: float) -> Optional[float]:
+        """Raw laser volts → displacement mm using config calibration, or None
+        if the laser isn't calibrated (same formula as analyze_sma / console)."""
+        lc = self.cfg.calibration.laser
+        if lc.k_mV_per_um in (None, 0) or lc.V0_mV is None:
+            return None
+        return (v_volts * 1000.0 - lc.V0_mV) / lc.k_mV_per_um / 1000.0
+
+    def get_laser_hist(self) -> "list[tuple[float, float]]":
+        """Snapshot of recent (monotonic_s, displacement_mm) — for the camera
+        worker's motion trigger. Thread-safe."""
+        with self._laser_lock:
+            return list(self._laser_hist)
+
+    def camera_mark_fast(self) -> None:
+        """Nudge the camera into fast capture (heat/idle transitions)."""
+        if self.camera_worker is not None:
+            self.camera_worker.mark_fast()
+
+    def reconnect_camera(self) -> "tuple[bool, str]":
+        """Restart the camera worker to apply a new resolution/fps. Refused
+        while recording (would interrupt the video). Stops only the camera."""
+        if not self.cfg.camera.enabled:
+            return False, "camera is disabled for this session"
+        if self.recording:
+            return False, "stop recording before changing camera resolution/fps"
+        old = self.camera_worker
+        if old is not None:
+            old.stop_local()
+            old.join(timeout=3.0)
+        cam = CameraWorker(self.cfg.camera, self.stop_event)
+        self.bind_camera(cam)
+        cam.start()
+        self.log_event("reconnect", "camera reconfigured")
+        return True, "camera reconnecting…"
+
+    def bind_camera(self, cam: CameraWorker) -> None:
+        """Wire a CameraWorker's hooks to this core (recording gate, laser
+        history, session dir, event log). Called at build and on reconnect."""
+        cam.laser_provider = self.get_laser_hist
+        cam.is_recording = lambda: self.recording
+        cam.session_dir = lambda: self.paths.session_dir
+        cam.on_event = self.log_event
+        self.camera_worker = cam
+
     def _drain_lcr(self) -> list:
         out: list = []
         if self.lcr_queue is None:
@@ -691,9 +765,16 @@ class RecordingCore:
         if self.h7_queue is None:
             return out
         write = self.recording and self._h7_w is not None
+        cam_on = self.camera_worker is not None
         try:
             while True:
                 s: H7Sample = self.h7_queue.get_nowait()
+                # Feed the camera's motion trigger with calibrated laser mm.
+                if cam_on and s.channel == "laser":
+                    mm = self._laser_to_mm(s.value)
+                    if mm is not None:
+                        with self._laser_lock:
+                            self._laser_hist.append((s.monotonic_s, mm))
                 if write:
                     self._h7_w.writerow([
                         f"{s.host_timestamp_s:.6f}", f"{s.monotonic_s:.6f}",
@@ -793,9 +874,11 @@ class RecordingCore:
         return self.sma_send(h7.wdt(ms))
 
     def stop_actuation(self) -> bool:
-        """Graceful stop -> idle-low (still armed)."""
+        """Graceful stop -> idle-low (still armed). This is the drop toward the
+        idle voltage where the cooling elongation begins — force fast capture."""
         ok = self.sma_send(h7.stop())
         self.actuating = False
+        self.camera_mark_fast()
         return ok
 
     def _ensure_armed(self) -> bool:
@@ -811,6 +894,7 @@ class RecordingCore:
         if ok:
             self.actuating = True
             self._last_ping_mono = time.monotonic()
+            self.camera_mark_fast()
         return ok
 
     def cycle(self, v_high: float, v_idle: float,
@@ -822,6 +906,7 @@ class RecordingCore:
         if ok:
             self.actuating = True
             self._last_ping_mono = time.monotonic()
+            self.camera_mark_fast()
         return ok
 
     def start_cycle_from_config(self) -> bool:
@@ -868,7 +953,8 @@ class RecordingCore:
     # ------------------------------------------------------------------
     def stop_workers(self) -> None:
         self.stop_event.set()
-        for w in (self.lcr_worker, self.h7_worker, self.stage_worker):
+        for w in (self.lcr_worker, self.h7_worker, self.stage_worker,
+                  self.camera_worker):
             if w is None:
                 continue
             w.join(timeout=WORKER_JOIN_TIMEOUT_S)
@@ -925,6 +1011,13 @@ class RecordingCore:
                 "info": getattr(self.stage_worker, "info", None),
                 "n_dropped": getattr(self.stage_worker, "n_dropped", None),
                 "active": self._stage_active,
+            },
+            "camera": {
+                **asdict(self.cfg.camera),
+                "info": getattr(self.camera_worker, "info", None),
+                "actual_res": getattr(self.camera_worker, "actual_res", None),
+                "n_written": getattr(self.camera_worker, "n_written", None),
+                "active": self.camera_worker is not None,
             },
             "sma": asdict(self.cfg.sma),
             "calibration": asdict(self.cfg.calibration),

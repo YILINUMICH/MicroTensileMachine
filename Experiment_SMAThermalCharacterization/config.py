@@ -76,6 +76,31 @@ class StageConfig:
 
 
 @dataclass
+class CameraConfig:
+    """12MP USB3 camera (adaptive-FPS video, fixed resolution). Recording is
+    gated by the console's Start/Stop REC; the frame rate adapts to SMA motion
+    measured from the laser: fast while moving, a slow heartbeat once settled.
+
+    resolution/fps_fast take effect on (re)connect only (changing them reopens
+    the camera). fps_heartbeat / transient_guarantee_s / thresholds are live.
+    """
+    enabled: bool = False
+    index: int = 1                       # DirectShow device index (12MP = 1)
+    resolution: List[int] = field(default_factory=lambda: [1280, 720])
+    fps_fast: float = 60.0               # capture rate while the SMA is moving
+    fps_heartbeat: float = 1.0           # sparse rate once settled (guard record)
+    transient_guarantee_s: float = 10.0  # force fast this long after a heat/idle
+    change_threshold_mm: float = 1.0     # net laser move that counts as "moving"
+    median_window_ms: float = 200.0      # laser noise/jump rejection window
+    stop_dwell_s: float = 4.0            # settled this long with no move -> slow
+    jpeg_quality: int = 90
+
+    def res_tuple(self) -> tuple:
+        w, h = self.resolution
+        return (int(w), int(h))
+
+
+@dataclass
 class SmaConfig:
     """
     Parameters for the ON-M7 cyclic actuation state machine
@@ -160,6 +185,7 @@ class AppConfig:
     lcr: LcrConfig = field(default_factory=LcrConfig)
     h7: H7Config = field(default_factory=H7Config)
     stage: StageConfig = field(default_factory=StageConfig)
+    camera: CameraConfig = field(default_factory=CameraConfig)
     sma: SmaConfig = field(default_factory=SmaConfig)
     phases: PhasesConfig = field(default_factory=PhasesConfig)
     calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
@@ -174,6 +200,7 @@ class AppConfig:
             lcr=LcrConfig(**(d.get("lcr") or {})),
             h7=H7Config(**(d.get("h7") or {})),
             stage=StageConfig(**(d.get("stage") or {})),
+            camera=CameraConfig(**(d.get("camera") or {})),
             sma=SmaConfig(**(d.get("sma") or {})),
             phases=PhasesConfig(**(d.get("phases") or {})),
             calibration=CalibrationConfig(
@@ -189,6 +216,7 @@ class AppConfig:
             "lcr": asdict(self.lcr),
             "h7": asdict(self.h7),
             "stage": asdict(self.stage),
+            "camera": asdict(self.camera),
             "sma": asdict(self.sma),
             "phases": asdict(self.phases),
             "calibration": asdict(self.calibration),

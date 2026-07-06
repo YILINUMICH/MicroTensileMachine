@@ -22,6 +22,24 @@
 
 ## Console controls (GUI)
 
+- **Adaptive-FPS camera + live preview (2026-07-06).** A `CameraWorker` drives
+  the 12MP USB3 camera (index 1) at a **fixed resolution, variable frame rate**:
+  fast (`fps_fast`) while the SMA is moving, a slow **heartbeat** (`fps_heartbeat`)
+  once settled. "Moving" = net **median-filtered** laser displacement ≥
+  `change_threshold_mm` (robust to sensor noise/jumps); after `stop_dwell_s` with
+  no full-mm change it drops to heartbeat. Each heat/idle event forces fast for
+  `transient_guarantee_s`. Camera runs at native rate (grab-always), decoding
+  only frames it keeps — the tail costs almost nothing. **Gated by the same
+  Start/Stop REC**; auxiliary/isolated (a camera failure warns, never touches
+  H7). **Console controls:** resolution + fast-fps **dropdowns** (fps options
+  adapt to resolution; both locked while recording), live **transient** +
+  **heartbeat** fields, a **● cam** reconnect dot, and a **live preview** pane.
+  Verified end-to-end against the real camera (fast→heartbeat transition,
+  per-cycle JPEGs, snapshots, `frames.csv`, preview). **Storage:**
+  `<session>/video/{frames.csv, cycle_NN/*.jpg, snapshots/*.jpg}` —
+  `frames.csv` (`frame_idx,host_ts,monotonic,cycle,mode,rel_path,laser_mm`) is
+  the alignment key against `h7.csv`/`stage.csv`. Config: `camera:` block;
+  requires `opencv-python` (import is guarded — absent → camera disabled).
 - **No LCR (2026-07-06).** LCR is fully removed from this thermal module — no
   worker/connection, no `lcr.csv`, no LCR UI (status dot, `Ls/Rs` readout, plot
   row, and `ref open`/`ref short` are gone). `build_core` never constructs an

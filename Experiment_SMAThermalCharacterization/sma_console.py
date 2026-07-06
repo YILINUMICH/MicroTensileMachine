@@ -45,8 +45,8 @@ from typing import Optional
 from config import AppConfig
 from recording_core import (RecordingCore, StreamVerdict, make_console_paths,
                             HEALTH_TIMEOUT_S,
-                            STREAM_H7, STREAM_STAGE)
-from workers import (H7Worker, ZaberWorker)
+                            STREAM_H7, STREAM_STAGE, STREAM_CAMERA)
+from workers import (H7Worker, ZaberWorker, CameraWorker)
 
 
 _THIS_DIR = Path(__file__).resolve().parent
@@ -112,6 +112,12 @@ def build_core(cfg: AppConfig, paths, stop_event: threading.Event,
     else:
         logging.info("Stage stream disabled in config")
 
+    camera_worker = None
+    if cfg.camera.enabled:
+        camera_worker = CameraWorker(cfg.camera, stop_event)
+    else:
+        logging.info("Camera stream disabled in config")
+
     if not (h7_worker or stage_worker):
         logging.error("No streams enabled — nothing to record.")
         print("ERROR: no streams enabled in config (h7/stage both disabled).",
@@ -122,9 +128,12 @@ def build_core(cfg: AppConfig, paths, stop_event: threading.Event,
         cfg=cfg, paths=paths,
         lcr_worker=lcr_worker, h7_worker=h7_worker, stage_worker=stage_worker,
         lcr_queue=lcr_q, h7_queue=h7_q, stage_queue=stage_q,
-        status_queue=status_q, stop_event=stop_event,
+        status_queue=status_q, camera_worker=camera_worker, stop_event=stop_event,
         on_event=on_event, on_log=on_log)
-    workers = [w for w in (lcr_worker, h7_worker, stage_worker) if w is not None]
+    if camera_worker is not None:
+        core.bind_camera(camera_worker)     # wire recording gate / laser / dir
+    workers = [w for w in (lcr_worker, h7_worker, stage_worker, camera_worker)
+               if w is not None]
     return core, workers
 
 
@@ -230,8 +239,21 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
     code can be verified off the bench."""
     # Lazy Qt imports so --headless never needs a GUI stack. pyqtgraph.Qt
     # abstracts the binding (PyQt5/6, PySide2/6) — whichever is installed.
+    import numpy as np
     import pyqtgraph as pg
-    from pyqtgraph.Qt import QtCore, QtWidgets
+    from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
+
+    # Fast-FPS options offered per resolution (from the measured caps — see
+    # README). Resolution dropdown order matches this dict.
+    _CAM_MODES = {
+        (640, 360): [30, 60, 120],
+        (1280, 720): [30, 60, 120],
+        (1920, 1080): [15, 30, 60],
+        (2560, 1440): [15, 30, 45],
+        (3264, 2448): [10, 15, 20],
+        (3840, 2160): [10, 15, 20],
+        (4000, 3000): [5, 10, 15],
+    }
 
     # ---- small UI helpers --------------------------------------------------
     def _dot(ok: Optional[bool]) -> str:
@@ -327,9 +349,11 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             # hardware connection. Flat buttons so they read like status dots.
             self.lbl_h7 = QtWidgets.QPushButton("● H7")
             self.lbl_stage = QtWidgets.QPushButton("● stage")
+            self.lbl_cam = QtWidgets.QPushButton("● cam")
             self.lbl_h7.clicked.connect(lambda: self.on_reconnect(STREAM_H7))
             self.lbl_stage.clicked.connect(lambda: self.on_reconnect(STREAM_STAGE))
-            for w in (self.lbl_h7, self.lbl_stage):
+            self.lbl_cam.clicked.connect(lambda: self.on_reconnect(STREAM_CAMERA))
+            for w in (self.lbl_h7, self.lbl_stage, self.lbl_cam):
                 w.setFlat(True)
                 w.setCursor(QtCore.Qt.PointingHandCursor)
                 w.setToolTip("click to (re)connect this instrument")
@@ -431,7 +455,41 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             st_box.setEnabled(cfg.stage.enabled)
             v.addWidget(st_box)
 
-            # (LCR group removed — this thermal module has no LCR.)
+            # --- Camera group ---
+            # resolution + fast-fps are dropdowns (apply on reconnect, locked
+            # while recording); transient + heartbeat are live fields. A live
+            # preview sits below. (LCR group removed — no LCR in this module.)
+            cam_box = QtWidgets.QGroupBox("Camera")
+            camf = QtWidgets.QFormLayout(cam_box)
+            self._cam_loading = True
+            self.cmb_cam_res = QtWidgets.QComboBox()
+            for (cw, ch) in _CAM_MODES:
+                self.cmb_cam_res.addItem(f"{cw}×{ch}", (cw, ch))
+            cur_res = tuple(cfg.camera.res_tuple())
+            ri = self.cmb_cam_res.findData(cur_res)
+            if ri >= 0:
+                self.cmb_cam_res.setCurrentIndex(ri)
+            self.cmb_cam_fps = QtWidgets.QComboBox()
+            self._repopulate_fps_combo(cur_res, cfg.camera.fps_fast)
+            self.e_cam_transient = _labeled_field(cfg.camera.transient_guarantee_s)
+            self.e_cam_hb = _labeled_field(cfg.camera.fps_heartbeat)
+            self.cmb_cam_res.currentIndexChanged.connect(self.on_cam_res_changed)
+            self.cmb_cam_fps.currentIndexChanged.connect(self.on_cam_fps_changed)
+            self.e_cam_transient.editingFinished.connect(self.on_cam_transient)
+            self.e_cam_hb.editingFinished.connect(self.on_cam_heartbeat)
+            camf.addRow("resolution", self.cmb_cam_res)
+            camf.addRow("fast fps", self.cmb_cam_fps)
+            camf.addRow("transient (s)", self.e_cam_transient)
+            camf.addRow("heartbeat fps", self.e_cam_hb)
+            self.cam_preview = QtWidgets.QLabel("no preview")
+            self.cam_preview.setFixedSize(256, 144)
+            self.cam_preview.setAlignment(QtCore.Qt.AlignCenter)
+            self.cam_preview.setStyleSheet(
+                "background:#111; color:#888; border:1px solid #333;")
+            camf.addRow(self.cam_preview)
+            cam_box.setEnabled(cfg.camera.enabled)
+            v.addWidget(cam_box)
+            self._cam_loading = False
 
             # Per-field normalization specs: (widget, decimals, min, max).
             # Voltages are clamped to the LDO ceiling, stage positions to the
@@ -563,6 +621,7 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             self._ingest(batch)
             self._refresh_readouts()
             self._refresh_plots()
+            self._refresh_preview()
             self._refresh_indicators()
             ok, reason = self.core.check_health()
             if not ok:
@@ -575,6 +634,8 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             self.lbl_h7.setStyleSheet(_dot(self.core.stream_status(STREAM_H7)))
             self.lbl_stage.setStyleSheet(
                 _dot(self.core.stream_status(STREAM_STAGE)))
+            self.lbl_cam.setStyleSheet(
+                _dot(self.core.stream_status(STREAM_CAMERA)))
             if self.core.recording:
                 self.lbl_rec.setText("REC ●")
                 self.lbl_rec.setStyleSheet(_dot(True))
@@ -669,6 +730,11 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                         "background:#7f8c8d; color:white; font-weight:bold; "
                         "padding:4px 16px;")
                     self.append_log("Recording started.")
+            # Resolution/fps reopen the camera, so lock them while recording.
+            locked = self.core.recording
+            if hasattr(self, "cmb_cam_res"):
+                self.cmb_cam_res.setEnabled(not locked)
+                self.cmb_cam_fps.setEnabled(not locked)
             self._refresh_indicators()
 
         def on_reconnect(self, label: str):
@@ -740,6 +806,73 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             ok, msg = self.core.stage_set_limits(lo, hi)
             self.append_log(f"stage {msg}" if ok
                             else f"stage limits FAILED: {msg}")
+
+        # --- camera controls ---------------------------------------------
+        def _repopulate_fps_combo(self, res, want_fps):
+            """Fill the fast-fps dropdown with the options valid for `res`,
+            selecting the closest to want_fps."""
+            was = self._cam_loading
+            self._cam_loading = True
+            self.cmb_cam_fps.clear()
+            opts = _CAM_MODES.get(tuple(res), [30])
+            for f in opts:
+                self.cmb_cam_fps.addItem(str(f), f)
+            closest = min(opts, key=lambda f: abs(f - float(want_fps)))
+            self.cmb_cam_fps.setCurrentIndex(opts.index(closest))
+            self._cam_loading = was
+
+        def _apply_camera_reconnect(self, what: str):
+            """Push the current resolution/fps into cfg and restart the camera
+            (unless recording). Called from the res/fps dropdown handlers."""
+            if self._cam_loading:
+                return
+            res = self.cmb_cam_res.currentData()
+            fps = self.cmb_cam_fps.currentData()
+            if res is not None:
+                cfg.camera.resolution = [int(res[0]), int(res[1])]
+            if fps is not None:
+                cfg.camera.fps_fast = float(fps)
+            if not self.core:
+                return
+            ok, msg = self.core.reconnect_camera()
+            self.append_log(f"camera {what}: {msg}" if ok
+                            else f"camera {what}: {msg}")
+
+        def on_cam_res_changed(self):
+            if self._cam_loading:
+                return
+            res = self.cmb_cam_res.currentData()
+            self._repopulate_fps_combo(res, cfg.camera.fps_fast)
+            self._apply_camera_reconnect("resolution")
+
+        def on_cam_fps_changed(self):
+            self._apply_camera_reconnect("fps")
+
+        def on_cam_transient(self):
+            val = _normalize_field(self.e_cam_transient, 1, 0.0, 120.0)
+            if val is not None:
+                cfg.camera.transient_guarantee_s = val  # live (no reconnect)
+
+        def on_cam_heartbeat(self):
+            val = _normalize_field(self.e_cam_hb, 2, 0.05, 30.0)
+            if val is not None:
+                cfg.camera.fps_heartbeat = val          # live (no reconnect)
+
+        def _refresh_preview(self):
+            if self.core is None or self.core.camera_worker is None:
+                return
+            frame = self.core.camera_worker.latest_preview()
+            if frame is None:
+                return
+            h, w = frame.shape[:2]
+            rgb = np.ascontiguousarray(frame[:, :, ::-1])  # BGR->RGB
+            img = QtGui.QImage(rgb.data, w, h, 3 * w,
+                               QtGui.QImage.Format_RGB888)
+            pix = QtGui.QPixmap.fromImage(img).scaled(
+                self.cam_preview.width(), self.cam_preview.height(),
+                QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            self.cam_preview.setPixmap(pix)
+            self._preview_ref = rgb  # keep the buffer alive for the QImage
 
         # --- event/log plumbing ------------------------------------------
         # The core invokes these only from inside its own methods, which in

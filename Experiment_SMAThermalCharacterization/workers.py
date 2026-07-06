@@ -23,16 +23,28 @@ Author: Yilin Ma — HDR Lab, University of Michigan
 
 from __future__ import annotations
 
+import contextlib
+import csv
 import logging
 import queue
+import statistics
 import sys
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Callable, List, Optional, Tuple
 
-from config import LcrConfig, H7Config, StageConfig
+from config import CameraConfig, LcrConfig, H7Config, StageConfig
+
+# OpenCV is only needed for the camera worker; import defensively so the rest
+# of the recorder runs even where opencv-python isn't installed.
+try:
+    import cv2  # noqa: E402
+    _HAVE_CV2 = True
+except Exception:  # noqa: BLE001
+    cv2 = None
+    _HAVE_CV2 = False
 
 
 # Sibling-module imports via sys.path shims. Each driver/ reader is the
@@ -456,3 +468,293 @@ class ZaberWorker(threading.Thread):
             dt = time.monotonic() - t0
             if dt < poll:
                 time.sleep(poll - dt)
+
+
+# ---------------------------------------------------------------------------
+# Camera worker (adaptive-FPS video, fixed resolution)
+# ---------------------------------------------------------------------------
+class CameraWorker(threading.Thread):
+    """Owns the 12MP USB camera. Streams continuously for a live preview, and
+    while the console is recording, writes JPEG frames at an ADAPTIVE rate:
+    fast while the SMA is moving (net laser displacement > change_threshold_mm,
+    median-filtered), a slow heartbeat once it settles. A transient-guarantee
+    window forces fast right after each heat/idle command.
+
+    The camera is grabbed at its native rate (grab() paces the loop and keeps
+    the buffer fresh); frames are only DECODED (retrieve) when a frame is
+    actually needed for preview or writing — so the slow tail costs almost
+    nothing. Output: <session>/video/{frames.csv, cycle_NN/*.jpg, snapshots/}.
+
+    Callable hooks (bound by build_core after RecordingCore exists):
+      laser_provider()  -> list[(monotonic_s, displacement_mm)]  (recent)
+      is_recording()    -> bool
+      session_dir()     -> Path | None
+      on_event(kind,detail) -> None   (optional, logs to events.csv)
+    Auxiliary worker: a failure sets .error but never trips the shared
+    stop_event (mirrors LcrWorker/ZaberWorker).
+    """
+
+    PREVIEW_WIDTH = 480
+    PREVIEW_HZ = 15.0
+
+    def __init__(self, cfg: CameraConfig, stop_event: threading.Event):
+        super().__init__(name="CameraWorker", daemon=True)
+        self.cfg = cfg
+        self.stop_event = stop_event
+        # Hooks (safe defaults; rebound after core creation).
+        self.laser_provider: Callable[[], List[Tuple[float, float]]] = lambda: []
+        self.is_recording: Callable[[], bool] = lambda: False
+        self.session_dir: Callable[[], Optional[Path]] = lambda: None
+        self.on_event: Optional[Callable[[str, str], None]] = None
+
+        self.error: Optional[BaseException] = None
+        self.info: Optional[str] = None
+        self.actual_res: Optional[Tuple[int, int]] = None
+        self.actual_fps: Optional[float] = None
+        self.n_written = 0
+        self.mode = "idle"
+
+        self._cap = None
+        self._preview = None
+        self._preview_lock = threading.Lock()
+        self._fast_until = 0.0
+        self._anchor: Optional[float] = None
+        self._last_move = 0.0
+        self._last_write = 0.0
+        self._last_preview = 0.0
+
+        # Recording-file state.
+        self._rec_active = False
+        self._frames_f = None
+        self._frames_w = None
+        self._video_dir: Optional[Path] = None
+        self._cycle_idx = -1
+        self._frame_in_cycle = 0
+        self._frame_idx = 0
+        self._cur_cycle_dir: Optional[Path] = None
+        self._snapshot_pending = False
+        # Per-worker stop (separate from the shared stop_event) so resolution/
+        # fps changes can restart JUST the camera without touching other streams.
+        self._local_stop = threading.Event()
+        self.logger = logging.getLogger("CameraWorker")
+
+    def stop_local(self) -> None:
+        """Stop only this worker (for a resolution/fps reconnect)."""
+        self._local_stop.set()
+
+    # -- public API (called from the GUI / core thread) -------------------
+    def mark_fast(self) -> None:
+        """Force fast capture for transient_guarantee_s (heat/idle events)."""
+        self._fast_until = time.monotonic() + self.cfg.transient_guarantee_s
+
+    def latest_preview(self):
+        """Return the most recent BGR frame (ndarray) for the GUI, or None."""
+        with self._preview_lock:
+            return None if self._preview is None else self._preview
+
+    # -- thread body ------------------------------------------------------
+    def run(self) -> None:
+        try:
+            self._main_loop()
+        except BaseException as e:  # noqa: BLE001
+            self.error = e
+            self.logger.exception("Camera worker crashed: %s", e)
+        finally:
+            self._close_files()
+            if self._cap is not None:
+                with_release = getattr(self._cap, "release", None)
+                if with_release:
+                    try:
+                        self._cap.release()
+                    except Exception:  # noqa: BLE001
+                        pass
+            self.logger.info("Camera worker exit (written=%d)", self.n_written)
+
+    def _open(self):
+        if not _HAVE_CV2:
+            raise RuntimeError("opencv-python (cv2) not installed — camera off")
+        cap = cv2.VideoCapture(self.cfg.index, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            raise RuntimeError(
+                f"cannot open camera index {self.cfg.index} (check USB/driver)")
+        w, h = self.cfg.res_tuple()
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+        cap.set(cv2.CAP_PROP_FPS, float(self.cfg.fps_fast))
+        aw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        ah = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.actual_res = (aw, ah)
+        self.actual_fps = self.cfg.fps_fast
+        self.info = f"cam[{self.cfg.index}] {aw}x{ah} MJPG"
+        # Warm up (the first couple of reads on DSHOW can be ~1 s each).
+        for _ in range(2):
+            cap.read()
+        return cap
+
+    def _main_loop(self) -> None:
+        cap = self._open()
+        self._cap = cap
+        self.logger.info("Camera ready: %s", self.info)
+        while not (self.stop_event.is_set() or self._local_stop.is_set()):
+            if not cap.grab():          # paces to camera fps; keeps buffer fresh
+                time.sleep(0.005)
+                continue
+            now = time.monotonic()
+
+            # Recording edges (driven by the console's Start/Stop REC).
+            rec = False
+            try:
+                rec = bool(self.is_recording())
+            except Exception:  # noqa: BLE001
+                rec = False
+            if rec and not self._rec_active:
+                self._open_files()
+            elif not rec and self._rec_active:
+                self._close_files()
+
+            mode = self._decide_mode(now)
+            entering_fast = (mode == "fast" and self.mode != "fast")
+            if self._rec_active and entering_fast:
+                self._begin_cycle()
+            self.mode = mode
+
+            interval = (1.0 / self.cfg.fps_fast if mode == "fast"
+                        else 1.0 / max(self.cfg.fps_heartbeat, 1e-3))
+            need_write = self._rec_active and (now - self._last_write) >= interval
+            need_preview = (now - self._last_preview) >= (1.0 / self.PREVIEW_HZ)
+            need_snap = self._rec_active and self._snapshot_pending
+
+            if need_write or need_preview or need_snap:
+                ok, frame = cap.retrieve()
+                if ok and frame is not None:
+                    if need_snap:
+                        self._write_snapshot(frame, now)
+                        self._snapshot_pending = False
+                    if need_preview:
+                        self._update_preview(frame)
+                        self._last_preview = now
+                    if need_write:
+                        self._write_frame(frame, now, mode)
+                        self._last_write = now
+
+    # -- adaptive-rate decision ------------------------------------------
+    def _filtered_laser(self, now: float) -> Optional[float]:
+        try:
+            hist = self.laser_provider()
+        except Exception:  # noqa: BLE001
+            hist = []
+        if not hist:
+            return None
+        win = self.cfg.median_window_ms / 1000.0
+        recent = [mm for (t, mm) in hist if (now - t) <= win]
+        if not recent:
+            recent = [hist[-1][1]]
+        return statistics.median(recent)
+
+    def _decide_mode(self, now: float) -> str:
+        if now < self._fast_until:
+            return "fast"
+        cur = self._filtered_laser(now)
+        if cur is None:
+            return "heartbeat"          # no laser signal -> event-driven only
+        if self._anchor is None:
+            self._anchor = cur
+            self._last_move = now
+            return "fast"
+        if abs(cur - self._anchor) >= self.cfg.change_threshold_mm:
+            self._anchor = cur          # re-anchor on each real move
+            self._last_move = now
+            return "fast"
+        if (now - self._last_move) < self.cfg.stop_dwell_s:
+            return "fast"               # still within the settle dwell
+        return "heartbeat"
+
+    # -- file output ------------------------------------------------------
+    def _open_files(self) -> None:
+        sd = None
+        try:
+            sd = self.session_dir()
+        except Exception:  # noqa: BLE001
+            sd = None
+        if sd is None:
+            return
+        self._video_dir = Path(sd) / "video"
+        (self._video_dir / "snapshots").mkdir(parents=True, exist_ok=True)
+        self._frames_f = open(self._video_dir / "frames.csv", "w", newline="")
+        self._frames_w = csv.writer(self._frames_f)
+        self._frames_w.writerow(["frame_idx", "host_timestamp_s", "monotonic_s",
+                                 "cycle_idx", "mode", "rel_path", "laser_mm"])
+        self._cycle_idx = -1
+        self._frame_idx = 0
+        self._snapshot_pending = False
+        self._rec_active = True
+        self.mode = "idle"              # force a fresh cycle on first fast frame
+        self.mark_fast()                # start recording fast
+        self._emit("camera", "video recording start")
+
+    def _close_files(self) -> None:
+        if self._frames_f is not None:
+            with contextlib.suppress(Exception):
+                self._frames_f.flush()
+                self._frames_f.close()
+        self._frames_f = self._frames_w = None
+        if self._rec_active:
+            self._emit("camera", f"video recording stop ({self.n_written} frames)")
+        self._rec_active = False
+
+    def _begin_cycle(self) -> None:
+        self._cycle_idx += 1
+        self._frame_in_cycle = 0
+        self._cur_cycle_dir = self._video_dir / f"cycle_{self._cycle_idx:02d}"
+        self._cur_cycle_dir.mkdir(parents=True, exist_ok=True)
+        self._snapshot_pending = True   # capture a reference frame at onset
+
+    def _write_frame(self, frame, now: float, mode: str) -> None:
+        if self._cur_cycle_dir is None:
+            self._begin_cycle()
+        path = self._cur_cycle_dir / f"{self._frame_in_cycle:06d}.jpg"
+        self._save_jpeg(frame, path)
+        self._index_row(path, now, self._cycle_idx, mode)
+        self._frame_in_cycle += 1
+        self.n_written += 1
+        if self.n_written % 30 == 0 and self._frames_f is not None:
+            self._frames_f.flush()
+
+    def _write_snapshot(self, frame, now: float) -> None:
+        ts = int(now * 1000)
+        path = (self._video_dir / "snapshots"
+                / f"cyc{self._cycle_idx:02d}_{ts}.jpg")
+        self._save_jpeg(frame, path)
+        self._index_row(path, now, self._cycle_idx, "snap")
+
+    def _index_row(self, path: Path, now: float, cycle: int, mode: str) -> None:
+        if self._frames_w is None:
+            return
+        laser = self._filtered_laser(now)
+        rel = path.relative_to(self._video_dir).as_posix()
+        self._frames_w.writerow([
+            self._frame_idx, f"{time.time():.6f}", f"{now:.6f}",
+            cycle, mode, rel, "" if laser is None else f"{laser:.4f}"])
+        self._frame_idx += 1
+
+    def _save_jpeg(self, frame, path: Path) -> None:
+        cv2.imwrite(str(path), frame,
+                    [cv2.IMWRITE_JPEG_QUALITY, int(self.cfg.jpeg_quality)])
+
+    def _update_preview(self, frame) -> None:
+        h, w = frame.shape[:2]
+        if w > self.PREVIEW_WIDTH:
+            scale = self.PREVIEW_WIDTH / float(w)
+            small = cv2.resize(frame, (self.PREVIEW_WIDTH, int(h * scale)))
+        else:
+            small = frame.copy()
+        with self._preview_lock:
+            self._preview = small
+
+    def _emit(self, kind: str, detail: str) -> None:
+        if self.on_event is not None:
+            try:
+                self.on_event(kind, detail)
+            except Exception:  # noqa: BLE001
+                pass

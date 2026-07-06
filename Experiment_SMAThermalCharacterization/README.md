@@ -77,14 +77,27 @@ python sma_console.py --headless          # scripted run, no GUI (Ctrl+C to stop
 python sma_console.py --session-id flexinol_run01
 ```
 
-One window (or one headless loop) controls the **stage and SMA** and
+One window (or one headless loop) controls the **stage, SMA, and camera** and
 continuously logs every enabled stream. Layout A: top status bar
-(H7/stage connection dots + `REC` + a persistent red **DISARM**), left
+(H7/stage/cam connection dots + `REC` + a persistent red **DISARM**), left
 control rail (SMA arm/disarm, fire↔cycle, start/stop, live `V/I/R`; stage
-position/target + home/go/STOP + limit window), four stacked live plots
-(laser displacement / load force / SMA V·I / SMA R), and a bottom event log.
-(No LCR row.) The laser/load plots show **mm / N** when calibration is present
-in `config.yaml`, else fall back to raw volts — display-only; CSVs stay raw.
+position/target + home/go/STOP + limit window; **camera** resolution/fast-fps
+dropdowns + transient/heartbeat fields + **live preview**), four stacked live
+plots (laser displacement / load force / SMA V·I / SMA R), and a bottom event
+log. (No LCR row.) The laser/load plots show **mm / N** when calibration is
+present in `config.yaml`, else fall back to raw volts — display-only; CSVs stay
+raw.
+
+**Camera (adaptive-FPS video + preview).** The 12MP USB3 camera records at a
+fixed resolution and **variable frame rate**: fast while the SMA moves, a slow
+heartbeat once settled ("moving" = median-filtered net laser displacement ≥
+`change_threshold_mm`, so sensor noise doesn't keep it recording). Each heat/idle
+event forces fast for `transient_guarantee_s`. Same **Start/Stop REC** button;
+auxiliary (a camera failure warns, never stops the SMA run). Resolution/fast-fps
+apply on reconnect and lock while recording; transient/heartbeat are live.
+Output → `video/{frames.csv, cycle_NN/*.jpg, snapshots/*.jpg}`; `frames.csv`
+timestamps every frame on the shared clock for offline join. Needs
+`opencv-python`.
 
 A 20 Hz timer is the heartbeat: drain queues → append CSVs → update
 readouts/plots → run the staleness monitor → auto-`disarm` on a critical
@@ -92,9 +105,10 @@ stall. **The MOSFET is armed only around an actuation** and `DISARM` is
 always live.
 
 Output: `data/console_<session_id>/` with continuous `h7.csv` /
-`stage.csv` / `status.csv` (no `lcr.csv`), plus **`events.csv`**
+`stage.csv` / `status.csv` (no `lcr.csv`), the **`video/`** dir
+(`frames.csv` + `cycle_NN/*.jpg` + `snapshots/*.jpg`), plus **`events.csv`**
 (`host_timestamp_s, monotonic_s, kind, detail`; `kind` ∈
-`session/cmd/arm/disarm/warn/error`), `meta.json`, and `session.log`.
+`session/cmd/arm/disarm/camera/warn/error`), `meta.json`, and `session.log`.
 
 **Critical vs auxiliary streams:** the **H7** sensor hub is critical — a
 startup failure aborts and a >3 s mid-run stall auto-disarms. The **Zaber
