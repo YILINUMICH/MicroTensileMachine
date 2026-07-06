@@ -1,0 +1,89 @@
+# SMA THERMAL characterization recorder config (forked from V3)
+#
+# One file to set every instrument + sensor parameter for a session.
+# Durations: seconds. Frequencies: Hz. Voltages: V. Distances: mm.
+#
+# Design rule: the RECORDER only configures instruments at startup and logs
+# RAW streams. It does NOT convert units or push calibration to firmware.
+# The `calibration:` block is consumed ONLY by analyze_sma.py (offline).
+
+# ── LCR meter ─────────────────────────────────────────────────────────
+# REMOVED from this thermal module: the console does not connect to, record,
+# or control an LCR. `enabled: false` is authoritative; the console also
+# hard-disables it (build_core never constructs an LcrWorker).
+lcr:
+  enabled: false
+
+# ── Portenta H7 (combined firmware: sensors + SMA on one USB-CDC port) ──
+# Streams src=1 laser, 2 load, 3 SMA V, 4 SMA I, 5 SMA R. The recorder logs
+# every enabled channel raw; demux + scaling happen offline in the analyzer.
+h7:
+  enabled: true
+  port: COM8
+  baud: 115200
+  channels: [laser, load, sma_v, sma_i, sma_r]   # which src streams to keep
+  startup_commands: []        # optional cmds sent to H7 at startup (e.g.
+                              #   ["gain 10", "shunt 0.1"]). EMPTY by default —
+                              #   the recorder stays a pure logger. Inert hook
+                              #   for future scripted actuation.
+
+# ── Zaber linear stage (X-LSQ300A-E01) ────────────────────────────────
+stage:
+  enabled: true
+  port: COM5                  # null = auto-detect Zaber (FTDI 0403:6001)
+  position_limits_mm: [5, 40] # firmware/software travel clamp for THIS workflow
+  max_velocity_mm_s: 10.0
+  reading_rate_hz: 100
+  home_on_start: false        # true = home before recording (clears the run)
+  move_to_zero_on_start: false
+  zero_mm: 10.0               # mechanical zero reference (recorded in meta)
+  poll_interval_s: 0.02       # ~50 Hz position poll
+
+# ── SMA cyclic actuation (the ON-M7 experiment state machine) ─────────
+# The firmware runs the heat/cool cycle deterministically off M7's own
+# clock — the PC is NOT in the timing loop. With enabled=true the recorder
+# sends one `cycle …` at RAW start, a `ping` heartbeat each second, and
+# `stop` at the end. enabled=false → recorder is a pure logger (drive the
+# SMA manually from the H7 console).
+sma:
+  enabled: false
+  v_high: 3.0                 # heating/actuation voltage (V)
+  v_low: 0.0                  # cooling-phase voltage (0 = off)
+  fire_ms: 2000               # heating duration per cycle
+  cool_ms: 8000               # cooling duration per cycle
+  n_cycles: 10                # 0 = continuous until RAW stop
+  wdt_ms: 5000                # M7 heartbeat watchdog timeout (0 = off);
+                              #   recorder pings every 1 s when driving
+
+# ── Phase durations (OPEN/SHORT LCR de-embed calibration) ─────────────
+phases:
+  open_duration_s: 20.0       # OPEN calibration recording window
+  short_duration_s: 20.0      # SHORT calibration recording window
+  # RAW (experiment) runs until Ctrl+C.
+
+# ── Calibration coefficients — ANALYSIS ONLY (not applied by recorder) ─
+# Filled from Calibrate_LaserHead / Calibrate_LoadCell. analyze_sma.py uses
+# these to convert raw voltages → physical units. null = leave raw.
+calibration:
+  laser:
+    # From Calibrate_LaserHead/calibration.json (2026-05-27 run09, bare EVM;
+    # R²=0.99999). displacement_um = (V_mV − V0_mV) / k_mV_per_um.
+    k_mV_per_um: -0.49779577092171906
+    V0_mV: 2503.7500968693835
+  load_cell:
+    # From Calibrate_LoadCell/calibration.json (2026-05-28 run07; sensitivity
+    # 10.2009 V/N, V0 = −34.1855 mV). Converted to this schema
+    # (force_N = scale·(V − offset)):  scale_N_per_V = 1/sensitivity_V_per_N,
+    # offset_V = V0_mV/1000. Carries ~5 mN fwd/rev hysteresis (see that json).
+    scale_N_per_V: 0.09803089999362627
+    offset_V: -0.03418552305418667
+  current_sense:              # firmware INA296A defaults — recorded for
+    gain_V_per_V: 10.0        # traceability (the analyzer trusts the
+    shunt_ohm: 0.1            # firmware-streamed src=4 I / src=5 R directly;
+    ioffset_V: 0.0            # these only matter if recomputing from raw).
+
+# ── Run metadata ──────────────────────────────────────────────────────
+run:
+  operator: ""                # filled into meta.json
+  notes: ""                   # free-form, also in meta.json
+  output_dir: data            # relative to sma_recorder.py (or absolute)
