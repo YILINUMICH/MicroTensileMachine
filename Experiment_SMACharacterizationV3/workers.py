@@ -334,6 +334,59 @@ class ZaberWorker(threading.Thread):
         self._stage = None
         self.logger = logging.getLogger("ZaberWorker")
 
+    # -- operator-initiated motion (manual, not part of the phase pipeline) --
+    # These are called from the GUI thread. The underlying driver serializes
+    # every serial transaction with its own lock, so it is safe to invoke them
+    # while this worker's poll loop is reading position on its own thread.
+    def request_home(self) -> "tuple[bool, str]":
+        """Home the stage. Blocks until the driver returns (homing is a
+        firmware routine)."""
+        stage = self._stage
+        if stage is None:
+            return False, "stage not connected"
+        ok = stage.home()
+        return (True, "homed") if ok else (False, "home command failed")
+
+    def request_move(self, target_mm: float) -> "tuple[bool, str]":
+        """Command an absolute go-to. Returns (accepted, message). The move
+        itself runs asynchronously on the stage (wait_until_idle=False)."""
+        stage = self._stage
+        if stage is None:
+            return False, "stage not connected"
+        if not stage.is_homed():
+            return False, "stage not homed — click Home first"
+        ok = stage.move_to(target_mm)
+        if not ok:
+            return False, "move command failed (see session log)"
+        lo, hi = self.cfg.limits_tuple()
+        clamped = max(lo, min(target_mm, hi))
+        if clamped != target_mm:
+            return True, (f"moving to {clamped:.3f} mm "
+                          f"(clamped from {target_mm:.3f}, limits [{lo}, {hi}])")
+        return True, f"moving to {target_mm:.3f} mm"
+
+    def request_stop(self) -> "tuple[bool, str]":
+        """Emergency stop: halt any motion immediately. Does not require a
+        homed stage — safe to hit at any time."""
+        stage = self._stage
+        if stage is None:
+            return False, "stage not connected"
+        ok = stage.stop()
+        return (True, "STOPPED") if ok else (False, "stop command failed")
+
+    def set_limits(self, lo_mm: float, hi_mm: float) -> "tuple[bool, str]":
+        """Update the soft position-limit window used to clamp go-to moves and
+        to judge the workflow-window health warning. Applies to both the live
+        driver and this worker's config so clamp messages stay consistent."""
+        if not (hi_mm > lo_mm):
+            return False, f"invalid window: max ({hi_mm}) must exceed min ({lo_mm})"
+        self.cfg.position_limits_mm = [float(lo_mm), float(hi_mm)]
+        stage = self._stage
+        if stage is not None:
+            stage.min_pos = float(lo_mm)
+            stage.max_pos = float(hi_mm)
+        return True, f"limits set to [{lo_mm:.3f}, {hi_mm:.3f}] mm"
+
     def run(self) -> None:
         try:
             self._main_loop()

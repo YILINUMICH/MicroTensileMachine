@@ -36,6 +36,28 @@
 - **Stage health.** A connected, streaming Zaber **passes** even when parked
   outside the workflow window `[lo, hi]` (it's telemetry-only) — that's now a
   warning, not a `FAIL`/"offline" verdict.
+- **Manual stage motion (2026-07-06).** The Stage group now has **home** + **go**
+  + **STOP** buttons (and Enter in the `target (mm)` field triggers **go**), plus
+  editable **min/max limit fields** with a **set** button. These are
+  operator-initiated only — the recording pipeline stays telemetry-only and never
+  autonomously commands motion. Motion is routed through the worker that owns the
+  serial session (`RecordingCore.stage_home/stage_move/stage_stop/stage_set_limits`
+  → `ZaberWorker`), and the driver now serializes every serial transaction with a
+  lock, so a move issued while the poll loop reads position no longer gets
+  dropped/garbled. **STOP** is an e-stop (halts motion immediately, no homing
+  required). The **limit window** clamps go-to moves and also drives the health
+  "workflow window"; editing it applies at runtime to both the driver and config.
+  Absolute go-to requires a homed stage (click **home** first, since
+  `home_on_start` is `false` by default); clamps and not-homed refusals are
+  surfaced in the log. **To-Test on the bench.**
+- **Input-field normalization (2026-07-06).** Every numeric field self-tidies
+  when focus leaves it (and again when its button is clicked): values are parsed,
+  clamped to a per-field range, and reformatted to fixed precision — voltages to 2
+  dp clamped to `SMA_MAX_V = 5.2 V` (LDO ceiling), stage target/limit fields to 2
+  dp clamped to `STAGE_MAX_MM = 300 mm` (travel), time (ms) and cycle count as
+  integers. So typing `100` shows `100.00`, and an over-range `6 V` snaps to
+  `5.20`. The limits row was also re-spaced (the `max` field no longer overlaps
+  the `set` button).
 - **Laser/load voltage-glitch filter (host-side).** The combined firmware emits
   one laser/load sample with `value==0 V` on ~every 32nd ADC1 frame while its
   `raw_code` is a normal non-zero value (the paired load sample is also dropped
@@ -61,8 +83,12 @@
 - [ ] **Verify H7 channel rates** — confirm `[STATUS]` shows no drops with all 5 src streaming during a `drive`.
 - [ ] **FIRMWARE BUG: laser/load V-field zero-glitch** (`Firmware_SMASensorHub_PIO`) — ~every 32nd ADC1 frame emits `voltage_V==0` despite a valid `raw_code` (and skips the paired ADC2/load sample). Raw codes are correct, so it's in the M4 voltage path / ADC1↔ADC2 interleave, not the ADC read. Currently masked host-side by the `H7Worker` glitch filter; fix at the source on the bench (suspect the `r1.status & 0x80` ADC2-piggyback branch around `main.cpp:1198-1214`).
 - [x] ~~**SMA scripted actuation**~~ — done 2026-06-21: recorder drives the on-M7 `cycle` state machine (params + heartbeat) when `sma.enabled`. Bench-verify the heat/cool timing + watchdog.
-- [ ] **Scripted STAGE profile** — optional RAW-phase stage motion (still telemetry-only).
-- [ ] **Stage motion during RAW** — currently telemetry-only; decide whether the recorder should command the stage.
+- [ ] **Bench-verify manual stage motion** — home + go buttons issue reliable
+  commands now that the driver serializes serial I/O (`_serial_lock`); confirm on
+  the rig that a go-to lands where expected and no commands are dropped.
+- [ ] **Confirm stage home direction** — see `Driver_ZaberStage/diag_home.py`;
+  the console home appeared to be on the opposite end vs Zaber Launcher.
+- [ ] **Scripted STAGE profile** — optional RAW-phase stage motion (recorder-driven, still deferred; manual motion is now available).
 - [ ] Flip to **Stable** once a real session records cleanly and the analyzer produces a sensible dashboard.
 
 See [../README.md](../README.md) for the project map.

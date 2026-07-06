@@ -642,6 +642,30 @@ class RecordingCore:
         self._log("info", f"{label}: reconnect requested")
         return True, f"{label}: reconnecting…"
 
+    # -- operator-initiated stage motion (manual) -------------------------
+    # The recorder pipeline stays telemetry-only; these are façade passthroughs
+    # so the GUI can drive the stage manually without reaching into the worker
+    # (which restart_worker() may replace). Always resolve the CURRENT worker.
+    def stage_home(self) -> "tuple[bool, str]":
+        if not self._stage_active or self.stage_worker is None:
+            return False, "stage is disabled for this session"
+        return self.stage_worker.request_home()
+
+    def stage_move(self, target_mm: float) -> "tuple[bool, str]":
+        if not self._stage_active or self.stage_worker is None:
+            return False, "stage is disabled for this session"
+        return self.stage_worker.request_move(target_mm)
+
+    def stage_stop(self) -> "tuple[bool, str]":
+        if not self._stage_active or self.stage_worker is None:
+            return False, "stage is disabled for this session"
+        return self.stage_worker.request_stop()
+
+    def stage_set_limits(self, lo_mm: float, hi_mm: float) -> "tuple[bool, str]":
+        if not self._stage_active or self.stage_worker is None:
+            return False, "stage is disabled for this session"
+        return self.stage_worker.set_limits(lo_mm, hi_mm)
+
     def _drain_lcr(self) -> list:
         out: list = []
         if self.lcr_queue is None:

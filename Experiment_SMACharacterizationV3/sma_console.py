@@ -57,6 +57,10 @@ PLOT_WINDOW_S = 30.0
 PLOT_MAX_POINTS = 6000
 GUI_TICK_MS = 50          # ~20 Hz heartbeat (drain + plots + health)
 
+# Hardware ceilings enforced on operator input fields.
+SMA_MAX_V = 5.2           # LDO can't drive the SMA above this; clamp any input.
+STAGE_MAX_MM = 300.0      # X-LSQ300A travel; no position/limit may exceed this.
+
 
 # ===========================================================================
 # Shared setup (used by both front ends)
@@ -245,6 +249,28 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
         e.setFixedWidth(width)
         return e
 
+    def _normalize_field(edit, decimals: int,
+                         lo: "float | None" = None,
+                         hi: "float | None" = None):
+        """Parse, clamp to [lo, hi], round to `decimals`, and write the tidy
+        value back into the field. Returns the float value, or None if the
+        field isn't a number (left untouched so the user can fix it).
+
+        This is what enforces the hardware ceilings (voltage ≤ SMA_MAX_V,
+        stage ≤ STAGE_MAX_MM) and the "100 -> 100.00" decimal formatting.
+        """
+        txt = edit.text().strip()
+        try:
+            val = float(txt)
+        except ValueError:
+            return None
+        if lo is not None:
+            val = max(lo, val)
+        if hi is not None:
+            val = min(hi, val)
+        edit.setText(f"{val:.{decimals}f}")
+        return val
+
     class MainWindow(QtWidgets.QMainWindow):
         def __init__(self):
             super().__init__()
@@ -352,6 +378,40 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             self.e_target = _labeled_field(cfg.stage.zero_mm)
             sf.addRow("position", self.lbl_stage_pos)
             sf.addRow("target (mm)", self.e_target)
+            # Manual, operator-initiated motion. The recorder pipeline stays
+            # telemetry-only; these buttons just drive the stage directly.
+            # Absolute go-to needs a homed stage, so Home is offered too.
+            st_row = QtWidgets.QHBoxLayout()
+            self.btn_stage_home = QtWidgets.QPushButton("home")
+            self.btn_stage_go = QtWidgets.QPushButton("go")
+            self.btn_stage_stop = QtWidgets.QPushButton("STOP")
+            self.btn_stage_stop.setStyleSheet(
+                "background:#c0392b; color:white; font-weight:bold;")
+            self.btn_stage_home.clicked.connect(self.on_stage_home)
+            self.btn_stage_go.clicked.connect(self.on_stage_move)
+            self.btn_stage_stop.clicked.connect(self.on_stage_stop)
+            self.e_target.returnPressed.connect(self.on_stage_move)
+            st_row.addWidget(self.btn_stage_home)
+            st_row.addWidget(self.btn_stage_go)
+            st_row.addWidget(self.btn_stage_stop)
+            sf.addRow(st_row)
+            # Configurable soft-limit window (clamps go-to; also the health
+            # "workflow window"). Prefilled from config; "set" applies at runtime.
+            lo0, hi0 = cfg.stage.limits_tuple()
+            self.e_lim_lo = _labeled_field(lo0, width=52)
+            self.e_lim_hi = _labeled_field(hi0, width=52)
+            lim_row = QtWidgets.QHBoxLayout()
+            lim_row.setSpacing(4)
+            lim_row.addWidget(QtWidgets.QLabel("min"))
+            lim_row.addWidget(self.e_lim_lo)
+            lim_row.addSpacing(8)
+            lim_row.addWidget(QtWidgets.QLabel("max"))
+            lim_row.addWidget(self.e_lim_hi)
+            lim_row.addStretch(1)
+            self.btn_stage_setlim = QtWidgets.QPushButton("set")
+            self.btn_stage_setlim.clicked.connect(self.on_stage_set_limits)
+            lim_row.addWidget(self.btn_stage_setlim)
+            sf.addRow("limits (mm)", lim_row)
             st_box.setEnabled(cfg.stage.enabled)
             v.addWidget(st_box)
 
@@ -370,6 +430,28 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             lf.addRow(ref_row)
             lcr_box.setEnabled(cfg.lcr.enabled)
             v.addWidget(lcr_box)
+
+            # Per-field normalization specs: (widget, decimals, min, max).
+            # Voltages are clamped to the LDO ceiling, stage positions to the
+            # travel; time (ms) and cycle count are integers (0 decimals). Each
+            # field self-normalizes when focus leaves it (editingFinished), so a
+            # typed "100" becomes "100.00" and out-of-range values snap to the
+            # ceiling immediately.
+            self._field_specs = [
+                (self.e_vhigh, 2, 0.0, SMA_MAX_V),
+                (self.e_vidle, 2, 0.0, SMA_MAX_V),
+                (self.e_thigh, 0, 0.0, None),
+                (self.e_tidle, 0, 0.0, None),
+                (self.e_n,     0, 0.0, None),
+                (self.e_target, 2, 0.0, STAGE_MAX_MM),
+                (self.e_lim_lo, 2, 0.0, STAGE_MAX_MM),
+                (self.e_lim_hi, 2, 0.0, STAGE_MAX_MM),
+            ]
+            for widget, decimals, flo, fhi in self._field_specs:
+                widget.editingFinished.connect(
+                    lambda w=widget, d=decimals, a=flo, b=fhi:
+                    _normalize_field(w, d, a, b))
+                _normalize_field(widget, decimals, flo, fhi)  # tidy initial value
 
             v.addStretch(1)
             return rail
@@ -539,15 +621,18 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
 
         # --- command handlers -------------------------------------------
         def _sma_params(self):
-            try:
-                return (float(self.e_vhigh.text()), float(self.e_vidle.text()),
-                        int(float(self.e_thigh.text())),
-                        int(float(self.e_tidle.text())),
-                        int(float(self.e_n.text())))
-            except ValueError:
+            # Normalize first so voltages are clamped to SMA_MAX_V and the
+            # fields show tidy values before we act on them.
+            vh = _normalize_field(self.e_vhigh, 2, 0.0, SMA_MAX_V)
+            vi = _normalize_field(self.e_vidle, 2, 0.0, SMA_MAX_V)
+            th = _normalize_field(self.e_thigh, 0, 0.0, None)
+            ti = _normalize_field(self.e_tidle, 0, 0.0, None)
+            n = _normalize_field(self.e_n, 0, 0.0, None)
+            if None in (vh, vi, th, ti, n):
                 QtWidgets.QMessageBox.warning(
                     self, "Bad input", "SMA fields must be numbers.")
                 return None
+            return (vh, vi, int(th), int(ti), int(n))
 
         def on_arm(self):
             if self.core:
@@ -621,6 +706,45 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                 self.core.ref_open()
             else:
                 self.core.ref_short()
+
+        def on_stage_home(self):
+            if not self.core:
+                return
+            ok, msg = self.core.stage_home()
+            self.append_log(f"stage home: {msg}" if ok
+                            else f"stage home FAILED: {msg}")
+
+        def on_stage_move(self):
+            if not self.core:
+                return
+            target = _normalize_field(self.e_target, 2, 0.0, STAGE_MAX_MM)
+            if target is None:
+                QtWidgets.QMessageBox.warning(
+                    self, "Bad input", "Target must be a number (mm).")
+                return
+            ok, msg = self.core.stage_move(target)
+            self.append_log(f"stage move: {msg}" if ok
+                            else f"stage move FAILED: {msg}")
+
+        def on_stage_stop(self):
+            if not self.core:
+                return
+            ok, msg = self.core.stage_stop()
+            self.append_log(f"stage: {msg}" if ok
+                            else f"stage STOP FAILED: {msg}")
+
+        def on_stage_set_limits(self):
+            if not self.core:
+                return
+            lo = _normalize_field(self.e_lim_lo, 2, 0.0, STAGE_MAX_MM)
+            hi = _normalize_field(self.e_lim_hi, 2, 0.0, STAGE_MAX_MM)
+            if lo is None or hi is None:
+                QtWidgets.QMessageBox.warning(
+                    self, "Bad input", "Limits must be numbers (mm).")
+                return
+            ok, msg = self.core.stage_set_limits(lo, hi)
+            self.append_log(f"stage {msg}" if ok
+                            else f"stage limits FAILED: {msg}")
 
         # --- event/log plumbing ------------------------------------------
         # The core invokes these only from inside its own methods, which in

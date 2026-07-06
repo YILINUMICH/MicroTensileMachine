@@ -116,7 +116,14 @@ class ZaberStage:
         self._is_homed = False
         
         # Thread control
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()          # guards cached Python state only
+        # Guards every serial transaction (request+reply) on the shared Zaber
+        # Connection. The background reader loop and any command (home / move /
+        # set_velocity / stop) run on different threads; without this, their
+        # ASCII request/reply frames interleave on the wire and commands get
+        # dropped or garbled ("move works only sometimes"). RLock so a command
+        # helper may nest calls (e.g. move_to -> get_position) on one thread.
+        self._serial_lock = threading.RLock()
         self._reading_thread = None
         self._stop_reading = threading.Event()
         
@@ -157,13 +164,14 @@ class ZaberStage:
                         return False
             
             # Open connection
-            self.connection = Connection.open_serial_port(self.port)
-            devices = self.connection.detect_devices()
-            
+            with self._serial_lock:
+                self.connection = Connection.open_serial_port(self.port)
+                devices = self.connection.detect_devices()
+
             if not devices:
                 self.logger.error(f"No devices on port {self.port}")
                 return False
-            
+
             # Get first device and axis
             self.device = devices[0]
             self.axis = self.device.get_axis(1)
@@ -177,14 +185,14 @@ class ZaberStage:
             # No need to explicitly enable axis in newer versions
             # The axis is ready to use after connection
             
-            # Check if homed
-            self._is_homed = self.axis.is_homed()
-            
-            # Read initial position
-            try:
-                self._current_position = self.axis.get_position(Units.LENGTH_MILLIMETRES)
-            except:
-                self._current_position = 0.0
+            # Check if homed + read initial position under the serial lock.
+            with self._serial_lock:
+                self._is_homed = self.axis.is_homed()
+                try:
+                    self._current_position = self.axis.get_position(
+                        Units.LENGTH_MILLIMETRES)
+                except Exception:
+                    self._current_position = 0.0
             
             self._connected = True
             self._start_position_reading()
@@ -200,17 +208,18 @@ class ZaberStage:
         """Disconnect from the stage"""
         self._stop_position_reading()
         
-        if self.axis:
-            try:
-                self.axis.stop()
-            except:
-                pass
-        
-        if self.connection:
-            try:
-                self.connection.close()
-            except:
-                pass
+        with self._serial_lock:
+            if self.axis:
+                try:
+                    self.axis.stop()
+                except Exception:
+                    pass
+
+            if self.connection:
+                try:
+                    self.connection.close()
+                except Exception:
+                    pass
         
         self._connected = False
         self.logger.info("Disconnected")
@@ -227,7 +236,8 @@ class ZaberStage:
         
         try:
             self.logger.info("Homing stage...")
-            self.axis.home()
+            with self._serial_lock:
+                self.axis.home()
             self._is_homed = True
             self.logger.info("Homing complete")
             return True
@@ -261,8 +271,9 @@ class ZaberStage:
                 velocity = 0  # Stop at maximum limit
             
             # Send velocity command
-            self.axis.move_velocity(velocity, Units.VELOCITY_MILLIMETRES_PER_SECOND)
-            
+            with self._serial_lock:
+                self.axis.move_velocity(velocity, Units.VELOCITY_MILLIMETRES_PER_SECOND)
+
             self._current_velocity = velocity
             return True
             
@@ -281,7 +292,8 @@ class ZaberStage:
             return False
         
         try:
-            self.axis.stop()
+            with self._serial_lock:
+                self.axis.stop()
             self._current_velocity = 0.0
             return True
         except Exception as e:
@@ -298,18 +310,30 @@ class ZaberStage:
         Returns:
             bool: True if move command successful
         """
-        if not self._connected or not self.axis or not self._is_homed:
+        if not self._connected or not self.axis:
+            self.logger.warning("move_to ignored: stage not connected")
             return False
-        
+        if not self._is_homed:
+            # Absolute moves are meaningless before homing; fail loudly rather
+            # than silently returning False so callers can surface it.
+            self.logger.warning("move_to ignored: stage not homed")
+            return False
+
         try:
-            # Clamp to limits
+            # Clamp to limits (surface it — a silent clamp reads as "ignored").
             position = max(self.min_pos, min(position_mm, self.max_pos))
-            
+            if position != position_mm:
+                self.logger.warning(
+                    "move_to %.3f mm clamped to %.3f mm (limits [%.3f, %.3f])",
+                    position_mm, position, self.min_pos, self.max_pos)
+
             # Move to position
-            self.axis.move_absolute(position, Units.LENGTH_MILLIMETRES, wait_until_idle=False)
-            
+            with self._serial_lock:
+                self.axis.move_absolute(position, Units.LENGTH_MILLIMETRES,
+                                        wait_until_idle=False)
+
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Move to position failed: {e}")
             return False
@@ -608,11 +632,13 @@ class ZaberStage:
         while not self._stop_reading.is_set():
             try:
                 if self.axis:
-                    # Read position from device
-                    position = self.axis.get_position(Units.LENGTH_MILLIMETRES)
-                    
-                    is_moving = self.axis.is_busy()
-                    
+                    # Read position + busy in one locked serial transaction so a
+                    # concurrent move/home command can't interleave its reply
+                    # between these two reads.
+                    with self._serial_lock:
+                        position = self.axis.get_position(Units.LENGTH_MILLIMETRES)
+                        is_moving = self.axis.is_busy()
+
                     # Update state with lock
                     with self._lock:
                         self._current_position = position
