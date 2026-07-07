@@ -129,6 +129,26 @@ class SmaConfig:
 
 
 @dataclass
+class BaselineConfig:
+    """Quiescent "measure cold R + zero all sensors" phase, run once before an
+    actuation session (see RecordingCore.measure_baseline()).
+
+    It ARMS at a low, NON-heating probe voltage so a small current flows,
+    streams V/I/R + laser/load for a short window, captures per-session zero
+    references — cold SMA resistance, laser rest voltage, and the load-cell
+    tare offset — then AUTO-DISARMS. `auto_on_start` is False by default so the
+    rig still powers up DISARMED (the safe state) until the operator asks for
+    it. Must run BEFORE recording (it drains the sample queues)."""
+    enabled: bool = True
+    auto_on_start: bool = False   # run automatically after the startup health check
+    probe_v: float = 0.5          # non-heating probe level (V); ~= idle, ~0.12 A
+    duration_s: float = 2.0       # averaging window
+    settle_s: float = 0.3         # skip the initial transient before averaging
+    apply_load_offset: bool = True   # write measured load rest V → load_cell.offset_V
+    load_saturation_warn_frac: float = 0.8  # warn if |V_rest| exceeds this of ±5 V
+
+
+@dataclass
 class PhasesConfig:
     open_duration_s: float = 20.0
     short_duration_s: float = 20.0
@@ -187,6 +207,7 @@ class AppConfig:
     stage: StageConfig = field(default_factory=StageConfig)
     camera: CameraConfig = field(default_factory=CameraConfig)
     sma: SmaConfig = field(default_factory=SmaConfig)
+    baseline: BaselineConfig = field(default_factory=BaselineConfig)
     phases: PhasesConfig = field(default_factory=PhasesConfig)
     calibration: CalibrationConfig = field(default_factory=CalibrationConfig)
     run: RunConfig = field(default_factory=RunConfig)
@@ -202,6 +223,7 @@ class AppConfig:
             stage=StageConfig(**(d.get("stage") or {})),
             camera=CameraConfig(**(d.get("camera") or {})),
             sma=SmaConfig(**(d.get("sma") or {})),
+            baseline=BaselineConfig(**(d.get("baseline") or {})),
             phases=PhasesConfig(**(d.get("phases") or {})),
             calibration=CalibrationConfig(
                 laser=LaserCal(**(cal.get("laser") or {})),
@@ -218,6 +240,7 @@ class AppConfig:
             "stage": asdict(self.stage),
             "camera": asdict(self.camera),
             "sma": asdict(self.sma),
+            "baseline": asdict(self.baseline),
             "phases": asdict(self.phases),
             "calibration": asdict(self.calibration),
             "run": asdict(self.run),

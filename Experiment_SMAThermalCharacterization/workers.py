@@ -435,13 +435,23 @@ class ZaberWorker(threading.Thread):
         except Exception:  # noqa: BLE001
             self.info = "Zaber (info unavailable)"
 
+        # SAFETY: do NOT move the stage at launch. Homing once drove the stage
+        # into the fixture and crushed it, so startup motion is opt-in only and
+        # off by default. NOTE: `set_velocity()` is a *continuous-motion*
+        # command (`axis.move_velocity`), NOT a speed setting — calling it here
+        # would start the stage moving, so it is deliberately NOT called at
+        # startup. The stage stays exactly where the operator left it; jog it
+        # with the console home/go buttons.
         if self.cfg.home_on_start:
             self.logger.info("Homing stage...")
             stage.home()
-        stage.set_velocity(self.cfg.max_velocity_mm_s)
-        if self.cfg.move_to_zero_on_start:
-            self.logger.info("Moving to zero_mm=%.3f", self.cfg.zero_mm)
-            stage.move_to(self.cfg.zero_mm)
+            if self.cfg.move_to_zero_on_start:
+                self.logger.info("Moving to zero_mm=%.3f", self.cfg.zero_mm)
+                stage.move_to(self.cfg.zero_mm)
+        elif self.cfg.move_to_zero_on_start:
+            self.logger.warning(
+                "move_to_zero_on_start ignored: needs home_on_start (absolute "
+                "move requires a homed stage); leaving stage in place.")
 
         self.logger.info("Zaber ready: %s", self.info)
         poll = max(self.cfg.poll_interval_s, 1e-3)

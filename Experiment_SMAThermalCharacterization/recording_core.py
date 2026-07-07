@@ -209,6 +209,10 @@ class RecordingCore:
         self.actuating = False
         self._last_ping_mono = 0.0
 
+        # Result of the last measure_baseline() run (cold R + sensor zeros),
+        # recorded into meta.json. None until the baseline phase is run.
+        self.baseline: Optional[dict] = None
+
         # Per-instrument staleness tracking (reset by reset_health_baseline()).
         self._hc_last_n: dict[str, int] = {}
         self._hc_last_adv: dict[str, float] = {}
@@ -920,6 +924,158 @@ class RecordingCore:
             self.errors.append("sma_cycle_start_failed: H7 reader unavailable")
         return ok
 
+    # ------------------------------------------------------------------
+    # Baseline / sensor-zero phase — "measure cold R + zero all sensors"
+    # ------------------------------------------------------------------
+    def measure_baseline(self) -> dict:
+        """Quiescent baseline phase: capture per-session zero references while
+        the coil is cold and at rest.
+
+        Arms at the (low, non-heating) ``baseline.probe_v`` and issues a single
+        ``drive`` at that level so the firmware streams src=3/4/5 (V/I/R) for a
+        short window WITHOUT heating; laser/load stream continuously anyway.
+        Averages the window to get the cold SMA resistance and the laser/load
+        rest voltages, then AUTO-DISARMS. The load rest voltage is written into
+        ``calibration.load_cell.offset_V`` (the tare) unless the channel is
+        saturated; the laser rest voltage is recorded as a tare reference
+        WITHOUT touching the absolute (k, V0) calibration.
+
+        Must run BEFORE recording — it drains the sample queues, so any samples
+        it consumes would not reach the CSVs. Returns (and stores on
+        ``self.baseline``) a result dict; it is written into meta.json.
+        """
+        cfg = self.cfg.baseline
+        started = time.time()
+
+        def _fail(reason: str) -> dict:
+            res = {"ok": False, "reason": reason,
+                   "measured_at_utc": time.strftime(
+                       "%Y-%m-%dT%H:%M:%SZ", time.gmtime(started))}
+            self.baseline = res
+            self._log("warning", f"baseline aborted: {reason}")
+            self.log_event("baseline", f"aborted: {reason}")
+            return res
+
+        if self.recording:
+            return _fail("stop recording before measuring baseline")
+        if self.h7_queue is None or getattr(self.h7_worker, "reader", None) is None:
+            return _fail("H7 reader unavailable")
+
+        self.log_event("baseline",
+                       f"start probe_v={cfg.probe_v:g} dur={cfg.duration_s:g}s")
+        self._log("info",
+                  "Baseline: arming at %.3f V probe (non-heating) for %.1f s..."
+                  % (cfg.probe_v, cfg.duration_s))
+
+        # Arm and HOLD at the low probe level (no drive/heat). The firmware
+        # streams V/I/R while armed+idle, so we simply read that idle stream.
+        self.arm()
+        self.set_idle(cfg.probe_v)
+
+        # Drop the pre-probe backlog, let the hold settle, then collect a window.
+        self._discard_drain(self.h7_queue)
+        self._discard_drain(self.stage_queue)
+        time.sleep(max(0.0, cfg.settle_s))
+        h7_s: list = []
+        stage_s: list = []
+        deadline = time.monotonic() + cfg.duration_s
+        while time.monotonic() < deadline:
+            self._collect_drain(self.h7_queue, h7_s, cap=1_000_000)
+            self._collect_drain(self.stage_queue, stage_s, cap=1_000_000)
+            time.sleep(0.02)
+        self._collect_drain(self.h7_queue, h7_s, cap=1_000_000)
+        self._collect_drain(self.stage_queue, stage_s, cap=1_000_000)
+
+        # Safety: always return to the disarmed (zero-current) state.
+        self.disarm()
+
+        # Reduce the window.
+        def _mean(xs):
+            return (sum(xs) / len(xs)) if xs else None
+
+        laser = [s.value for s in h7_s if s.channel == "laser"]
+        load = [s.value for s in h7_s if s.channel == "load"]
+        load_raw = [s.raw_code for s in h7_s
+                    if s.channel == "load" and s.raw_code is not None]
+        r_vals = [s.value for s in h7_s
+                  if s.channel == "sma_r" and math.isfinite(s.value)]
+        stage_pos = [s.position_mm for s in stage_s]
+
+        laser_v = _mean(laser)
+        load_v = _mean(load)
+        cold_r = _mean(r_vals)
+
+        # Load-cell saturation: raw pinned at ±2^23 (ADC full scale).
+        FS = 8_388_608
+        n_sat = sum(1 for r in load_raw if abs(r) >= FS - 8)
+        load_sat_frac = (n_sat / len(load_raw)) if load_raw else 0.0
+        load_range_frac = (abs(load_v) / 5.0) if load_v is not None else None
+
+        warnings: list[str] = []
+        if not load:
+            warnings.append("no load-cell samples in the window")
+        if not laser:
+            warnings.append("no laser samples in the window")
+        if not r_vals:
+            warnings.append("no finite SMA resistance samples — check the "
+                            "arm/drive path and the coil current")
+        if load_sat_frac > 0.0:
+            warnings.append(
+                f"LOAD CELL SATURATED — {load_sat_frac*100:.0f}% of samples at "
+                f"the ADC rail (±5 V). Force is invalid; null the LCA-9PC ZERO "
+                f"pot before trusting/taring the load cell.")
+        elif (load_range_frac is not None
+              and load_range_frac > cfg.load_saturation_warn_frac):
+            warnings.append(
+                f"load rest voltage at {load_range_frac*100:.0f}% of the ±5 V "
+                f"range — little headroom before saturation; consider nulling "
+                f"the LCA-9PC ZERO pot.")
+
+        # Tare the load cell (write measured rest V into the offset) unless it
+        # is saturated (taring a railed channel is meaningless) or disabled.
+        applied_load_offset = None
+        if (cfg.apply_load_offset and load_v is not None
+                and load_sat_frac == 0.0):
+            self.cfg.calibration.load_cell.offset_V = load_v
+            applied_load_offset = load_v
+
+        res = {
+            "ok": True,
+            "measured_at_utc": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ", time.gmtime(started)),
+            "probe_v": cfg.probe_v,
+            "duration_s": cfg.duration_s,
+            "cold_r_ohm": cold_r,
+            "sma_r_n": len(r_vals),
+            "laser_rest_V": laser_v,       # tare reference (absolute cal untouched)
+            "laser_n": len(laser),
+            "load_rest_V": load_v,
+            "load_n": len(load),
+            "load_saturated_frac": load_sat_frac,
+            "load_range_frac": load_range_frac,
+            "applied_load_offset_V": applied_load_offset,
+            "stage_mm": _mean(stage_pos),
+            "warnings": warnings,
+        }
+        self.baseline = res
+
+        def _g(x):
+            return f"{x:.4g}" if isinstance(x, (int, float)) else "—"
+        self.log_event(
+            "baseline",
+            f"done cold_R={_g(cold_r)}ohm laser={_g(laser_v)}V "
+            f"load={_g(load_v)}V load_offset={_g(applied_load_offset)} "
+            f"warn={len(warnings)}")
+        self._log("info",
+                  "Baseline: cold_R=%s Ω, laser_rest=%s V, load_rest=%s V "
+                  "(offset %s), %d warning(s)"
+                  % (_g(cold_r), _g(laser_v), _g(load_v),
+                     "applied" if applied_load_offset is not None else "NOT applied",
+                     len(warnings)))
+        for w in warnings:
+            self._log("warning", f"baseline: {w}")
+        return res
+
     def maybe_ping(self, interval_s: float = 1.0) -> None:
         """Send the 1 Hz heartbeat that resets the firmware heat watchdog,
         but only while an actuation is in flight."""
@@ -1020,6 +1176,8 @@ class RecordingCore:
                 "active": self.camera_worker is not None,
             },
             "sma": asdict(self.cfg.sma),
+            "baseline_config": asdict(self.cfg.baseline),
+            "baseline": self.baseline,   # measured cold R + sensor zeros (or null)
             "calibration": asdict(self.cfg.calibration),
             "run": asdict(self.cfg.run),
             "host": {

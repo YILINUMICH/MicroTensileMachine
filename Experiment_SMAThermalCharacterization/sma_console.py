@@ -407,6 +407,14 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             for b in (self.btn_arm, self.btn_start, self.btn_stop):
                 row.addWidget(b)
             f.addRow(row)
+            self._refresh_arm_button()   # initial (disarmed) colour
+            # Baseline / sensor-zero phase: cold R + laser/load tare. Arms at a
+            # low non-heating probe, measures, auto-disarms. Refused while
+            # recording (it drains the queues). Disabled if baseline is off.
+            self.btn_baseline = QtWidgets.QPushButton("measure baseline (cold R + zero)")
+            self.btn_baseline.clicked.connect(self.on_measure_baseline)
+            self.btn_baseline.setEnabled(cfg.baseline.enabled)
+            f.addRow(self.btn_baseline)
             self.lbl_sma_read = QtWidgets.QLabel("V — / I — / R — / code —")
             f.addRow(self.lbl_sma_read)
             v.addWidget(sma_box)
@@ -486,6 +494,12 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             self.cam_preview.setAlignment(QtCore.Qt.AlignCenter)
             self.cam_preview.setStyleSheet(
                 "background:#111; color:#888; border:1px solid #333;")
+            # Click the thumbnail to pop out a large live view (for focusing).
+            self.cam_preview.setCursor(QtCore.Qt.PointingHandCursor)
+            self.cam_preview.setToolTip("Click to open a large live view (focus)")
+            self.cam_preview.mousePressEvent = self.on_preview_click
+            self._preview_popup = None
+            self._preview_popup_label = None
             camf.addRow(self.cam_preview)
             cam_box.setEnabled(cfg.camera.enabled)
             v.addWidget(cam_box)
@@ -591,6 +605,17 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                     "See the event log. Disarm is still available.")
             self.core.discard_backlog()
             self.core.reset_health_baseline()
+            # Optional automatic baseline / sensor-zero phase (cold R + tare),
+            # run once here while nothing else drains the queues. Skipped on a
+            # critical health failure (don't arm into a broken H7).
+            if (cfg.baseline.enabled and cfg.baseline.auto_on_start
+                    and critical_ok):
+                self.append_log("Auto baseline (cold R + sensor zero)...")
+                res = self.core.measure_baseline()
+                if res.get("ok"):
+                    for w in (res.get("warnings") or []):
+                        self.append_log(f"  ⚠ {w}")
+                self.core.discard_backlog()
             self._started = True
             self.timer = QtCore.QTimer(self)
             self.timer.timeout.connect(self.on_tick)
@@ -642,6 +667,27 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             else:
                 self.lbl_rec.setText("REC ○")
                 self.lbl_rec.setStyleSheet(_dot(None))
+            self._refresh_arm_button()
+
+        def _refresh_arm_button(self):
+            """Colour the arm button by the live SMA arm state: amber "● ARMED"
+            when the MOSFET is closed (coil current can flow), green "arm" when
+            disarmed (the safe, zero-current state). The red DISARM button is
+            always the master cutoff."""
+            if not hasattr(self, "btn_arm"):
+                return
+            armed = bool(self.core and self.core.armed)
+            if armed:
+                self.btn_arm.setText("● ARMED")
+                self.btn_arm.setStyleSheet(
+                    "background:#e67e22; color:white; font-weight:bold;")
+                self.btn_arm.setToolTip(
+                    "SMA ARMED — coil current can flow. Use DISARM to cut off.")
+            else:
+                self.btn_arm.setText("arm")
+                self.btn_arm.setStyleSheet(
+                    "background:#2e7d32; color:white; font-weight:bold;")
+                self.btn_arm.setToolTip("SMA disarmed (safe). Click to arm.")
 
         def _ingest(self, batch):
             now = time.monotonic() - self._t0
@@ -708,10 +754,58 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
         def on_arm(self):
             if self.core:
                 self.core.arm()
+                # Hold at the configured idle level (0.5 V). The firmware streams
+                # V/I/R while armed+idle, so the readout populates from the hold
+                # itself — no drive/heat needed.
+                self.core.set_idle(cfg.sma.v_low)
+                self._refresh_arm_button()
 
         def on_disarm(self):
             if self.core:
                 self.core.disarm()
+                self._refresh_arm_button()
+
+        def on_measure_baseline(self):
+            """Run the baseline / sensor-zero phase (cold R + laser/load tare).
+            Pauses the tick so the phase is the sole queue drainer, then reports
+            the result + any warnings. Refused while recording."""
+            if self.core is None:
+                return
+            if self.core.recording:
+                self.append_log("Baseline refused: stop recording first.")
+                return
+            self.btn_baseline.setEnabled(False)
+            paused = self.timer.isActive() if getattr(self, "timer", None) else False
+            if paused:
+                self.timer.stop()
+            self.append_log("Measuring baseline (arming at probe level)...")
+            QtWidgets.QApplication.processEvents()
+            try:
+                res = self.core.measure_baseline()
+            finally:
+                if paused:
+                    self.timer.start(GUI_TICK_MS)
+                self.btn_baseline.setEnabled(self.core is not None
+                                             and cfg.baseline.enabled)
+            if not res.get("ok"):
+                self.append_log(f"Baseline FAILED: {res.get('reason','?')}")
+                QtWidgets.QMessageBox.warning(
+                    self, "Baseline failed",
+                    f"Baseline could not run:\n{res.get('reason','unknown')}")
+                return
+            def g(x):
+                return f"{x:.4g}" if isinstance(x, (int, float)) else "—"
+            self.append_log(
+                f"Baseline: cold_R={g(res.get('cold_r_ohm'))} Ω  "
+                f"laser_rest={g(res.get('laser_rest_V'))} V  "
+                f"load_rest={g(res.get('load_rest_V'))} V  "
+                f"load_offset={'applied' if res.get('applied_load_offset_V') is not None else 'NOT applied'}")
+            warns = res.get("warnings") or []
+            for w in warns:
+                self.append_log(f"  ⚠ {w}")
+            if warns:
+                QtWidgets.QMessageBox.warning(
+                    self, "Baseline warnings", "\n\n".join(warns))
 
         def on_toggle_record(self):
             if not self.core:
@@ -868,11 +962,46 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             rgb = np.ascontiguousarray(frame[:, :, ::-1])  # BGR->RGB
             img = QtGui.QImage(rgb.data, w, h, 3 * w,
                                QtGui.QImage.Format_RGB888)
-            pix = QtGui.QPixmap.fromImage(img).scaled(
+            src = QtGui.QPixmap.fromImage(img)
+            self.cam_preview.setPixmap(src.scaled(
                 self.cam_preview.width(), self.cam_preview.height(),
-                QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-            self.cam_preview.setPixmap(pix)
+                QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+            # Mirror the same frame into the pop-out live view if it's open.
+            popup = getattr(self, "_preview_popup", None)
+            lbl = getattr(self, "_preview_popup_label", None)
+            if popup is not None and lbl is not None:
+                lbl.setPixmap(src.scaled(
+                    lbl.width(), lbl.height(),
+                    QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
             self._preview_ref = rgb  # keep the buffer alive for the QImage
+
+        def on_preview_click(self, _event=None):
+            """Pop out a large, live camera view for focusing. Clicking again
+            (or clicking the thumbnail) just re-focuses the existing window;
+            closing it returns to the thumbnail."""
+            if getattr(self, "_preview_popup", None) is not None:
+                self._preview_popup.raise_()
+                self._preview_popup.activateWindow()
+                return
+            dlg = QtWidgets.QDialog(self)
+            dlg.setWindowTitle("Camera — live view (close to return)")
+            dlg.setMinimumSize(640, 360)
+            dlg.resize(960, 540)
+            lay = QtWidgets.QVBoxLayout(dlg)
+            lay.setContentsMargins(0, 0, 0, 0)
+            lbl = QtWidgets.QLabel("waiting for frames…")
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+            lbl.setStyleSheet("background:#000; color:#888;")
+            lay.addWidget(lbl)
+            self._preview_popup = dlg
+            self._preview_popup_label = lbl
+            dlg.finished.connect(self._on_preview_popup_closed)
+            dlg.show()
+            self._refresh_preview()  # paint immediately, don't wait for a tick
+
+        def _on_preview_popup_closed(self, *_):
+            self._preview_popup = None
+            self._preview_popup_label = None
 
         # --- event/log plumbing ------------------------------------------
         # The core invokes these only from inside its own methods, which in

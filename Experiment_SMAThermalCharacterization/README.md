@@ -185,9 +185,20 @@ python analyze_sma.py --session <dir> --k -0.1171 --v0 566.957 --load-scale 50.0
 present, else the **legacy per-phase** layout. Produces, in the session dir:
 
 - `<label>_dashboard.png` — multi-panel: displacement, force, SMA R/V/I,
-  de-embedded LCR R/L, stage position, and force-vs-displacement
-  (`<label>` = `console` or the phase name).
+  de-embedded LCR R/L, and force-vs-displacement (`<label>` = `console` or the
+  phase name). The **stage panel is dropped** (held fixed for a thermal run);
+  position is still in the joined CSV. The **Force panel flags ADC-rail
+  saturation** (load samples pinned at ±2²³ → invalid force, marked red with a
+  "null the LCA-9PC ZERO pot" note), and the **SMA panel draws the cold-R
+  reference** from the `baseline` block in `meta.json` (if the baseline phase
+  ran). The console summary also prints the saturation % and the measured
+  cold R / applied load tare.
 - `<label>_joined.csv` — all streams interpolated onto a uniform 100 Hz grid.
+- `video/cycle_NN.mp4` — **annotated per-cycle video** stitched from the camera
+  JPEGs, with a burned-in overlay (cycle, time, mode, and the displacement/force
+  interpolated onto each frame) so a frame is self-explanatory. Needs
+  `opencv-python`; skip with `--no-video`, set playback rate with `--video-fps`
+  (default 15).
 
 In **console mode** the OPEN/SHORT de-embed references are the LCR samples in
 the `--ref-window` seconds (default 10) after each `ref_open`/`ref_short`

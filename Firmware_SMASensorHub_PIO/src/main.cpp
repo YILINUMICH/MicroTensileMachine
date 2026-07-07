@@ -236,6 +236,12 @@ static bool     cyc_fire     = false;  // fire preset: scope trigger + clean edg
 static const uint32_t CYCLE_LOG_MS = 10;
 static const uint32_t CYCLE_MS_MAX = 600000;   // 10 min per phase ceiling
 
+// While ARMED and resting at idle (SMA_IDLE), stream V/I/R at this period so
+// the host has a live readout of the idle-hold (idle current makes R readable
+// without any drive/heat). No streaming when disarmed (no current flows).
+static const uint32_t IDLE_LOG_MS  = 100;      // ~10 Hz idle telemetry
+static uint32_t       idle_next_log = 0;
+
 // ── Heat watchdog (max_heat = wdt) ────────────────────────────────────
 // Only while HEATing: if no `ping` arrives within wdt_timeout_ms, drop to
 // idle-low (STILL ARMED → relaunch-able). `wdt 0` disables (manual bench).
@@ -522,6 +528,12 @@ static bool cycleWatchdogTripped() {
 static void serviceSma() {
     switch (smaState) {
         case SMA_IDLE:
+            // Armed + resting at idle: stream V/I/R so the host sees the
+            // idle-hold live. Disarmed = no current = nothing to report.
+            if (armed && (int32_t)(millis() - idle_next_log) >= 0) {
+                streamSma(readSma());
+                idle_next_log = millis() + IDLE_LOG_MS;
+            }
             return;
 
         case SMA_SET_SETTLE:

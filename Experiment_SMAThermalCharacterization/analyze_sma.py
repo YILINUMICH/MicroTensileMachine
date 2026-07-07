@@ -59,6 +59,12 @@ try:
 except ImportError:
     _HAS_MPL = False
 
+_HAS_CV2 = True
+try:
+    import cv2
+except ImportError:
+    _HAS_CV2 = False
+
 log = logging.getLogger("analyze_sma")
 
 H7_CHANNELS = ("laser", "load", "sma_v", "sma_i", "sma_r")
@@ -266,12 +272,29 @@ def _rel(t: np.ndarray, t0: float) -> np.ndarray:
     return t - t0
 
 
+_ADC_FS = 8_388_608   # ADS1263 full scale = 2^23 (raw code rails at ±this)
+
+
+def load_saturation_mask(h7: Dict[str, dict]) -> Optional[np.ndarray]:
+    """Boolean mask over the load samples that are pinned at the ADC rail
+    (raw code at ±2^23), i.e. the load cell saturated. Falls back to a
+    voltage test (|V| ≥ 4.99) if raw codes weren't logged. None if no load."""
+    if "load" not in h7:
+        return None
+    ld = h7["load"]
+    raw = ld.get("raw")
+    if raw is not None and np.isfinite(raw).any():
+        return np.abs(np.nan_to_num(raw, nan=0.0)) >= _ADC_FS - 8
+    return np.abs(ld["value"]) >= 4.99
+
+
 def make_dashboard(out_png: Path, title: str, t0: float,
                    h7: Dict[str, dict],
                    disp_um: Optional[np.ndarray],
                    force_N: Optional[np.ndarray],
                    deemb: Optional[DeembedResult],
-                   stage: Optional[dict]) -> None:
+                   stage: Optional[dict],
+                   baseline: Optional[dict] = None) -> None:
     if not _HAS_MPL:
         log.warning("matplotlib not available — skipping dashboard PNG")
         return
@@ -283,8 +306,8 @@ def make_dashboard(out_png: Path, title: str, t0: float,
         panels.append("sma")
     if deemb is not None and deemb.method != "none":
         panels.append("lcr")
-    if stage is not None:
-        panels.append("stage")
+    # Stage panel dropped — the stage is held fixed for a thermal run, so its
+    # trace is flat and uninformative. (position stays in the joined CSV.)
     if disp_um is not None and force_N is not None:
         panels.append("fx")
 
@@ -307,13 +330,27 @@ def make_dashboard(out_png: Path, title: str, t0: float,
                 ax.set_ylabel("laser (V) [uncal]")
             ax.set_title("Displacement"); ax.set_xlabel("t (s)")
         elif key == "force":
+            yvals = None
             if force_N is not None and "load" in h7:
-                ax.plot(_rel(h7["load"]["t"], t0), force_N, lw=0.8, color="C3")
+                yvals = force_N
+                ax.plot(_rel(h7["load"]["t"], t0), yvals, lw=0.8, color="C3")
                 ax.set_ylabel("force (N)")
             elif "load" in h7:
-                ax.plot(_rel(h7["load"]["t"], t0), h7["load"]["value"],
-                        lw=0.8, color="C3")
+                yvals = h7["load"]["value"]
+                ax.plot(_rel(h7["load"]["t"], t0), yvals, lw=0.8, color="C3")
                 ax.set_ylabel("load (V) [uncal]")
+            # Flag ADC-rail saturation — those force values are invalid.
+            sat = load_saturation_mask(h7)
+            if sat is not None and yvals is not None and sat.any():
+                tl = _rel(h7["load"]["t"], t0)
+                ax.plot(tl[sat], yvals[sat], ".", ms=3, color="red",
+                        label="saturated (±5 V rail)")
+                frac = 100.0 * int(sat.sum()) / sat.size
+                ax.text(0.02, 0.04,
+                        f"⚠ {frac:.0f}% saturated — null the LCA-9PC ZERO pot",
+                        transform=ax.transAxes, color="red", fontsize=8,
+                        va="bottom")
+                ax.legend(loc="upper right", fontsize=7)
             ax.set_title("Force"); ax.set_xlabel("t (s)")
         elif key == "sma":
             if "sma_r" in h7:
@@ -328,6 +365,13 @@ def make_dashboard(out_png: Path, title: str, t0: float,
                 ax2.plot(_rel(h7["sma_i"]["t"], t0), h7["sma_i"]["value"],
                          lw=0.7, color="C4", alpha=0.7, label="I (A)")
             ax2.set_ylabel("V (V) / I (A)")
+            # Cold-R reference from the baseline phase (if measured).
+            cr = (baseline or {}).get("cold_r_ohm")
+            if cr is not None and "sma_r" in h7:
+                ax.axhline(cr, ls="--", lw=0.9, color="C2", alpha=0.6)
+                ax.text(0.02, 0.95, f"cold R = {cr:.3g} Ω",
+                        transform=ax.transAxes, color="C2", fontsize=8,
+                        va="top")
             ax.set_title("SMA drive (R / V / I)"); ax.set_xlabel("t (s)")
         elif key == "lcr" and deemb is not None:
             ax.plot(_rel(deemb.t, t0), deemb.R_dut, lw=0.8, color="C5", label="R_dut (Ω)")
@@ -352,6 +396,98 @@ def make_dashboard(out_png: Path, title: str, t0: float,
     fig.savefig(out_png, dpi=130)
     plt.close(fig)
     log.info("Wrote %s", out_png)
+
+
+# ---------------------------------------------------------------------------
+# Annotated per-cycle video (stitches the camera JPEGs into a scrubbable MP4
+# with a burned-in overlay of time + synced displacement/force, so a frame is
+# self-explanatory without cross-referencing frames.csv).
+# ---------------------------------------------------------------------------
+def _annotate_frame(img, cyc: int, t_rel: float, mode: str,
+                    disp_um: Optional[float], force_N: Optional[float]) -> None:
+    """Burn a two-line overlay onto a BGR frame (in place)."""
+    h, w = img.shape[:2]
+    line1 = f"cycle {cyc}   t=+{t_rel:5.2f}s   {mode}"
+    dtxt = f"{disp_um:+.0f} um" if disp_um is not None else "-- um"
+    ftxt = f"{force_N:+.3f} N" if force_N is not None else "-- N"
+    line2 = f"disp {dtxt}   F {ftxt}"
+    bar = max(28, h // 12)
+    ov = img.copy()
+    cv2.rectangle(ov, (0, 0), (w, bar * 2 + 6), (0, 0, 0), -1)
+    cv2.addWeighted(ov, 0.45, img, 0.55, 0, img)
+    fs = max(0.5, w / 1100.0)
+    cv2.putText(img, line1, (10, int(bar * 0.9)), cv2.FONT_HERSHEY_SIMPLEX,
+                0.7 * fs, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(img, line2, (10, int(bar * 1.9)), cv2.FONT_HERSHEY_SIMPLEX,
+                0.7 * fs, (0, 255, 255), 1, cv2.LINE_AA)
+
+
+def make_cycle_videos(video_dir: Path, disp_t, disp_um, force_t, force_N,
+                      fps: float = 15.0) -> None:
+    """Stitch each cycle's JPEGs (from video/frames.csv) into an annotated MP4
+    next to them (video/cycle_NN.mp4). Overlay shows cycle-relative time, mode,
+    and the displacement/force interpolated onto each frame's host clock."""
+    if not _HAS_CV2:
+        log.warning("opencv (cv2) not available — skipping cycle videos")
+        return
+    frames_csv = video_dir / "frames.csv"
+    if not frames_csv.exists():
+        log.info("no %s — skipping cycle videos", frames_csv.name)
+        return
+    from collections import defaultdict
+    by_cycle: "dict[int, list]" = defaultdict(list)
+    with open(frames_csv) as f:
+        for row in csv.DictReader(f):
+            try:
+                by_cycle[int(row["cycle_idx"])].append(row)
+            except (KeyError, ValueError):
+                continue
+    if not by_cycle:
+        log.info("frames.csv had no usable rows — skipping cycle videos")
+        return
+
+    n_vids = 0
+    for cyc in sorted(by_cycle):
+        if cyc < 0:
+            continue
+        rows = sorted(by_cycle[cyc], key=lambda r: float(r["host_timestamp_s"]))
+        t_start = float(rows[0]["host_timestamp_s"])
+        out_path = video_dir / f"cycle_{cyc:02d}.mp4"
+        writer = None
+        size = None
+        n_frames = 0
+        for row in rows:
+            img = cv2.imread(str(video_dir / row["rel_path"]))
+            if img is None:
+                continue
+            if size is None:
+                size = (img.shape[1], img.shape[0])
+                writer = cv2.VideoWriter(
+                    str(out_path), cv2.VideoWriter_fourcc(*"mp4v"),
+                    float(fps), size)
+            elif (img.shape[1], img.shape[0]) != size:
+                img = cv2.resize(img, size)
+            host = float(row["host_timestamp_s"])
+            d = None
+            if disp_um is not None and disp_t is not None and len(disp_t):
+                d = float(np.interp(host, disp_t, disp_um))
+            elif row.get("laser_mm"):
+                try:
+                    d = float(row["laser_mm"]) * 1000.0
+                except ValueError:
+                    pass
+            fN = None
+            if force_N is not None and force_t is not None and len(force_t):
+                fN = float(np.interp(host, force_t, force_N))
+            _annotate_frame(img, cyc, host - t_start, row.get("mode", ""), d, fN)
+            writer.write(img)
+            n_frames += 1
+        if writer is not None:
+            writer.release()
+            n_vids += 1
+            log.info("Wrote %s (%d frames @ %g fps)", out_path, n_frames, fps)
+    if n_vids == 0:
+        log.info("no cycle videos written (no readable frames)")
 
 
 # ---------------------------------------------------------------------------
@@ -411,7 +547,9 @@ def _run_analysis(out_dir: Path, label: str, args,
                   open_lcr: Optional[LcrArrays],
                   h7: Dict[str, dict],
                   stage: Optional[dict],
-                  freq: float, k, v0, lscale, loff) -> int:
+                  freq: float, k, v0, lscale, loff,
+                  session_dir: Optional[Path] = None,
+                  meta: Optional[dict] = None) -> int:
     """Shared downstream: conversions -> de-embed -> dashboard -> joined CSV ->
     summary. Both the per-phase and the continuous-console loaders feed this."""
     if not h7 and raw_lcr is None and stage is None:
@@ -438,10 +576,21 @@ def _run_analysis(out_dir: Path, label: str, args,
         deemb = deembed(raw_lcr, short_lcr, open_lcr, freq)
         log.info("LCR de-embed method: %s (f=%.3g Hz)", deemb.method, freq)
 
+    baseline = (meta or {}).get("baseline")
     out_dir.mkdir(parents=True, exist_ok=True)
     title = f"{out_dir.name} — {label}"
     make_dashboard(out_dir / f"{label}_dashboard.png", title, t0,
-                   h7, disp_um, force_N, deemb, stage)
+                   h7, disp_um, force_N, deemb, stage, baseline=baseline)
+
+    # Annotated per-cycle video from the camera JPEGs (video/ lives in the
+    # recording dir, not necessarily out_dir).
+    vid_src = (session_dir or out_dir) / "video"
+    if not args.no_video and vid_src.exists():
+        make_cycle_videos(
+            vid_src,
+            h7["laser"]["t"] if "laser" in h7 else None, disp_um,
+            h7["load"]["t"] if "load" in h7 else None, force_N,
+            fps=args.video_fps)
 
     # Joined CSV on a uniform 100 Hz grid spanning the data.
     t_end_candidates = []
@@ -481,6 +630,23 @@ def _run_analysis(out_dir: Path, label: str, args,
     print(f"  H7 channels present: {sorted(h7.keys())}")
     print(f"  displacement: {'calibrated (µm)' if disp_um is not None else 'raw (no k/V0)'}")
     print(f"  force:        {'calibrated (N)' if force_N is not None else 'raw (no scale)'}")
+    # Load-cell saturation report.
+    sat = load_saturation_mask(h7)
+    if sat is not None and sat.any():
+        frac = 100.0 * int(sat.sum()) / sat.size
+        print(f"  ⚠ load cell SATURATED: {int(sat.sum())}/{sat.size} samples "
+              f"({frac:.1f}%) at the ±5 V ADC rail — force invalid there; "
+              f"null the LCA-9PC ZERO pot.")
+    # Baseline / cold-R report.
+    if baseline:
+        cr = baseline.get("cold_r_ohm")
+        print(f"  baseline: cold R = "
+              f"{cr:.4g} Ω" if cr is not None else "  baseline: cold R = n/a")
+        off = baseline.get("applied_load_offset_V")
+        if off is not None:
+            print(f"            load tare offset = {off:.4g} V (applied)")
+        for w in (baseline.get("warnings") or []):
+            print(f"            ⚠ {w}")
     if deemb is not None:
         print(f"  LCR de-embed: {deemb.method}  (f={freq:.4g} Hz)")
         if deemb.method != "none" and len(deemb.R_dut):
@@ -496,7 +662,7 @@ def _run_analysis(out_dir: Path, label: str, args,
 def analyze_session(session_dir: Path, phase: str, args) -> int:
     """Legacy per-phase layout (sma_recorder.py): {phase}_{lcr,h7,stage}.csv
     plus dedicated open_lcr.csv / short_lcr.csv for de-embed references."""
-    _meta, freq, k, v0, lscale, loff = _read_meta_and_cal(session_dir, args)
+    meta, freq, k, v0, lscale, loff = _read_meta_and_cal(session_dir, args)
     raw_lcr = load_lcr(session_dir / f"{phase}_lcr.csv")
     short_lcr = load_lcr(session_dir / "short_lcr.csv")
     open_lcr = load_lcr(session_dir / "open_lcr.csv")
@@ -504,7 +670,8 @@ def analyze_session(session_dir: Path, phase: str, args) -> int:
     stage = load_stage(session_dir / f"{phase}_stage.csv")
     out_dir = Path(args.out) if args.out else session_dir
     return _run_analysis(out_dir, phase, args, raw_lcr, short_lcr, open_lcr,
-                         h7, stage, freq, k, v0, lscale, loff)
+                         h7, stage, freq, k, v0, lscale, loff,
+                         session_dir=session_dir, meta=meta)
 
 
 def analyze_console_session(session_dir: Path, args) -> int:
@@ -513,7 +680,7 @@ def analyze_console_session(session_dir: Path, args) -> int:
     SHORT de-embed references are the LCR samples in the `--ref-window` seconds
     that follow each `ref_open` / `ref_short` marker; the RAW (actuation) trace
     is every LCR sample OUTSIDE those reference windows."""
-    _meta, freq, k, v0, lscale, loff = _read_meta_and_cal(session_dir, args)
+    meta, freq, k, v0, lscale, loff = _read_meta_and_cal(session_dir, args)
     events = load_events(session_dir / "events.csv")
     open_win = ref_windows(events, "ref_open", args.ref_window)
     short_win = ref_windows(events, "ref_short", args.ref_window)
@@ -531,7 +698,8 @@ def analyze_console_session(session_dir: Path, args) -> int:
     stage = load_stage(session_dir / "stage.csv")
     out_dir = Path(args.out) if args.out else session_dir
     return _run_analysis(out_dir, "console", args, raw_lcr, short_lcr, open_lcr,
-                         h7, stage, freq, k, v0, lscale, loff)
+                         h7, stage, freq, k, v0, lscale, loff,
+                         session_dir=session_dir, meta=meta)
 
 
 def _main() -> int:
@@ -554,6 +722,10 @@ def _main() -> int:
     p.add_argument("--v0", type=float, default=None, help="laser V0_mV override")
     p.add_argument("--load-scale", type=float, default=None)
     p.add_argument("--load-offset", type=float, default=None)
+    p.add_argument("--no-video", action="store_true",
+                   help="skip building the annotated per-cycle camera videos")
+    p.add_argument("--video-fps", type=float, default=15.0,
+                   help="playback fps for the per-cycle videos (default: 15)")
     args = p.parse_args()
 
     session_dir = Path(args.session)

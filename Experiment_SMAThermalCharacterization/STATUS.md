@@ -46,6 +46,53 @@
   `LcrWorker`; `config.yaml` keeps only `lcr: {enabled: false}` and the
   `LcrConfig` default is `enabled=False`. The engine's LCR paths remain but are
   inert (queue/worker are `None`). `meta.json` no longer emits an `lcr` block.
+- **Stage NEVER moves at launch (2026-07-07, SAFETY).** Homing once drove the
+  stage into the fixture and crushed it. Startup now issues **zero** motion:
+  `home_on_start`/`move_to_zero_on_start` default **false**, and the worker's
+  unconditional `set_velocity()` call was **removed** — `set_velocity` is a
+  *continuous-motion* command (`axis.move_velocity`), not a speed setting, so it
+  would have started the stage moving (and does so on a stage that retained
+  homing). The stage stays exactly where the operator left it; jog it with the
+  home/go buttons. Auto-motion is opt-in (`home_on_start: true`, which also
+  gates `move_to_zero_on_start`) — use only when the travel is known clear.
+- **Idle voltage default 0.5 V + live readout at idle-hold (2026-07-07,
+  firmware To-Test).** `sma.v_low` now defaults to **0.5 V** (≈0.12 A,
+  non-heating) instead of 0 V, so the coil carries a small rest current whose
+  V/I/R is measurable. **Firmware** (`Firmware_SMASensorHub_PIO`, `SMA_IDLE`
+  case): while **armed and resting at idle**, it now **streams src=3/4/5 at
+  ~10 Hz** (`IDLE_LOG_MS`) — previously telemetry streamed only during a
+  drive/cycle, so a bare `arm` showed nothing. Now `arm` simply **holds 0.5 V**
+  and the readout populates from the hold itself; the console `on_arm` just
+  `arm()` + `set_idle(v_low)` (no `drive`). `measure_baseline` likewise reads
+  the idle-hold stream instead of issuing a `drive`. **Needs a firmware
+  flash + bench verify** (idle streaming rate, no drops); disarmed still streams
+  nothing (no current).
+- **Arm-button status colour + click-to-focus preview (2026-07-07).** The SMA
+  **arm** button now reflects live state: green **"arm"** when disarmed (safe,
+  zero current), amber **"● ARMED"** when the MOSFET is closed — refreshed every
+  tick + immediately on click (the red **DISARM** stays the master cutoff). The
+  camera **live preview thumbnail is click-to-pop-out**: clicking opens a large
+  resizable live view (updated on the same tick) for focusing; closing it
+  returns to the thumbnail.
+- **Baseline / sensor-zero phase — "measure cold R + zero" (2026-07-07, To-Test).**
+  A quiescent companion to the go-to-defined-start behaviour: the operator
+  button **"measure baseline (cold R + zero)"** (or `baseline.auto_on_start`)
+  calls `RecordingCore.measure_baseline()`, which **arms at a low, non-heating
+  probe** (`baseline.probe_v`, ~0.5 V ≈ 0.12 A), issues one `drive` so the
+  firmware streams src=3/4/5 for `duration_s`, averages the window, then
+  **auto-disarms**. It captures **cold SMA resistance**, the **laser rest
+  voltage**, and the **load-cell rest voltage** — the latter written into
+  `calibration.load_cell.offset_V` (per-session **tare**) unless the channel is
+  saturated. Rationale: disarm (MOSFET-open) is the safe start state but gives
+  *zero* current, so R is unmeasurable there; the idle-armed probe is the
+  self-cooling middle state where R can be read without heating. **Guards:** the
+  load channel is checked for ADC-rail saturation (`|raw|≥2²³`) and % of ±5 V
+  range — a saturated/near-rail load cell **blocks the tare** and warns to null
+  the LCA-9PC ZERO pot first. Results + `baseline_config` are recorded in
+  `meta.json`; `events.csv` gets `baseline start`/`done` markers. Refused while
+  recording (it drains the queues). **Not yet bench-run** — the reduction/tare/
+  saturation logic is unit-tested on synthetic samples; the arm→drive→stream
+  timing needs a real-rig verify.
 - **Manual recording.** On launch the console runs the startup health check and
   shows live plots/readouts, but writes **nothing to disk** until the operator
   clicks **Start REC** (queues are still drained so the buffers never overflow).
@@ -104,6 +151,8 @@
 - [ ] **Bench-run the console** (`sma_console.py`) against the real rig: health-check pass/fail, live readouts/plots, `DISARM`, auto-disarm + 1 s warn / 3 s critical-disarm on unplugging the H7, clean shutdown writes `meta.json`. LCR/stage are **auxiliary** (warn-only); H7 is critical.
 - [ ] **Bench-run** a full OPEN→SHORT→RAW session against the real rig (LCR + combined-firmware H7 + Zaber).
 - [ ] **Fill calibration** in `config.yaml` from `Calibrate_LaserHead` / `Calibrate_LoadCell` fits.
+- [ ] **Flash + bench-verify idle telemetry streaming** (`Firmware_SMASensorHub_PIO`, `SMA_IDLE` case): after `arm`, confirm src=3/4/5 stream at ~10 Hz while holding 0.5 V idle (readout populates), that disarm stops the stream, and that it doesn't perturb the M4 laser/load ring rates. Requires reflash + power-cycle (EVM rails).
+- [ ] **Bench-verify the baseline phase** (`measure_baseline`): confirm the arm→`drive` at `probe_v` streams src=3/4/5 for the window (idle current, no heating), the cold-R / laser-rest / load-rest means are sane, auto-disarm fires, and the load-saturation guard trips when the LCA-9PC ZERO pot is deliberately off. Then decide whether `baseline.auto_on_start` should default true.
 - [ ] **Verify H7 channel rates** — confirm `[STATUS]` shows no drops with all 5 src streaming during a `drive`.
 - [ ] **FIRMWARE BUG: laser/load V-field zero-glitch** (`Firmware_SMASensorHub_PIO`) — ~every 32nd ADC1 frame emits `voltage_V==0` despite a valid `raw_code` (and skips the paired ADC2/load sample). Raw codes are correct, so it's in the M4 voltage path / ADC1↔ADC2 interleave, not the ADC read. Currently masked host-side by the `H7Worker` glitch filter; fix at the source on the bench (suspect the `r1.status & 0x80` ADC2-piggyback branch around `main.cpp:1198-1214`).
 - [x] ~~**SMA scripted actuation**~~ — done 2026-06-21: recorder drives the on-M7 `cycle` state machine (params + heartbeat) when `sma.enabled`. Bench-verify the heat/cool timing + watchdog.

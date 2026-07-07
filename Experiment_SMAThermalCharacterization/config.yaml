@@ -31,12 +31,13 @@ h7:
 stage:
   enabled: true
   port: COM5                  # null = auto-detect Zaber (FTDI 0403:6001)
-  position_limits_mm: [5, 40] # firmware/software travel clamp for THIS workflow
+  position_limits_mm: [40, 150] # firmware/software travel clamp for THIS workflow
   max_velocity_mm_s: 10.0
   reading_rate_hz: 100
-  home_on_start: false        # true = home before recording (clears the run)
-  move_to_zero_on_start: false
-  zero_mm: 10.0               # mechanical zero reference (recorded in meta)
+  home_on_start: false        # NEVER move at launch — homing once crushed the
+  move_to_zero_on_start: false #  fixture. The stage stays exactly where it is;
+                              #  the operator jogs it manually (home/go buttons).
+  zero_mm: 40.0              # manual go-to default only (NOT auto-applied at start)
   poll_interval_s: 0.02       # ~50 Hz position poll
 
 # ── 12MP camera (adaptive-FPS video; fixed resolution) ────────────────
@@ -66,12 +67,28 @@ camera:
 sma:
   enabled: false
   v_high: 3.0                 # heating/actuation voltage (V)
-  v_low: 0.0                  # cooling-phase voltage (0 = off)
+  v_low: 0.5                  # idle / cooling level (V). 0.5 V ≈ 0.12 A — a
+                              #   non-heating rest current so V/I/R is readable
+                              #   at arm (0 V = no current = nothing to read)
   fire_ms: 2000               # heating duration per cycle
   cool_ms: 8000               # cooling duration per cycle
   n_cycles: 10                # 0 = continuous until RAW stop
   wdt_ms: 5000                # M7 heartbeat watchdog timeout (0 = off);
                               #   recorder pings every 1 s when driving
+
+# ── Baseline / sensor-zero phase (cold R + laser/load tare) ───────────
+# A quiescent "go-to-defined-start" companion: ARMS at a LOW, non-heating
+# probe voltage, streams V/I/R + laser/load briefly, and captures per-session
+# zero references — cold SMA resistance, laser rest voltage, load-cell tare —
+# then AUTO-DISARMS. Run it before actuating (operator button, or auto below).
+baseline:
+  enabled: true
+  auto_on_start: false        # true = run automatically after the health check
+  probe_v: 0.5                # non-heating probe voltage (V); ~= idle, ~0.12 A
+  duration_s: 2.0             # averaging window
+  settle_s: 0.3               # skip the initial transient before averaging
+  apply_load_offset: true     # tare: write measured load rest V → load_cell.offset_V
+  load_saturation_warn_frac: 0.8  # warn if |V_rest| exceeds this fraction of ±5 V
 
 # ── Phase durations (OPEN/SHORT LCR de-embed calibration) ─────────────
 phases:
