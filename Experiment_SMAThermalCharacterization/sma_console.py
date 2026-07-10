@@ -302,19 +302,18 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             self._buf = {k: deque(maxlen=PLOT_MAX_POINTS)
                          for k in ("laser", "load", "sma_v", "sma_i", "sma_r")}
             self._t0 = time.monotonic()
-            # Display-only calibration for the live plots (CSVs stay raw). Same
-            # formulas as analyze_sma.py: displacement_mm = (V·1000 − V0)/k/1000,
-            # force_N = scale·(V − offset). When a coefficient is missing the
-            # corresponding plot falls back to raw volts.
+            # Live plots show the raw laser / load-cell voltages straight off
+            # the ADC — no sensitivity applied — so what's on screen matches the
+            # (already-raw) CSVs 1:1. Set these flags True to re-enable the
+            # displacement_mm / force_N display conversions below.
             lc = cfg.calibration.laser
             fc = cfg.calibration.load_cell
             self._laser_k = lc.k_mV_per_um
             self._laser_v0 = lc.V0_mV
             self._load_scale = fc.scale_N_per_V
             self._load_off = fc.offset_V
-            self._laser_cal = (self._laser_k not in (None, 0)
-                               and self._laser_v0 is not None)
-            self._load_cal = self._load_scale is not None
+            self._laser_cal = False
+            self._load_cal = False
             self._build_ui()
 
         def _laser_mm(self, v_volts: float) -> float:

@@ -21,24 +21,25 @@ h7:
   enabled: true
   port: COM8
   baud: 115200
-  channels: [laser, load, sma_v, sma_i, sma_r]   # which src streams to keep
-  startup_commands: []        # optional cmds sent to H7 at startup (e.g.
-                              #   ["gain 10", "shunt 0.1"]). EMPTY by default —
-                              #   the recorder stays a pure logger. Inert hook
-                              #   for future scripted actuation.
+  channels: [laser, load, sma_v, sma_i, sma_r] # which src streams to keep
+  startup_commands: [] # optional cmds sent to H7 at startup (e.g.
+    #   ["gain 10", "shunt 0.1"]). EMPTY by default —
+    #   the recorder stays a pure logger. Inert hook
+    #   for future scripted actuation.
 
 # ── Zaber linear stage (X-LSQ300A-E01) ────────────────────────────────
 stage:
   enabled: true
-  port: COM5                  # null = auto-detect Zaber (FTDI 0403:6001)
+  port: COM5 # null = auto-detect Zaber (FTDI 0403:6001)
   position_limits_mm: [40, 150] # firmware/software travel clamp for THIS workflow
   max_velocity_mm_s: 10.0
   reading_rate_hz: 100
-  home_on_start: false        # NEVER move at launch — homing once crushed the
-  move_to_zero_on_start: false #  fixture. The stage stays exactly where it is;
-                              #  the operator jogs it manually (home/go buttons).
-  zero_mm: 40.0              # manual go-to default only (NOT auto-applied at start)
-  poll_interval_s: 0.02       # ~50 Hz position poll
+  home_on_start: false # NEVER move at launch — homing once crushed the
+  move_to_zero_on_start:
+    false #  fixture. The stage stays exactly where it is;
+    #  the operator jogs it manually (home/go buttons).
+  zero_mm: 40.0 # manual go-to default only (NOT auto-applied at start)
+  poll_interval_s: 0.02 # ~50 Hz position poll
 
 # ── 12MP camera (adaptive-FPS video; fixed resolution) ────────────────
 # Recording is gated by the console's Start/Stop REC. Frame rate adapts to SMA
@@ -48,14 +49,14 @@ stage:
 # fps dropdowns, transient + heartbeat fields). Auxiliary: a failure warns.
 camera:
   enabled: true
-  index: 1                     # DirectShow index of the 12MP U3 camera
-  resolution: [1280, 720]      # dropdown: 640x360..4000x3000 (see README)
-  fps_fast: 60                 # dropdown; options adapt to resolution
-  fps_heartbeat: 1.0           # sparse rate once the SMA has settled
-  transient_guarantee_s: 10.0  # force fast this long after a heat/idle event
-  change_threshold_mm: 1.0     # net (median-filtered) laser move that counts
-  median_window_ms: 200        # laser noise/jump rejection
-  stop_dwell_s: 4.0            # no >threshold move this long -> drop to heartbeat
+  index: 1 # DirectShow index of the 12MP U3 camera
+  resolution: [1280, 720] # dropdown: 640x360..4000x3000 (see README)
+  fps_fast: 120 # dropdown; options adapt to resolution
+  fps_heartbeat: 1.0 # sparse rate once the SMA has settled
+  transient_guarantee_s: 1.0 # force fast this long after a heat/idle event
+  change_threshold_mm: 1.0 # net (median-filtered) laser move that counts
+  median_window_ms: 200 # laser noise/jump rejection
+  stop_dwell_s: 4.0 # no >threshold move this long -> drop to heartbeat
   jpeg_quality: 90
 
 # ── SMA cyclic actuation (the ON-M7 experiment state machine) ─────────
@@ -66,15 +67,17 @@ camera:
 # SMA manually from the H7 console).
 sma:
   enabled: false
-  v_high: 3.0                 # heating/actuation voltage (V)
-  v_low: 0.5                  # idle / cooling level (V). 0.5 V ≈ 0.12 A — a
-                              #   non-heating rest current so V/I/R is readable
-                              #   at arm (0 V = no current = nothing to read)
-  fire_ms: 2000               # heating duration per cycle
-  cool_ms: 8000               # cooling duration per cycle
-  n_cycles: 10                # 0 = continuous until RAW stop
-  wdt_ms: 5000                # M7 heartbeat watchdog timeout (0 = off);
-                              #   recorder pings every 1 s when driving
+  v_high: 3.0 # heating/actuation voltage (V)
+  v_low:
+    0.5 # idle / cooling level (V). 0.5 V ≈ 0.12 A — a
+    #   non-heating rest current so V/I/R is readable
+    #   at arm (0 V = no current = nothing to read)
+  fire_ms: 100 # heating duration per cycle
+  cool_ms: 3000 # cooling duration per cycle
+  n_cycles: 10 # 0 = continuous until RAW stop
+  wdt_ms:
+    5000 # M7 heartbeat watchdog timeout (0 = off);
+    #   recorder pings every 1 s when driving
 
 # ── Baseline / sensor-zero phase (cold R + laser/load tare) ───────────
 # A quiescent "go-to-defined-start" companion: ARMS at a LOW, non-heating
@@ -83,17 +86,17 @@ sma:
 # then AUTO-DISARMS. Run it before actuating (operator button, or auto below).
 baseline:
   enabled: true
-  auto_on_start: false        # true = run automatically after the health check
-  probe_v: 0.5                # non-heating probe voltage (V); ~= idle, ~0.12 A
-  duration_s: 2.0             # averaging window
-  settle_s: 0.3               # skip the initial transient before averaging
-  apply_load_offset: true     # tare: write measured load rest V → load_cell.offset_V
-  load_saturation_warn_frac: 0.8  # warn if |V_rest| exceeds this fraction of ±5 V
+  auto_on_start: false # true = run automatically after the health check
+  probe_v: 0.5 # non-heating probe voltage (V); ~= idle, ~0.12 A
+  duration_s: 2.0 # averaging window
+  settle_s: 0.3 # skip the initial transient before averaging
+  apply_load_offset: true # tare: write measured load rest V → load_cell.offset_V
+  load_saturation_warn_frac: 0.8 # warn if |V_rest| exceeds this fraction of ±5 V
 
 # ── Phase durations (OPEN/SHORT LCR de-embed calibration) ─────────────
 phases:
-  open_duration_s: 20.0       # OPEN calibration recording window
-  short_duration_s: 20.0      # SHORT calibration recording window
+  open_duration_s: 20.0 # OPEN calibration recording window
+  short_duration_s: 20.0 # SHORT calibration recording window
   # RAW (experiment) runs until Ctrl+C.
 
 # ── Calibration coefficients — ANALYSIS ONLY (not applied by recorder) ─
@@ -112,13 +115,13 @@ calibration:
     # offset_V = V0_mV/1000. Carries ~5 mN fwd/rev hysteresis (see that json).
     scale_N_per_V: 0.09803089999362627
     offset_V: -0.03418552305418667
-  current_sense:              # firmware INA296A defaults — recorded for
-    gain_V_per_V: 10.0        # traceability (the analyzer trusts the
-    shunt_ohm: 0.1            # firmware-streamed src=4 I / src=5 R directly;
-    ioffset_V: 0.0            # these only matter if recomputing from raw).
+  current_sense: # firmware INA296A defaults — recorded for
+    gain_V_per_V: 10.0 # traceability (the analyzer trusts the
+    shunt_ohm: 0.1 # firmware-streamed src=4 I / src=5 R directly;
+    ioffset_V: 0.0 # these only matter if recomputing from raw).
 
 # ── Run metadata ──────────────────────────────────────────────────────
 run:
-  operator: ""                # filled into meta.json
-  notes: ""                   # free-form, also in meta.json
-  output_dir: data            # relative to sma_recorder.py (or absolute)
+  operator: "" # filled into meta.json
+  notes: "" # free-form, also in meta.json
+  output_dir: data # relative to sma_recorder.py (or absolute)

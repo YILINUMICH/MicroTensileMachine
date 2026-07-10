@@ -300,15 +300,17 @@ def make_dashboard(out_png: Path, title: str, t0: float,
         return
 
     panels = []
-    panels.append("disp")
-    panels.append("force")
+    if "laser" in h7:
+        panels.append("disp")
+    if "load" in h7:
+        panels.append("force")
     if "sma_r" in h7 or "sma_v" in h7 or "sma_i" in h7:
         panels.append("sma")
     if deemb is not None and deemb.method != "none":
         panels.append("lcr")
     # Stage panel dropped — the stage is held fixed for a thermal run, so its
     # trace is flat and uninformative. (position stays in the joined CSV.)
-    if disp_um is not None and force_N is not None:
+    if "laser" in h7 and "load" in h7:
         panels.append("fx")
 
     n = len(panels)
@@ -321,24 +323,19 @@ def make_dashboard(out_png: Path, title: str, t0: float,
 
     for ax, key in zip(axes, panels):
         if key == "disp":
-            if disp_um is not None and "laser" in h7:
-                ax.plot(_rel(h7["laser"]["t"], t0), disp_um, lw=0.8, color="C0")
-                ax.set_ylabel("displacement (µm)")
-            elif "laser" in h7:
+            # Raw laser voltage straight off the ADC — no sensitivity applied.
+            if "laser" in h7:
                 ax.plot(_rel(h7["laser"]["t"], t0), h7["laser"]["value"],
                         lw=0.8, color="C0")
-                ax.set_ylabel("laser (V) [uncal]")
-            ax.set_title("Displacement"); ax.set_xlabel("t (s)")
+                ax.set_ylabel("laser (V)")
+            ax.set_title("Laser voltage"); ax.set_xlabel("t (s)")
         elif key == "force":
+            # Raw load-cell voltage straight off the ADC — no sensitivity applied.
             yvals = None
-            if force_N is not None and "load" in h7:
-                yvals = force_N
-                ax.plot(_rel(h7["load"]["t"], t0), yvals, lw=0.8, color="C3")
-                ax.set_ylabel("force (N)")
-            elif "load" in h7:
+            if "load" in h7:
                 yvals = h7["load"]["value"]
                 ax.plot(_rel(h7["load"]["t"], t0), yvals, lw=0.8, color="C3")
-                ax.set_ylabel("load (V) [uncal]")
+                ax.set_ylabel("load (V)")
             # Flag ADC-rail saturation — those force values are invalid.
             sat = load_saturation_mask(h7)
             if sat is not None and yvals is not None and sat.any():
@@ -351,7 +348,7 @@ def make_dashboard(out_png: Path, title: str, t0: float,
                         transform=ax.transAxes, color="red", fontsize=8,
                         va="bottom")
                 ax.legend(loc="upper right", fontsize=7)
-            ax.set_title("Force"); ax.set_xlabel("t (s)")
+            ax.set_title("Load voltage"); ax.set_xlabel("t (s)")
         elif key == "sma":
             if "sma_r" in h7:
                 ax.plot(_rel(h7["sma_r"]["t"], t0), h7["sma_r"]["value"],
@@ -384,12 +381,13 @@ def make_dashboard(out_png: Path, title: str, t0: float,
             ax.plot(_rel(stage["t"], t0), stage["position_mm"], lw=0.8, color="C7")
             ax.set_ylabel("position (mm)"); ax.set_title("Stage"); ax.set_xlabel("t (s)")
         elif key == "fx":
-            # F-vs-x on a common timeline (interp force onto laser t).
+            # Raw load-V vs laser-V on a common timeline (interp load onto
+            # laser t) — no sensitivity applied to either axis.
             tl = h7["laser"]["t"]; tf = h7["load"]["t"]
-            f_on_l = np.interp(tl, tf, force_N)
-            ax.plot(disp_um, f_on_l, lw=0.6, color="k")
-            ax.set_xlabel("displacement (µm)"); ax.set_ylabel("force (N)")
-            ax.set_title("Force – displacement")
+            load_on_l = np.interp(tl, tf, h7["load"]["value"])
+            ax.plot(h7["laser"]["value"], load_on_l, lw=0.6, color="k")
+            ax.set_xlabel("laser (V)"); ax.set_ylabel("load (V)")
+            ax.set_title("Load – laser voltage")
 
     fig.suptitle(title, fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.97))

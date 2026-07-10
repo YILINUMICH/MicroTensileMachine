@@ -902,27 +902,58 @@ static const uint32_t STATUS_PERIOD_MS = 1000;
 // Drain boot text, drain a batch of sensor samples, emit periodic [STATUS].
 // Called every loop() pass AND it is the only sensor-path work on M7, so a
 // fast loop() (state machine never blocks long) keeps the stream alive.
+// Max sensor lines drained + written per loop pass. Build-flag overridable.
+#ifndef SENSOR_BATCH
+#define SENSOR_BATCH 64
+#endif
+
 static void pumpSensors() {
-    // 1. Boot / diagnostic text from M4 via RPC.
-    while (RPC.available()) Serial.write(RPC.read());
+    // 1. Boot / diagnostic text from M4 via RPC. Guarantee it ends on a newline
+    //    before the sensor batch below: a not-yet-terminated RPC message (e.g.
+    //    the periodic [ADC1] PGA alarm, delivered in chunks across passes) would
+    //    otherwise concatenate with the first sensor line and the host parser
+    //    would drop that line.
+    int rpc_last = -1;
+    while (RPC.available()) { int c = RPC.read(); Serial.write((uint8_t)c); rpc_last = c; }
+    if (rpc_last >= 0 && rpc_last != '\n') Serial.write('\n');
 
     // 2. ADC samples from the shared ring buffer (untagged sensor TSV).
+    //    BATCHED WRITE — each small USB-CDC Serial.print() blocks ~1 ms on the
+    //    mbed stack (it waits on the USB frame, not bandwidth: ~40 KB/s is <10 %
+    //    of the link). Doing ~6 prints × 64 lines/pass gated the M7 loop — and
+    //    thus the once-per-pass SMA src=3/4/5 stream — to ~15 Hz (~1.5 pts per
+    //    100 ms fire). Formatting the whole batch into one buffer + a SINGLE
+    //    Serial.write() amortizes the per-write latency and lifts the SMA stream
+    //    to the CYCLE_LOG_MS ceiling (~99 Hz, ~10 pts/fire). Verified in the
+    //    Firmware_SMARateTest_PIO fork (2026-07-09). Float is formatted without
+    //    printf-%f (not linked on nano newlib): sign + int + 6-digit fraction.
+    static char batch[8192];
+    size_t off = 0;
     AdcSample s;
-    int batch = 0;
-    while (ring_pop(SAMPLE_RING, s) && batch < 64) {
-        Serial.print(s.timestamp_ms);
-        Serial.print('\t');
+    int n_batch = 0;
+    while (ring_pop(SAMPLE_RING, s) && n_batch < SENSOR_BATCH) {
+        if (sizeof(batch) - off < 96) {           // guard: never overflow the buffer
+            Serial.write((const uint8_t*)batch, off);
+            off = 0;
+        }
+        bool vneg = s.voltage_V < 0.0f;
+        float av  = vneg ? -s.voltage_V : s.voltage_V;
+        unsigned long vip = (unsigned long)av;
+        unsigned long vfp = (unsigned long)((av - (float)vip) * 1000000.0f + 0.5f);
+        if (vfp >= 1000000UL) { vip++; vfp -= 1000000UL; }  // fraction carry
+        int w = snprintf(batch + off, sizeof(batch) - off,
 #if ENABLE_ADC1 && ENABLE_ADC2
-        Serial.print((int)s.src);
-        Serial.print('\t');
+            "%lu\t%d\t%ld\t%s%lu.%06lu\t%lu\t%lu\r\n",
+            (unsigned long)s.timestamp_ms, (int)s.src, (long)s.raw_code,
+            vneg ? "-" : "", vip, vfp,
+            (unsigned long)s.hw_us, (unsigned long)s.seq);
+#else
+            "%lu\t%ld\t%s%lu.%06lu\t%lu\t%lu\r\n",
+            (unsigned long)s.timestamp_ms, (long)s.raw_code,
+            vneg ? "-" : "", vip, vfp,
+            (unsigned long)s.hw_us, (unsigned long)s.seq);
 #endif
-        Serial.print(s.raw_code);
-        Serial.print('\t');
-        Serial.print(s.voltage_V, 6);
-        Serial.print('\t');
-        Serial.print(s.hw_us);
-        Serial.print('\t');
-        Serial.println(s.seq);
+        if (w > 0) off += (size_t)w;
 
         // Track the newest M4 clock so SMA src=3/4/5 can share the M4 timeline.
         last_m4_hw_us = s.hw_us;
@@ -931,8 +962,9 @@ static void pumpSensors() {
         if      (s.src == SAMPLE_SRC_LASER) pop_count_src1++;
         else if (s.src == SAMPLE_SRC_LOAD)  pop_count_src2++;
         else                                pop_count_other++;
-        batch++;
+        n_batch++;
     }
+    if (off) Serial.write((const uint8_t*)batch, off);   // one USB write per pass
 
     // 3. Periodic [STATUS] telemetry frame (every 1 s).
     uint32_t now = millis();

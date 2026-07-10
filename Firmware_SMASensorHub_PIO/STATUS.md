@@ -37,6 +37,24 @@ Code-review pass over M4 + M7. Applied:
 
 Open: **compile pass** (`pio run`) — not built here; bench-verify the heat/cool/arm/wdt paths; optionally lighten `readADC`; propagate `crc_err`/`overrun` to `Firmware_SensorHub_PIO`; `V_IDLE` default (0.5 V) to confirm against the measured LDO idle.
 
+## SMA stream-rate fix (2026-07-09)
+
+**`pumpSensors()` batched write.** The M7 bridge printed each sensor line with
+~6 `Serial.print()` calls; on the Portenta mbed core each small USB-CDC write
+blocks ~1 ms (waits on the USB frame, not bandwidth — ~40 KB/s is <10 % of the
+link). At ~64 lines/pass that gated the M7 loop, and the once-per-pass SMA
+`src=3/4/5` stream inherited it → **~15 Hz, ~1.5 points per 100 ms fire.**
+
+Fix: format the whole drain batch into one buffer and push it with a **single
+`Serial.write()`** per pass (float formatted without printf-`%f`, not linked on
+nano newlib). Also added an **RPC-newline guard** so the periodic `[ADC1]` PGA
+alarm can't concatenate with the first sensor line. Measured result (in the
+`Firmware_SMARateTest_PIO` fork, then ported here): **SMA stream 15 → 99 Hz,
+~1.5 → ~9.9 points per fire**; `readSma()` unchanged (~2 ms — it was never the
+bottleneck). `SENSOR_BATCH` is a build flag. Both cores build. **Bench-verify on
+hardware; `CYCLE_LOG_MS` (10 ms) is now the ceiling and the next tuning knob.**
+See `Firmware_SMARateTest_PIO/STATUS.md` for the full investigation.
+
 ## Module TODOs
 
 - [ ] **Bench-verify the combined image** end-to-end (dual stream + SMA `drive`/`fire`, zero drops, `[STATUS]` hwm < 50%).
