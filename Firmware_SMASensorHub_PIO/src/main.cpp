@@ -97,8 +97,39 @@ static const float I_FLOOR_A       = 1e-3f;   // below this, R is undefined
 // -- On-chip ADC (H7, 16-bit) ------------------------------------------
 static const int   ADC_RES_BITS = 16;
 static const int   ADC_RES_MAX  = (1 << ADC_RES_BITS) - 1;   // 65535
-static float       ADC_VREF_V   = 3.145f;     // H7 Vref+ (1-pt cal)
-static const int   ADC_SAMPLES  = 64;
+static float       ADC_VREF_V   = 3.145f;     // H7 Vref+ (1-pt cal). NOTE: this is
+                                              // ~5% high — the rate ladder extrapolates
+                                              // the true value to ~2.99 V at zero ADC
+                                              // duty. V and I are correspondingly high;
+                                              // R = V/I is immune. Recalibrating it is a
+                                              // separate open TODO.
+
+// Software-oversampling depth, split by phase (2026-07-13, from the rate ladder
+// in Firmware_SMARateTest_PIO, env portenta_m7_rate1k_n4).
+//
+// readADC() takes N readings and averages them, and readSma() calls it twice, so
+// N sets both the cost AND the ADC's conversion duty. Duty is not innocent: the
+// ADC's reference sags in proportion to how busy it is, which inflates every
+// voltage read from it (correlation +1.000 across 8 bench runs at a fixed DAC
+// code; V_measured = 0.01508 x duty% + 2.988, R2 = 0.9996). R = V/I cancels it
+// exactly, which is why it hid for so long.
+//
+// So the in-cycle path takes FEWER readings per sample, not more: N=4 at 1 kHz
+// performs slightly fewer conversions per second than N=64 at 100 Hz did, while
+// reporting 10x as many samples. The averaging moves off the ADC and onto the
+// host, where it is free and does not drain the reference. Precision per sample
+// drops, but you get 10x the samples to average — and the fire transient is
+// finally resolved (96 points per 100 ms fire, vs 8).
+//
+//   ADC_SAMPLES_IDLE  — precision reads (cold-R, settle, manual, idle-hold) — 64
+//   ADC_SAMPLES_CYCLE — fast reads inside the heat/cool actuation           —  4
+#ifndef ADC_SAMPLES_IDLE
+#define ADC_SAMPLES_IDLE   64
+#endif
+#ifndef ADC_SAMPLES_CYCLE
+#define ADC_SAMPLES_CYCLE  4
+#endif
+static const int   ADC_SAMPLES  = ADC_SAMPLES_IDLE;   // default for legacy calls
 
 // -- Drive parameters --------------------------------------------------
 static const float    DRIVE_V_MAX  = 5.0f;
@@ -112,27 +143,42 @@ static uint16_t currentCode = 0;
 //  the BLOCKING control flow above them was restructured into a machine)
 // ──────────────────────────────────────────────────────────────────────
 
+// Post-mux settling time before the averaging burst. This was `delay(1)` — a
+// FULL MILLISECOND — and readSma() calls readADC() twice, so ~2 ms of every SMA
+// sample was pure delay. It was the single largest cost in the path and capped
+// the stream near 200 Hz. The throw-away conversion already charges the
+// sample-and-hold; the delay only buys settling of the external source, and 1 ms
+// is wildly conservative for these low-impedance sources (an LDO divider on A0,
+// an INA296A op-amp output on A1). Bench-swept 1000 -> 50 us at a fixed drive:
+// the V/I means moved -0.1%, i.e. not at all. Do not cut it further without
+// re-running that check — an unsettled source reads WRONG and the stream will
+// not tell you so.
+#ifndef SMA_SETTLE_US
+#define SMA_SETTLE_US 50
+#endif
+
 // Averaged read at an analog pin (volts at the ADC input).
-static float readADC(int pin) {
+static float readADC(int pin, int nsamples = ADC_SAMPLES) {
+    if (nsamples < 1) nsamples = 1;
     analogRead(pin);                 // throw-away (prime the input stage)
-    delay(1);
+    delayMicroseconds(SMA_SETTLE_US);
     uint32_t sum = 0;
-    for (int i = 0; i < ADC_SAMPLES; i++) sum += (uint32_t)analogRead(pin);
-    float code = (float)sum / (float)ADC_SAMPLES;
+    for (int i = 0; i < nsamples; i++) sum += (uint32_t)analogRead(pin);
+    float code = (float)sum / (float)nsamples;
     return (code / (float)ADC_RES_MAX) * ADC_VREF_V;
 }
 
 // LDO output voltage (un-divided).
-static float readLDO() {
-    return readADC(FB_PIN) * ADC_FB_SCALE;
+static float readLDO(int nsamples = ADC_SAMPLES) {
+    return readADC(FB_PIN, nsamples) * ADC_FB_SCALE;
 }
 
 // One coherent electrical read of the SMA drive path (INA296A current sense).
 struct SmaRead { float v_ldo; float i; float v_sma; float r; };
-static SmaRead readSma() {
+static SmaRead readSma(int nsamples = ADC_SAMPLES) {
     SmaRead s;
-    s.v_ldo = readLDO();                                  // A0, before the shunt
-    float v_ina = readADC(ISENSE_PIN);                    // A1, INA296A OUT
+    s.v_ldo = readLDO(nsamples);                          // A0, before the shunt
+    float v_ina = readADC(ISENSE_PIN, nsamples);          // A1, INA296A OUT
     float scale = INA_GAIN * R_SHUNT_OHM;                 // V/A
     s.i     = (scale > 0.0f) ? (v_ina - ISENSE_OFFSET_V) / scale : 0.0f;
     s.v_sma = s.v_ldo - s.i * R_SHUNT_OHM;                // subtract shunt drop
@@ -172,10 +218,12 @@ static inline void smaTag() { Serial.print(F("[SMA] ")); }
 // ══════════════════════════════════════════════════════════════════════
 //  SMA NON-BLOCKING STATE MACHINE
 //
-//  loop() services ONE step of the active op per pass. A step is short but
-//  NOT free: a feedback step calls readSma() = 2x readADC (~2-4 ms incl.
-//  readADC's delay(1) + 64-sample average), and setDACraw() adds delay(2).
-//  So the loop can stall a few ms per pass during an active SMA op — the
+//  loop() services ONE step of the active op per pass — so the loop rate is a
+//  hard ceiling on the SMA stream rate ([STATUS] loop_hz reports it). A step is
+//  short but NOT free: a feedback step calls readSma() = 2x readADC. In-cycle
+//  that is ~0.2 ms (settle 50 us + 4-sample average); at idle, or on a manual
+//  read, it is ~1.6 ms (64-sample average). setDACraw() adds delay(2).
+//  So the loop can still stall a few ms per pass during an active SMA op — the
 //  ring (~1.28 s) absorbs it with no sample loss, but the sensor stream gets
 //  bursty. pumpSensors() drains the ring every pass, so data keeps flowing
 //  DURING an SMA drive and `abort` can interrupt a live op.
@@ -233,7 +281,16 @@ static uint32_t cyc_n_done   = 0;      // completed cycles so far
 static uint32_t cyc_phase_t0 = 0;      // current phase start (millis)
 static uint32_t cyc_next_log = 0;      // next src=3/4/5 stream time (rel ms)
 static bool     cyc_fire     = false;  // fire preset: scope trigger + clean edge
-static const uint32_t CYCLE_LOG_MS = 10;
+// Period of the src=3/4/5 V/I/R stream during a cycle. Once the batched write
+// and the settle fix landed, the stream sat exactly ON this ceiling, so it is
+// the knob: 10 ms -> 100 Hz, 1 ms -> ~1 kHz (measured 962 Hz, 96 points per
+// 100 ms fire — the whole point of the exercise; it was 8). millis() has 1 ms
+// resolution, so 1 ms is the floor this scheduler can express; anything finer
+// needs the schedule moved to micros().
+#ifndef CYCLE_LOG_MS_CFG
+#define CYCLE_LOG_MS_CFG 1
+#endif
+static const uint32_t CYCLE_LOG_MS = CYCLE_LOG_MS_CFG;
 static const uint32_t CYCLE_MS_MAX = 600000;   // 10 min per phase ceiling
 
 // While ARMED and resting at idle (SMA_IDLE), stream V/I/R at this period so
@@ -317,27 +374,77 @@ static uint32_t sma_seq[6] = {0, 0, 0, 0, 0, 0};   // per-src seq, idx by src
 // publish a separate clock (M4 stays a pure producer).
 static uint32_t last_m4_hw_us = 0;   // newest sample hw_us (M4 micros())
 static uint32_t last_m4_ms    = 0;   // newest sample timestamp_ms (M4 millis())
-static void emitSmaSample(uint8_t src, int32_t raw, float volts,
-                          uint32_t hw, uint32_t ms) {
-    Serial.print(ms);        Serial.print('\t');
-    Serial.print((int)src);  Serial.print('\t');
-    Serial.print(raw);       Serial.print('\t');
-    Serial.print(volts, 6);  Serial.print('\t');
-    Serial.print(hw);        Serial.print('\t');
-    Serial.println(sma_seq[src]++);
+
+// Batch all three SMA rows into ONE USB-CDC write.
+//
+// This is the same bug the 2026-07-09 round fixed in pumpSensors(), which was
+// never applied to the SMA path: six Serial.print() calls per row x three rows =
+// ~18 tiny USB-CDC writes per sample, each blocking ~1 ms on the mbed stack.
+// That is ~3 ms of pure write latency per sample — on its own enough to make
+// 1 kHz impossible. Format into a buffer, push once (measured: 0.06 ms).
+//
+// Float without printf-%f (not linked on nano newlib): sign + integer +
+// zero-padded 6-digit fraction, byte-identical to what Serial.print(v, 6) and
+// pumpSensors() emit, so the host parser is unchanged.
+static char sma_batch[512];
+static size_t sma_off = 0;
+
+static void smaAppend(uint8_t src, int32_t raw, float volts,
+                      uint32_t hw, uint32_t ms) {
+    if (sizeof(sma_batch) - sma_off < 96) {          // guard: never overflow
+        Serial.write((const uint8_t*)sma_batch, sma_off);
+        sma_off = 0;
+    }
+    bool vneg = volts < 0.0f;
+    float av  = vneg ? -volts : volts;
+    unsigned long vip = (unsigned long)av;
+    unsigned long vfp = (unsigned long)((av - (float)vip) * 1000000.0f + 0.5f);
+    if (vfp >= 1000000UL) { vip++; vfp -= 1000000UL; }   // fraction carry
+    int w = snprintf(sma_batch + sma_off, sizeof(sma_batch) - sma_off,
+                     "%lu\t%d\t%ld\t%s%lu.%06lu\t%lu\t%lu\r\n",
+                     (unsigned long)ms, (int)src, (long)raw,
+                     vneg ? "-" : "", vip, vfp,
+                     (unsigned long)hw, (unsigned long)sma_seq[src]++);
+    if (w > 0) sma_off += (size_t)w;
 }
+
+static inline void smaFlush() {
+    if (sma_off) {
+        Serial.write((const uint8_t*)sma_batch, sma_off);   // ONE write
+        sma_off = 0;
+    }
+}
+
+// CLOCK — these lines are now stamped from M7's own micros()/millis(), NOT M4's.
+//
+// They used to carry last_m4_hw_us (the freshest sample M7 drained from the
+// ring) so src=3/4/5 would share a timeline with the src=1/2 sensor lines. That
+// was harmless at 100 Hz, but M4 produces at ~400-500 SPS, so its clock only
+// advances every ~2 ms: at 1 kHz consecutive SMA samples would carry IDENTICAL
+// timestamps and the cadence would be unmeasurable — 1 kHz of data with 500 Hz
+// of time resolution.
+//
+// The two cores' clocks differ by a constant offset, and [STATUS] emits BOTH
+// m7_us and m4_us once a second, so the host can still place src=3/4/5 on the M4
+// timeline offline. In practice nothing needs to: the host analysis aligns
+// streams on host_timestamp_s and only ever uses hw_us WITHIN a channel
+// (relative to that channel's first sample), where the M7 clock is strictly
+// better — it has real per-sample resolution.
+#ifndef SMA_STAMP_M7
+#define SMA_STAMP_M7 1
+#endif
 static void streamSma(const SmaRead& s) {
-    // Stamp these M7-produced SMA lines with the M4 timeline so src=3/4/5 share
-    // one clock with the src=1/2 sensor lines. M4 is a pure producer (it no
-    // longer publishes a live clock into the ring header), so we use the
-    // timestamps of the freshest sample M7 drained from the ring — captured in
-    // pumpSensors() as last_m4_hw_us / last_m4_ms. At 500 SPS that's within
-    // ~2 ms of "now", plenty for correlating actuation with sensor response.
-    uint32_t hw = last_m4_hw_us;
+#if SMA_STAMP_M7
+    uint32_t hw = micros();          // M7 clock — true per-sample resolution
+    uint32_t ms = millis();
+#else
+    uint32_t hw = last_m4_hw_us;     // M4 clock — quantized to ~2 ms (legacy)
     uint32_t ms = last_m4_ms;
-    emitSmaSample(SAMPLE_SRC_SMA_V, (int32_t)currentCode, s.v_ldo, hw, ms);
-    emitSmaSample(SAMPLE_SRC_SMA_I, 0,                    s.i,     hw, ms);
-    if (!isnan(s.r)) emitSmaSample(SAMPLE_SRC_SMA_R, 0,   s.r,     hw, ms);
+#endif
+    smaAppend(SAMPLE_SRC_SMA_V, (int32_t)currentCode, s.v_ldo, hw, ms);
+    smaAppend(SAMPLE_SRC_SMA_I, 0,                    s.i,     hw, ms);
+    if (!isnan(s.r)) smaAppend(SAMPLE_SRC_SMA_R, 0,   s.r,     hw, ms);
+    smaFlush();                      // ONE USB-CDC write for all three rows
 }
 
 // ── Instant (non-state) commands ──────────────────────────────────────
@@ -531,7 +638,7 @@ static void serviceSma() {
             // Armed + resting at idle: stream V/I/R so the host sees the
             // idle-hold live. Disarmed = no current = nothing to report.
             if (armed && (int32_t)(millis() - idle_next_log) >= 0) {
-                streamSma(readSma());
+                streamSma(readSma(ADC_SAMPLES_IDLE));   // 10 Hz — precision, duty ~1.5%
                 idle_next_log = millis() + IDLE_LOG_MS;
             }
             return;
@@ -611,7 +718,7 @@ static void serviceSma() {
             if (cycleWatchdogTripped()) return;     // heat-only watchdog → idle-low
             uint32_t t_rel = millis() - cyc_phase_t0;
             if (t_rel >= cyc_next_log) {            // stream V/I/R during heat
-                streamSma(readSma());
+                streamSma(readSma(ADC_SAMPLES_CYCLE));   // ~1 kHz — average in post
                 cyc_next_log += CYCLE_LOG_MS;
             }
             if (t_rel >= cyc_fire_ms) cycleEnterLow();
@@ -621,7 +728,7 @@ static void serviceSma() {
         case SMA_ACT_COOL: {
             uint32_t t_rel = millis() - cyc_phase_t0;   // cooling is self-safe → no wdt
             if (t_rel >= cyc_next_log) {            // stream V/I/R during cool
-                streamSma(readSma());
+                streamSma(readSma(ADC_SAMPLES_CYCLE));   // ~1 kHz — average in post
                 cyc_next_log += CYCLE_LOG_MS;
             }
             if (t_rel >= cyc_cool_ms) {
@@ -1025,6 +1132,20 @@ static void pumpSensors() {
         Serial.print(" vdd=");            Serial.print(VDD_MCP, 3);
         Serial.print(" offset=");         Serial.print(V_OFFSET, 4);
         Serial.print(" aref=");           Serial.print(ADC_VREF_V, 3);
+        // M7 loop period. serviceSma() streams at most ONE sample per loop pass,
+        // so loop_hz is a HARD CEILING on the SMA rate no matter what
+        // CYCLE_LOG_MS says. If the achieved SMA rate ever plateaus below
+        // 1/CYCLE_LOG_MS, compare it against loop_hz first — that is the wall.
+        {
+            extern uint32_t loop_dt_sum, loop_dt_max, loop_n;
+            uint32_t avg = loop_n ? (loop_dt_sum / loop_n) : 0;
+            Serial.print(" loop_us_avg=");  Serial.print(avg);
+            Serial.print(" loop_us_max=");  Serial.print(loop_dt_max);
+            Serial.print(" loop_hz=");      Serial.print(avg ? (1000000UL / avg) : 0);
+            Serial.print(" cycle_log_ms="); Serial.print(CYCLE_LOG_MS);
+            Serial.print(" n_cycle=");      Serial.print(ADC_SAMPLES_CYCLE);
+            loop_dt_sum = 0; loop_dt_max = 0; loop_n = 0;
+        }
         Serial.println();
     }
 }
@@ -1101,7 +1222,26 @@ void setup() {
     smaTag(); Serial.println(F("      gain|shunt|ioffset|vdd|offset|aref <x> | reset"));
 }
 
+// M7 loop-period instrumentation. serviceSma() streams at most ONE sample per
+// loop pass, so the SMA rate can never exceed the loop rate regardless of
+// CYCLE_LOG_MS — to hold 1 kHz the whole loop must sustain <1000 us per pass.
+// Reported in [STATUS] once a second so the bench sees the real ceiling instead
+// of inferring it.
+uint32_t loop_dt_sum = 0;
+uint32_t loop_dt_max = 0;
+uint32_t loop_n      = 0;
+
 void loop() {
+    static uint32_t last_loop_us = 0;
+    uint32_t now_us = micros();
+    if (last_loop_us) {
+        uint32_t dt = now_us - last_loop_us;
+        loop_dt_sum += dt;
+        if (dt > loop_dt_max) loop_dt_max = dt;
+        loop_n++;
+    }
+    last_loop_us = now_us;
+
     pumpSensors();                  // keep the sensor stream flowing (every pass)
     String line;
     if (pollCommand(line)) dispatch(line);

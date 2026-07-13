@@ -4,7 +4,9 @@
 answer one question: why does the SMA V/I/R stream capture only ~2 points during
 a 100 ms fire, and how do we fix it?
 
-**Bottom line (2026-07-09): SOLVED.** The bottleneck was NOT the ADC — it was the
+**Round 1 bottom line (2026-07-09): SOLVED (15 → 99 Hz).** Round 2 (2026-07-13, below) pushes toward 1 kHz — built, not yet bench-run.
+
+**Original round-1 finding:** The bottleneck was NOT the ADC — it was the
 M7 bridge loop doing many tiny USB-CDC writes. A batched `Serial.write()` took
 the SMA stream from **15 Hz → 99 Hz (~1.5 → ~9.9 points per fire)**. The fix is
 ready to port to production; see **Next**.
@@ -74,7 +76,83 @@ per-call overhead, not bandwidth (so a transport swap like UDP would NOT help).
 Float format spot-checked (laser/load/negatives, exactly 6 decimals; 51 k lines
 validated). Both cores build clean.
 
-## Next
+---
+
+# ROUND 2 (2026-07-13) — push toward 1 kHz. **BUILT, NOT YET BENCH-RUN.**
+
+Round 1 raised the SMA stream to 99 Hz and left `CYCLE_LOG_MS` as the ceiling.
+Round 2 attacks the three costs that gate it above that. **All six envs compile
+clean; none has been on the rig yet — every number below is a prediction.**
+
+## What was found in the code
+
+| cost | what it was | fix |
+|---|---|---|
+| **~2000 µs** | `readADC()` did `delay(1)` — a FULL MILLISECOND — per channel, and `readSma()` calls it twice. This is the fixed ~2 ms that round 1 measured but never removed (it correctly proved the *averaging* wasn't the cost, then stopped). | `SMA_SETTLE_US` (default 50 µs) |
+| **~3000 µs** | **`emitSmaSample()` never got round 1's batching fix.** It does 6 `Serial.print()` calls per line × 3 rows = ~18 tiny USB-CDC writes per sample, each blocking ~1 ms on the mbed stack. This is *literally the same bug* round 1 fixed in `pumpSensors()` — it was just never applied to the SMA path. | batch into one `Serial.write()` |
+| **silent** | `streamSma()` stamped every line with `last_m4_hw_us` — M4's clock, which only advances every ~2 ms (500 SPS). Harmless at 100 Hz; above ~500 Hz consecutive samples would carry **identical timestamps** and the achieved cadence would be unmeasurable. | `SMA_STAMP_M7` (default 1) |
+| ceiling | `CYCLE_LOG_MS` hard-coded to 10 | `CYCLE_LOG_MS_CFG` build flag |
+
+Together those are ~5 ms of work per sample → a ~200 Hz ceiling, which is why
+`CYCLE_LOG_MS = 10` (100 Hz) sat comfortably below it and never slipped.
+
+## New instrumentation
+
+- `[RATE] n=<N> readSma_us=<µs> emit_us=<µs> dt_us=<µs>` — **`dt_us` is the
+  ACHIEVED cadence**, measured on-device between consecutive SMA samples. That is
+  the number this whole exercise is about. The `[RATE]` line is appended into the
+  same batch buffer as the sample rows, so it costs no extra USB write (at 1 kHz
+  an unbatched diagnostic line would itself become the bottleneck — the very bug
+  being fixed). `RATE_DECIM` thins it at high rates.
+- `[STATUS] … loop_us_avg / loop_us_max / loop_hz` — the M7 loop period.
+  **`serviceSma()` streams at most one sample per loop pass, so the loop rate is a
+  hard ceiling on the SMA rate**, independent of `CYCLE_LOG_MS`.
+- `rate_probe.py` now reports achieved cadence, where the time goes, stream health
+  (`dropped`/`crc_err`), and an **accuracy check** on the V/I means.
+
+## The rate ladder — climb IN ORDER, stop at the first failure
+
+```
+pio run -e portenta_m4              -t upload   # sampler, once (unchanged)
+pio run -e portenta_m7_rate100      -t upload   # rung 0: control (today's behaviour)
+pio run -e portenta_m7_rate100_fixed -t upload  # rung 1: both fixes, rate unchanged
+pio run -e portenta_m7_rate200      -t upload   # rung 2: 200 Hz
+pio run -e portenta_m7_rate500      -t upload   # rung 3: 500 Hz
+pio run -e portenta_m7_rate1k       -t upload   # rung 4: 1 kHz, still 64x averaging
+pio run -e portenta_m7_rate1k_n16   -t upload   # rung 5: 1 kHz, 16x (only if 4 fails)
+python rate_probe.py --port COM8                # after EACH upload
+```
+Power-cycle USB + EVM after every upload (else the ADS1263 boots `ID=0x00`).
+
+**Rung 0 first, and keep its output.** It is the control: the V/I means from rung
+0 (settle = 1000 µs) are what every later rung must reproduce.
+
+## What to watch — a bigger number is NOT automatically a win
+
+1. **`dt_us` should approach `CYCLE_LOG_MS × 1000`.** If it plateaus *above* that,
+   the M7 loop (`loop_us_avg`) is the wall, not the schedule.
+2. **`dropped` / `crc_err` must stay 0.** If the ring starts dropping, the SMA path
+   is starving the sensor drain — you bought SMA rate with laser/load data.
+3. **The V and I MEANS must not move as `SMA_SETTLE_US` comes down.** This is the
+   one failure mode that is silent: 1 ms of settling is wildly conservative for
+   these low-impedance sources (LDO divider, INA296A op-amp output), but if the
+   source has *not* settled, you get a faster reading that is simply **wrong**, and
+   nothing in the stream will say so. `rate_probe.py` section [3] prints these
+   means for exactly this comparison. If they shift, back `SMA_SETTLE_US` off.
+4. **Rung 5's trade-off is a real question, not a formality.** Dropping 64× → 16×
+   averaging costs √4 = 2× in noise *if the noise is white*. Our session data says
+   it is **not** — σ(I) = 138 LSB even *after* 64× averaging, because the
+   interferer is low-frequency and the 64 back-to-back reads all catch it at the
+   same phase. So 16× may be nearly free. **Measure the V/I scatter, don't assume.**
+
+## Honest expectation
+
+readSma should fall ~2.47 ms → ~0.5 ms (64×) and the emit ~3 ms → well under
+0.1 ms, which *should* clear a 1 ms budget. But the M7 loop period has never been
+measured — that is what `loop_hz` is now for, and it is the most likely place for
+1 kHz to fail. **500 Hz is the confident outcome; 1 kHz is the stretch.**
+
+## Round 1 next-steps (superseded by the ladder above)
 
 1. **Play with `CYCLE_LOG_MS` (`src/main.cpp`, currently 10 ms).** It is now the
    ceiling — the SMA stream sits right on it (99 Hz ≈ 1/10 ms). Lowering it (e.g.

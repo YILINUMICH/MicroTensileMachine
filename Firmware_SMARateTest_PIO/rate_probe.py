@@ -36,6 +36,8 @@ except ImportError:
     sys.exit("pyserial required:  pip install pyserial")
 
 RATE_RE = re.compile(r"\[RATE\]\s+n=(\d+)\s+readSma_us=(\d+)")
+EMIT_RE = re.compile(r"\bemit_us=(\d+)")
+DT_RE = re.compile(r"\bdt_us=(\d+)")     # achieved cadence, measured on-device
 
 
 def main() -> int:
@@ -134,29 +136,154 @@ def main() -> int:
 
 
 def _summarize(lines: list[str], out: str) -> None:
-    by_n: dict[int, list[int]] = defaultdict(list)
+    by_n: dict[int, list[int]] = defaultdict(list)      # readSma_us
+    emit_us: list[int] = []
+    dt_us: list[int] = []                               # ACHIEVED cadence
     for s in lines:
         m = RATE_RE.search(s)
-        if m:
-            by_n[int(m.group(1))].append(int(m.group(2)))
-    n_v = sum(1 for s in lines if s.split("\t")[1:2] == ["3"])   # src=3 sma_v samples
+        if not m:
+            continue
+        by_n[int(m.group(1))].append(int(m.group(2)))
+        m2 = EMIT_RE.search(s)
+        if m2:
+            emit_us.append(int(m2.group(1)))
+        m3 = DT_RE.search(s)
+        if m3 and int(m3.group(1)) > 0:
+            dt_us.append(int(m3.group(1)))
+
+    # src=3/4/5 sample rows, and the V/I values — the accuracy check.
+    v_vals, i_vals = [], []
+    for s in lines:
+        f = s.split("\t")
+        if len(f) >= 4:
+            try:
+                if f[1] == "3":
+                    v_vals.append(float(f[3]))
+                elif f[1] == "4":
+                    i_vals.append(float(f[3]))
+            except ValueError:
+                pass
+
+    # [STATUS] loop ceiling / health
+    st_loop, st_drop, st_crc, st_cfg = [], [], [], {}
+    for s in lines:
+        if not s.startswith("[STATUS]"):
+            continue
+        for k, store in (("loop_hz", st_loop), ("dropped", st_drop),
+                         ("crc_err", st_crc)):
+            mm = re.search(rf"\b{k}=(\d+)", s)
+            if mm:
+                store.append(int(mm.group(1)))
+        for k in ("loop_us_avg", "loop_us_max", "cycle_log_ms", "settle_us"):
+            mm = re.search(rf"\b{k}=(\d+)", s)
+            if mm:
+                st_cfg[k] = int(mm.group(1))
 
     print(f"\nsaved {len(lines)} lines -> {out}")
-    print(f"SMA sample points captured (src=3 sma_v): {n_v}")
+    print(f"SMA sample points captured (src=3 sma_v): {len(v_vals)}")
     if not by_n:
         print("NO [RATE] lines — SMA never armed/cycled. Check that `arm` was accepted "
               "(MCP4728 DAC present?) and the port is the H7 (COM8).")
         return
-    print("\nreadSma() duration by ADC_SAMPLES (n):")
-    print(f"  {'n':>4}  {'count':>6}  {'median_ms':>10}  {'min_ms':>7}  {'max_ms':>7}  {'~pts/100ms fire':>16}")
+
+    if st_cfg:
+        print(f"\nbuild: CYCLE_LOG_MS={st_cfg.get('cycle_log_ms','?')} "
+              f"SMA_SETTLE_US={st_cfg.get('settle_us','?')}")
+
+    # ---- 1. THE HEADLINE: did we actually get the rate? ---------------------
+    print("\n[1] ACHIEVED SMA CADENCE (dt between consecutive samples, on-device)")
+    if dt_us:
+        med = st.median(dt_us)
+        target = st_cfg.get("cycle_log_ms", 0) * 1000
+        print(f"  median dt = {med/1000:.3f} ms  ->  {1e6/med:.0f} Hz "
+              f"   ({100.0/(med/1000):.1f} points per 100 ms fire)")
+        if target:
+            if med > target * 1.25:
+                print(f"  ** MISSED the {1000/st_cfg['cycle_log_ms']:.0f} Hz target "
+                      f"({target/1000:.0f} ms) — something below is the wall, not the schedule.")
+            else:
+                print(f"  ** HIT the {1000/st_cfg['cycle_log_ms']:.0f} Hz target.")
+    else:
+        print("  (no dt_us field — firmware predates the rate-ladder build)")
+
+    # ---- 2. where the time goes ---------------------------------------------
+    print("\n[2] WHERE THE TIME GOES (per sample)")
+    print(f"  {'n':>4}  {'count':>6}  {'readSma_ms':>11}  {'min':>6}  {'max':>6}")
     for N in sorted(by_n):
         v = by_n[N]
-        med = st.median(v) / 1000.0
-        pts = 100.0 / med if med > 0 else float("inf")
-        print(f"  {N:>4}  {len(v):>6}  {med:>10.2f}  {min(v)/1000:>7.2f}  {max(v)/1000:>7.2f}  {pts:>16.1f}")
-    print("\nInterpretation:")
-    print("  - If n=16 median ~= n=64 median / 4  -> averaging dominates; lower N buys rate.")
-    print("  - If n=16 median barely below n=64   -> M7 loop is the wall; needs HW oversampling.")
+        print(f"  {N:>4}  {len(v):>6}  {st.median(v)/1000:>11.3f}  "
+              f"{min(v)/1000:>6.3f}  {max(v)/1000:>6.3f}")
+    if emit_us:
+        print(f"  emit (3 rows, one batched USB write): "
+              f"median {st.median(emit_us)/1000:.3f} ms")
+    if st_loop:
+        print(f"  M7 loop: {st.median(st_loop):.0f} Hz "
+              f"(avg {st_cfg.get('loop_us_avg','?')} us, "
+              f"max {st_cfg.get('loop_us_max','?')} us)")
+        print("     serviceSma() streams at most ONE sample per loop pass, so the")
+        print("     loop rate is a HARD ceiling on the SMA rate.")
+
+    # ---- 3. the silent failure mode -----------------------------------------
+    # Runs 0-5 (2026-07-13) found V and I inflating up to +33% as the ADC
+    # CONVERSION DUTY rose, with the DAC code unchanged. R = V/I is IMMUNE (both
+    # channels scale together, the ratio cancels) and sat at a rock-steady 21.4 Ω
+    # through the whole thing — so checking R would have called it a clean pass.
+    # Always compare V and I against the DAC CODE, phase by phase.
+    print("\n[3] ACCURACY CHECK — is the measurement still telling the truth?")
+
+    # Pair V (src=3, raw column = DAC currentCode) with I (src=4) by seq.
+    dv, dc, di = {}, {}, {}
+    for s in lines:
+        f = s.split("\t")
+        if len(f) >= 6:
+            try:
+                if f[1] == "3":
+                    dv[int(f[5])] = float(f[3]); dc[int(f[5])] = int(f[2])
+                elif f[1] == "4":
+                    di[int(f[5])] = float(f[3])
+            except ValueError:
+                pass
+    keys = sorted(set(dv) & set(di))
+    if not keys:
+        print("  (no paired V/I samples)")
+    else:
+        fire = [k for k in keys if dv[k] > 1.75]
+        if fire:
+            V = [dv[k] for k in fire]
+            I = [di[k] for k in fire]
+            C = [dc[k] for k in fire]
+            vm, im = st.mean(V), st.mean(I)
+            print(f"  IN FIRE (n={len(fire)}), DAC code = {st.mean(C):.0f}")
+            print(f"    V = {vm:8.4f} V  (sd {st.pstdev(V):.4f})")
+            print(f"    I = {im:8.4f} A  (sd {st.pstdev(I):.4f}, "
+                  f"{100*st.pstdev(I)/abs(im) if im else 0:.2f}% scatter)")
+            print(f"    R = V/I = {vm/im if im else float('nan'):.3f} ohm")
+            print()
+            print("  >> Compare V and I against RUNG 0 at the SAME DAC code.")
+            print("     If the DAC code matches but V has moved, the MEASUREMENT is")
+            print("     wrong, not the drive.")
+            print("  >> R is NOT a valid check — it cancels the error. Runs 0-5 had R")
+            print("     pinned at 21.4 ohm while V drifted +33%.")
+        # The diagnostic that actually caught it: error vs ADC conversion duty.
+        if by_n and dt_us:
+            N = st.median(sorted(by_n))
+            rd = st.median(by_n[sorted(by_n)[0]])
+            settle = st_cfg.get("settle_us", 0)
+            adc_us = rd - 2 * settle
+            duty = 100.0 * adc_us / st.median(dt_us)
+            print(f"\n  ADC conversion duty = {duty:.0f}%  "
+                  f"(adc {adc_us:.0f} us of a {st.median(dt_us):.0f} us cadence)")
+            if duty > 20:
+                print(f"  ** WARNING: duty > 20%. Runs 0-5 showed V inflating "
+                      f"~0.46% per 1% of duty above ~14%.")
+                print(f"     Predicted V error here: ~{0.46*(duty-14):+.0f}%. "
+                      f"Reduce ADC_SAMPLES_CYCLE.")
+
+    # ---- 4. stream health ----------------------------------------------------
+    if st_drop or st_crc:
+        d, c = sum(st_drop), sum(st_crc)
+        print(f"\n[4] STREAM HEALTH: dropped={d}  crc_err={c}   "
+              f"{'OK' if d == 0 and c == 0 else '** NOT CLEAN — the SMA path is starving the sensor drain'}")
 
 
 if __name__ == "__main__":

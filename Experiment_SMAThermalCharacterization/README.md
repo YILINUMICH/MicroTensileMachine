@@ -173,6 +173,16 @@ implementation remains in git history.
 
 ## Analyze + visualize
 
+Two entry points, and they do different jobs:
+
+| script | job |
+|---|---|
+| **`analyze_sma.py`** | the flat whole-session dashboard on **raw** values, the legacy OPEN/SHORT/RAW layout, LCR de-embedding, and the annotated per-cycle videos |
+| **`sma_plots.py`** | everything that reasons about the **actuation pattern** — `cycles` / `laser` / `transition` (next section) |
+
+Start with `sma_plots.py all --session <dir>`; reach for `analyze_sma.py` when you
+want the raw dashboard, a legacy phase-layout session, or the camera videos.
+
 ```sh
 # console layout (events.csv) and legacy per-phase layout both auto-detect
 python analyze_sma.py --session data/console_20260624_153000
@@ -185,15 +195,20 @@ python analyze_sma.py --session <dir> --k -0.1171 --v0 566.957 --load-scale 50.0
 present, else the **legacy per-phase** layout. Produces, in the session dir:
 
 - `<label>_dashboard.png` — multi-panel: displacement, force, SMA R/V/I,
-  de-embedded LCR R/L, and force-vs-displacement (`<label>` = `console` or the
-  phase name). The **stage panel is dropped** (held fixed for a thermal run);
+  de-embedded LCR R/L, and **SMA electrical power P = V·I vs time** (`<label>` =
+  `console` or the phase name). The power panel annotates peak / idle power and
+  the total energy delivered (∫P dt). It **replaced** a load-vs-laser voltage
+  cross-plot: for a thermal run the Joule heating driving the transformation is
+  what matters, and with the stage held fixed the displacement axis barely moved
+  (what it did show was drive feedthrough, not motion). The **stage panel is dropped** (held fixed for a thermal run);
   position is still in the joined CSV. The **Force panel flags ADC-rail
   saturation** (load samples pinned at ±2²³ → invalid force, marked red with a
   "null the LCA-9PC ZERO pot" note), and the **SMA panel draws the cold-R
   reference** from the `baseline` block in `meta.json` (if the baseline phase
   ran). The console summary also prints the saturation % and the measured
   cold R / applied load tare.
-- `<label>_joined.csv` — all streams interpolated onto a uniform 100 Hz grid.
+- `<label>_joined.csv` — all streams interpolated onto a uniform 100 Hz grid
+  (now including `sma_power_W`).
 - `video/cycle_NN.mp4` — **annotated per-cycle video** stitched from the camera
   JPEGs, with a burned-in overlay (cycle, time, mode, and the displacement/force
   interpolated onto each frame) so a frame is self-explanatory. Needs
@@ -207,18 +222,59 @@ those windows. Conversions are applied only where the coefficient is present
 in `meta.json` (or overridden on the CLI); otherwise the channel is plotted
 raw. LCR de-embedding auto-selects OPEN+SHORT (2-term) or SHORT-only.
 
-## Cycle-aligned + laser plots
+## Cycle-aligned + laser plots — `sma_plots.py`
 
-Two focused plotters sit alongside `analyze_sma.py` (which renders the flat
-whole-session dashboard):
+`analyze_sma.py` renders the flat whole-session dashboard on **raw** values and
+is unchanged. Everything that reasons about the **actuation pattern** lives in
+one script, `sma_plots.py`, with three views:
 
 ```sh
-python plot_cycles.py --session data/console_20260713_115921    # segment by the actuation pattern
-python plot_cycles.py --session <dir> --r-ref cycle             # normalize R to each cycle's own pre-fire R
-python plot_laser.py  --session data/console_20260713_122906    # laser-channel diagnostic
+python sma_plots.py all        --session data/console_20260713_115921
+python sma_plots.py cycles     --session <dir> [--r-ref cycle] [--notch auto] [--lowpass 20]
+python sma_plots.py laser      --session data/console_20260713_122906
+python sma_plots.py transition --session <dir> [--bin-ms 150]
 ```
 
-`plot_cycles.py` recovers the `cycle <v_high> <v_low> <fire_ms> <cool_ms> <n>`
+| view | answers | writes |
+|---|---|---|
+| `cycles` | what happened in each fire/cool cycle | `cycles_{timeline,overlay,trend}.png`, `cycles_metrics.csv` |
+| `laser` | is the laser trustworthy | `laser_diagnostics.png`, `laser_before_after.png` |
+| `transition` | is the SMA transition real, and how fast | `transition_fit.png`, `transition_per_cycle.png` |
+| `all` | run all three with their defaults | everything above |
+
+### Flags
+
+Every view takes `--session <dir>` (required) and `--dpi` (default 140).
+
+| view | flag | default | what it does |
+|---|---|---|---|
+| `cycles` | `--r-ref cold\|cycle` | `cold` | R₀ that resistance is normalized to. `cold` = the session's initial baseline reading (one reference for the run, so the cycle-to-cycle drift stays **visible**); `cycle` = each cycle's own pre-fire R (drift **divided out**). |
+| `cycles` | `--notch HZ\|auto` | *off* | Notch this frequency + harmonics out of the **displacement** channel. `auto` fits the tone in 40–90 Hz. |
+| `cycles` | `--notch-q` | `30` | Notch sharpness (f₀/width); higher = narrower. |
+| `cycles` | `--notch-harmonics` | `3` | How many harmonics of `--notch` to remove. |
+| `cycles` | `--lowpass HZ` | *off* | Low-pass the **displacement** channel (4th-order Butterworth magnitude, zero-phase). SMA actuation lives below a few Hz, so ~20 Hz is generous. |
+| `laser` | `--fmin` / `--fmax` | `5` / `195` | Tone-search band (Hz). |
+| `laser` | `--zoom-s` | `0.20` | Width of the zoom panel (s). |
+| `laser` | `--notch-hw` | `1.0` | Notch half-width (Hz) in the before/after demo. |
+| `transition` | `--bin-ms` | `150` | Ensemble time-bin width. **Don't go too fine** — at 25 ms the per-bin SEM (±1.7%) approaches the ~3% effect and a real transient reads as noise. |
+
+**Filtering is opt-in and never silent.** With no `--notch`/`--lowpass`, everything
+is **raw** (`analyze_sma.py` is *always* raw). When a filter is on: only the
+**displacement** channel is touched — force and resistance are never filtered —
+every figure is stamped `[displacement FILTERED: …]`, and outputs get a `_filt`
+suffix so the raw PNGs are never clobbered:
+
+```sh
+python sma_plots.py cycles --session <dir> --notch auto --lowpass 20
+# -> cycles_timeline_filt.png, cycles_overlay_filt.png,
+#    cycles_trend_filt.png, cycles_metrics_filt.csv   (raw versions untouched)
+```
+
+Note the filter cannot remove the **drive feedthrough** (artifact 3 below) — that
+is synchronous with the fire, not at a distinct frequency, so no frequency filter
+touches it. The view keeps flagging it even under `--lowpass`.
+
+The `cycles` view recovers the `cycle <v_high> <v_low> <fire_ms> <cool_ms> <n>`
 command from `events.csv`, locates each fire onset as a rising edge of `sma_v`,
 and writes `cycles_timeline.png`, `cycles_overlay.png` (all cycles folded onto
 fire-onset time), `cycles_trend.png` and `cycles_metrics.csv`. Resistance is
@@ -229,7 +285,7 @@ cycle's own pre-fire R, drift divided out). Every per-cycle metric is drawn
 against its own **±2σ noise band**, so a "trend" that is really scatter reads as
 scatter.
 
-`fit_transition.py` answers "is the SMA transition actually there?" Single-cycle
+The `transition` view answers "is the SMA transition actually there?" Single-cycle
 resistance is hopeless (σ ≈ 6% per sample vs a ~3% effect), but the run fires the
 SAME cycle N times, so the transient is recovered by **ensemble averaging**: fold
 every cycle onto the fire onset, average **within a window** and then **across
@@ -245,7 +301,7 @@ cycles**. That drops the error to ~0.5% and the transition appears at >5σ:
 **Resistance DROPS ~3% during the fire and recovers over the cool.** Note the
 sign: an estimator that takes `max()` over the fire window finds only the largest
 *noise* excursion (always positive) and reports a meaningless *rise* — which is
-exactly what an earlier version of `plot_cycles.py` did. Use the window **mean**.
+exactly what an earlier version of this code did. Use the window **mean**.
 
 It also fits a first-order thermal model to the cooling phase. **τ_F ≳ 6 s while
 `cool_ms` is only 3 s**, so the coil never returns to baseline before the next
@@ -253,13 +309,27 @@ fire — which is why the force baseline ratchets upward across the run. The fit
 warns when τ exceeds half the observation window (it is then only a lower bound).
 **Raise `cool_ms` to ≥ 3–5 × τ (~20–30 s) if you want clean, independent cycles.**
 
+`transition_per_cycle.png` shows the same thing **cycle by cycle** rather than
+pooled — one small multiple per cycle, each with an error bar from *that cycle's
+own* ~8 in-fire samples (nothing borrowed from the ensemble), plus a trend panel.
+Most cycles resolve on their own at >5σ, the spread across cycles (±1.6%) is 2.8×
+the measurement error — so the **cycle-to-cycle variation is real** — and on this
+run cycle 8 shows **no drop at all**, right after the cycle-7 mechanical event
+that also spikes the force 7×. That is exactly the kind of thing an ensemble
+average erases, which is why both figures exist.
+
+The `laser` view is the instrument diagnostic: it pulls out the coherent ~65.8 Hz
+tone, marks the zero-order-hold duplicate rows, and renders a before/after of the
+two corrections applied in post. Point it at an **idle** recording — see the
+reference sample below. Full write-up in the next section.
+
 ## Known signal artifacts — diagnose with `console_20260713_122906`
 
 **`data/console_20260713_122906/` is the reference diagnostic sample.** It is a
 ~19 s recording with **the laser aimed at a rigid, immovable block** — no
 actuation, stage held, nothing mechanically able to move. So anything that shows
 up in it is **instrumentation, not SMA physics**, by construction. Re-run
-`python plot_laser.py --session data/console_20260713_122906` after any change to
+`python sma_plots.py laser --session data/console_20260713_122906` after any change to
 the laser wiring / ADC config and compare against the committed PNGs.
 
 **Three artifacts are known. Ranked by how much they actually threaten a result:**
@@ -342,7 +412,7 @@ corrupt any slow measurement. **Nuisance, not defect.**
 
 1. **Take the laser out of the loop.** Disconnect the IL-030 from AIN4/AIN5 and
    feed ADC1 a steady DC voltage (battery + divider, or just short the inputs).
-   Record 20 s, run `plot_laser.py`.
+   Record 20 s, run `sma_plots.py laser`.
    - Tone **survives** → it is the **ADC front end / wiring / Portenta**; the
      laser is innocent.
    - Tone **vanishes** → the **IL-030 is generating it**; next question is its
@@ -384,7 +454,7 @@ entirely. That is why this went unnoticed.
 
 ### Outputs
 
-`plot_laser.py` writes, into the session dir:
+The `laser` view writes, into the session dir:
 
 - `laser_diagnostics.png` — full trace, zoom (duplicates marked), amplitude
   spectrum (laser vs load), phase-fold, autocorrelation, and the residual once
@@ -402,7 +472,7 @@ fire window** and is back to 0 ± 0.3 µm by +0.25 s — exactly when the force 
 *peaking*. Real contraction visible in the force would still be present at the
 force peak; this isn't, and the step is unchanged even on a cycle where the force
 was 8× larger. It tracks the 0.7 A drive, not the mechanics: **drive feedthrough,
-not displacement.** `plot_cycles.py` tests for this automatically and labels the
+not displacement.** The `cycles` view tests for this automatically and labels the
 panel when it triggers.
 
 ## Files
@@ -420,9 +490,8 @@ Experiment_SMAThermalCharacterization/
 ├── sma_recorder.py        legacy interactive OPEN→SHORT→RAW entry point
 ├── run_experiment.py      RETIRED stub (use sma_console.py --headless)
 ├── operator_io.py         terminal prompts / progress / banners (legacy recorder)
-├── analyze_sma.py         offline de-embed + raw→physical + dashboards (console + phase)
-├── plot_cycles.py         segment a run by its actuation pattern (timeline/overlay/trend + metrics)
-└── plot_laser.py          laser-channel diagnostic — the 65.8 Hz tone + ZOH duplicates
+├── analyze_sma.py         offline de-embed + raw→physical + dashboards (console + phase); RAW values, unchanged
+└── sma_plots.py           actuation-pattern analysis — `cycles` / `laser` / `transition` views
 ```
 
 Cross-module drivers are imported via `sys.path` shims (canonical sources:

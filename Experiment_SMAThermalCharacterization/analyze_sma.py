@@ -8,6 +8,9 @@ RECORDER logs raw data only — all unit conversion happens here), joins the
 streams on the host clock, and renders a multi-panel PNG dashboard plus a
 joined CSV.
 
+Dashboard panels: displacement, force, SMA R/V/I, de-embedded LCR R/L, and SMA
+electrical power (P = V.I) vs time. All values are plotted RAW - no filtering.
+
 Usage:
     python analyze_sma.py --session data/sma_20260621_153000
     python analyze_sma.py --session <dir> --phase raw
@@ -310,8 +313,14 @@ def make_dashboard(out_png: Path, title: str, t0: float,
         panels.append("lcr")
     # Stage panel dropped — the stage is held fixed for a thermal run, so its
     # trace is flat and uninformative. (position stays in the joined CSV.)
-    if "laser" in h7 and "load" in h7:
-        panels.append("fx")
+    #
+    # Electrical power P = V·I into the coil. This replaced a load-vs-laser
+    # voltage scatter: for a THERMAL run the Joule heating actually driving the
+    # transformation is the quantity of interest, and the force-vs-displacement
+    # cross-plot was near-meaningless anyway (the stage is held, so displacement
+    # barely moves and what it does show is drive feedthrough).
+    if "sma_v" in h7 and "sma_i" in h7:
+        panels.append("power")
 
     n = len(panels)
     ncol = 2
@@ -380,14 +389,37 @@ def make_dashboard(out_png: Path, title: str, t0: float,
         elif key == "stage" and stage is not None:
             ax.plot(_rel(stage["t"], t0), stage["position_mm"], lw=0.8, color="C7")
             ax.set_ylabel("position (mm)"); ax.set_title("Stage"); ax.set_xlabel("t (s)")
-        elif key == "fx":
-            # Raw load-V vs laser-V on a common timeline (interp load onto
-            # laser t) — no sensitivity applied to either axis.
-            tl = h7["laser"]["t"]; tf = h7["load"]["t"]
-            load_on_l = np.interp(tl, tf, h7["load"]["value"])
-            ax.plot(h7["laser"]["value"], load_on_l, lw=0.6, color="k")
-            ax.set_xlabel("laser (V)"); ax.set_ylabel("load (V)")
-            ax.set_title("Load – laser voltage")
+        elif key == "power":
+            # Electrical power into the coil, P = V·I. V and I are already
+            # physical (the firmware computes volts and amps), so no calibration
+            # is applied — this stays as raw as every other panel.
+            # sma_v and sma_i are separate rows of the same stream, so interp I
+            # onto V's clock rather than assuming the timestamps line up.
+            tv = h7["sma_v"]["t"]; ti = h7["sma_i"]["t"]
+            i_on_v = np.interp(tv, ti, h7["sma_i"]["value"])
+            p_W = h7["sma_v"]["value"] * i_on_v
+            ax.plot(_rel(tv, t0), p_W, lw=0.9, color="C8")
+            ax.set_ylabel("P = V·I  (W)")
+            ax.set_xlabel("t (s)")
+            # Energy is the integral — the quantity that actually heats the wire.
+            # Split it by fire vs idle (threshold at half the peak, so no
+            # dependence on events.csv): on a run with a long cool the "idle
+            # probe" can quietly deliver MORE total heat than all the fires
+            # combined, which is worth seeing on the panel.
+            _trapz = getattr(np, "trapezoid", None) or np.trapz   # numpy 2 / 1
+            if len(tv) > 1 and np.nanmax(p_W) > 0:
+                hot = p_W > 0.5 * np.nanmax(p_W)
+                e_tot = float(_trapz(p_W, tv))
+                e_fire = float(_trapz(np.where(hot, p_W, 0.0), tv))
+                e_idle = e_tot - e_fire
+                frac = 100.0 * e_idle / e_tot if e_tot else 0.0
+                ax.text(0.02, 0.95,
+                        f"peak {np.nanmax(p_W):.2f} W   "
+                        f"idle {np.nanmedian(p_W[~hot]):.3f} W\n"
+                        f"energy {e_tot:.1f} J = {e_fire:.1f} J fires "
+                        f"+ {e_idle:.1f} J idle ({frac:.0f}% idle)",
+                        transform=ax.transAxes, fontsize=8, va="top", color="0.3")
+            ax.set_title("SMA electrical power")
 
     fig.suptitle(title, fontsize=12)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
@@ -614,6 +646,12 @@ def _run_analysis(out_dir: Path, label: str, args,
             for ch in ("sma_v", "sma_i", "sma_r"):
                 if ch in h7:
                     series[ch] = (h7[ch]["t"], h7[ch]["value"])
+            # Electrical power into the coil — the Joule heating that drives the
+            # transformation. Same P = V·I the dashboard plots.
+            if "sma_v" in h7 and "sma_i" in h7:
+                tv = h7["sma_v"]["t"]
+                i_on_v = np.interp(tv, h7["sma_i"]["t"], h7["sma_i"]["value"])
+                series["sma_power_W"] = (tv, h7["sma_v"]["value"] * i_on_v)
             if deemb is not None and deemb.method != "none":
                 series["R_dut_ohm"] = (deemb.t, deemb.R_dut)
                 series["L_dut_uH"] = (deemb.t, deemb.L_dut * 1e6)
