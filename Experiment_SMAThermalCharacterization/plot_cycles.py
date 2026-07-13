@@ -84,19 +84,26 @@ def _rows(path: Path) -> List[dict]:
 
 
 def load_h7(path: Path) -> Dict[str, dict]:
-    """{channel: {'t': host_ts array, 'v': value array}}"""
+    """{channel: {'t': host_ts, 'v': value, 'hw': firmware µs clock}}
+
+    `t` (host clock) is what everything is aligned on — it is the clock the
+    stage/events share. `hw` is only used for FILTERING: the host timestamps are
+    USB-batched and bursty (median dt ~1 ms but σ ~3 ms), which smears anything
+    above a few Hz; the firmware clock is uniform.
+    """
     acc: Dict[str, dict] = {}
     for r in _rows(path):
         ch = (r.get("channel") or "").strip()
         if not ch:
             continue
-        d = acc.setdefault(ch, {"t": [], "v": []})
+        d = acc.setdefault(ch, {"t": [], "v": [], "hw": []})
         try:
             d["t"].append(float(r["host_timestamp_s"]))
             d["v"].append(float(r["value"]))
+            d["hw"].append(float(r.get("hw_us") or "nan"))
         except (ValueError, KeyError):
             continue
-    return {ch: {"t": np.asarray(d["t"]), "v": np.asarray(d["v"])}
+    return {ch: {k: np.asarray(v) for k, v in d.items()}
             for ch, d in acc.items() if d["t"]}
 
 
@@ -144,6 +151,70 @@ def find_fire_onsets(t: np.ndarray, v: np.ndarray,
 # ---------------------------------------------------------------------------
 # Per-cycle slicing + metrics
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Optional displacement filtering (opt-in — RAW is the default everywhere)
+#
+# The laser carries a coherent ~65.8 Hz instrumental tone (see the module README,
+# "Known signal artifacts"). It is out of band for SMA actuation and therefore
+# accepted, but it dominates the raw displacement panels. These filters let you
+# see past it. They are OFF unless a flag is given, and when on, every figure is
+# stamped and the outputs get a `_filt` suffix so the raw PNGs are never clobbered.
+#
+# Both are ZERO-PHASE (applied as a magnitude mask in the frequency domain), so
+# nothing shifts in time relative to the fire onset — important, since the whole
+# point is to look at transients. The rolloffs are SMOOTH (Gaussian notch,
+# Butterworth-magnitude low-pass) rather than brick-wall: a brick-wall filter
+# rings badly around the sharp step the drive feedthrough puts at every fire.
+# ---------------------------------------------------------------------------
+def _uniform(t_us: np.ndarray, y: np.ndarray) -> tuple:
+    """Resample onto a uniform grid using the firmware clock. Returns
+    (grid_s, y_on_grid, fs)."""
+    t = (t_us - t_us[0]) / 1e6
+    fs = 1.0 / float(np.median(np.diff(t)))
+    g = np.arange(0.0, t[-1], 1.0 / fs)
+    return g, np.interp(g, t, y), fs
+
+
+def _apply_mask(y: np.ndarray, fs: float, mask_of) -> np.ndarray:
+    Y = np.fft.rfft(y - y.mean())
+    f = np.fft.rfftfreq(len(y), 1.0 / fs)
+    return np.fft.irfft(Y * mask_of(f), n=len(y)) + y.mean()
+
+
+def filter_channel(t_us: np.ndarray, t_host: np.ndarray, y: np.ndarray,
+                   notch_hz: Optional[float], notch_q: float,
+                   n_harm: int, lowpass_hz: Optional[float]) -> np.ndarray:
+    """Filter `y` on the firmware clock, then map back onto the ORIGINAL samples
+    (so the caller's host-clock alignment is untouched). Returns a new value
+    array, same length as `y`."""
+    if not np.isfinite(t_us).all():
+        log.warning("hw_us missing — filtering on the (bursty) host clock; "
+                    "the notch will be smeared")
+        t_us = (t_host - t_host[0]) * 1e6
+    g, yg, fs = _uniform(t_us, y)
+
+    if notch_hz:
+        width = notch_hz / max(notch_q, 1e-6)      # -3 dB half-width, Hz
+        freqs = [n * notch_hz for n in range(1, n_harm + 1) if n * notch_hz < fs / 2]
+
+        def notch_mask(f):
+            m = np.ones_like(f)
+            for f0 in freqs:
+                m *= 1.0 - np.exp(-0.5 * ((f - f0) / width) ** 2)
+            return m
+        yg = _apply_mask(yg, fs, notch_mask)
+
+    if lowpass_hz:
+        def lp_mask(f):
+            # 4th-order Butterworth magnitude, applied zero-phase.
+            return 1.0 / np.sqrt(1.0 + (f / lowpass_hz) ** 8)
+        yg = _apply_mask(yg, fs, lp_mask)
+
+    # back onto the original sample instants
+    t_rel = (t_us - t_us[0]) / 1e6
+    return np.interp(t_rel, g, yg)
+
+
 def slice_cycle(t: np.ndarray, y: np.ndarray, t_fire: float,
                 span_s: float) -> tuple:
     """(t_rel, y) for one cycle window, t_rel measured from the fire onset."""
@@ -166,6 +237,19 @@ def main() -> int:
                         "the session's initial baseline reading (default), "
                         "'cycle' = each cycle's own pre-fire R (removes the "
                         "cycle-to-cycle baseline drift)")
+    p.add_argument("--notch", metavar="HZ|auto", default=None,
+                   help="OPT-IN: notch this frequency (and its harmonics) out of "
+                        "the DISPLACEMENT channel — e.g. '65.77', or 'auto' to "
+                        "fit the tone in 40–90 Hz. Default: no filtering, raw.")
+    p.add_argument("--notch-q", type=float, default=30.0,
+                   help="notch sharpness (f0/width); higher = narrower (default 30)")
+    p.add_argument("--notch-harmonics", type=int, default=3,
+                   help="how many harmonics of --notch to remove (default 3)")
+    p.add_argument("--lowpass", type=float, default=None, metavar="HZ",
+                   help="OPT-IN: low-pass the DISPLACEMENT channel at this cutoff "
+                        "(4th-order Butterworth magnitude, zero-phase). SMA "
+                        "actuation lives below a few Hz, so ~20 Hz is generous. "
+                        "Default: no filtering, raw.")
     p.add_argument("--dpi", type=int, default=140)
     args = p.parse_args()
 
@@ -200,6 +284,41 @@ def main() -> int:
     disp_um = (h7["laser"]["v"] * 1000.0 - v0) / k
     force_N = lscale * (h7["load"]["v"] - loff)
 
+    # ---- optional displacement filter (raw is the default) -----------------
+    filt_label = ""
+    notch_hz: Optional[float] = None
+    if args.notch:
+        if str(args.notch).lower() == "auto":
+            lt = h7["laser"]
+            hw = lt["hw"] if np.isfinite(lt["hw"]).all() else (lt["t"] - lt["t"][0]) * 1e6
+            tt = (hw - hw[0]) / 1e6
+            yy = disp_um - disp_um.mean()
+            best = (np.nan, -1.0)
+            for f0 in np.linspace(40.0, 90.0, 2000):
+                A = np.c_[np.cos(2 * np.pi * f0 * tt), np.sin(2 * np.pi * f0 * tt)]
+                c, *_ = np.linalg.lstsq(A, yy, rcond=None)
+                r2 = 1.0 - np.var(yy - A @ c) / np.var(yy)
+                if r2 > best[1]:
+                    best = (f0, r2)
+            notch_hz = float(best[0])
+            log.info("--notch auto: fitted tone at %.3f Hz (R²=%.2f)", notch_hz, best[1])
+        else:
+            notch_hz = float(args.notch)
+    if notch_hz or args.lowpass:
+        sd_before = float(np.std(disp_um))
+        disp_um = filter_channel(h7["laser"]["hw"], h7["laser"]["t"], disp_um,
+                                 notch_hz, args.notch_q, args.notch_harmonics,
+                                 args.lowpass)
+        bits = []
+        if notch_hz:
+            bits.append(f"notch {notch_hz:.2f} Hz ×{args.notch_harmonics} harm")
+        if args.lowpass:
+            bits.append(f"low-pass {args.lowpass:g} Hz")
+        filt_label = " + ".join(bits)
+        log.warning("DISPLACEMENT IS FILTERED (%s): σ %.2f → %.2f µm. Force and "
+                    "resistance are untouched; outputs get a '_filt' suffix.",
+                    filt_label, sd_before, float(np.std(disp_um)))
+
     sig = {
         "volt": (h7["sma_v"]["t"], h7["sma_v"]["v"]),
         "curr": (h7["sma_i"]["t"], h7["sma_i"]["v"]),
@@ -217,6 +336,11 @@ def main() -> int:
 
     t0 = onsets[0]               # time origin = first fire
     fire_s = cmd.fire_ms / 1000.0
+
+    # Filtered runs never overwrite the raw PNGs, and every figure says so.
+    sfx = "_filt" if filt_label else ""
+    stamp = f"  [displacement FILTERED: {filt_label}]" if filt_label else ""
+    disp_note = f" — FILTERED ({filt_label})" if filt_label else ""
 
     # Noise floors, measured on the COOL stretches only (>0.5 s past a fire, so
     # the thermal transient is over). Any per-cycle Δ smaller than ~2σ here is
@@ -257,7 +381,12 @@ def main() -> int:
             post_fire.append(float(np.mean(y[mp]) - b))
     disp_in = float(np.nanmean(in_fire)) if in_fire else float("nan")
     disp_post = float(np.nanmean(post_fire)) if post_fire else float("nan")
-    feedthrough = (abs(disp_in) > 2 * sd_disp and abs(disp_post) < sd_disp)
+    # Test the SHAPE, not the absolute level: the excursion is large during the
+    # drive and has essentially decayed by the force peak. Comparing disp_post
+    # against the noise floor would silently stop flagging under --lowpass/--notch
+    # (which collapse the floor) even though the feedthrough step is still there.
+    feedthrough = (abs(disp_in) > 2 * sd_disp
+                   and abs(disp_post) < 0.3 * abs(disp_in))
     if feedthrough:
         log.warning("laser excursion is confined to the drive window "
                     "(%.2f µm in-fire vs %.2f µm at force peak) — drive "
@@ -298,7 +427,7 @@ def main() -> int:
         ("curr", "drive I", "A", C_CURR),
         ("res", f"SMA resistance\n(R/R₀, R₀={r0_global:.2f} Ω)", "R/R₀", C_RES),
         ("force", "force", "N", C_FORCE),
-        ("disp", "displacement (Δ vs start)", "µm", C_DISP),
+        ("disp", f"displacement (Δ vs start){disp_note}", "µm", C_DISP),
     ]
     fig, axes = plt.subplots(len(rows), 1, figsize=(12, 11), sharex=True,
                              facecolor=SURFACE)
@@ -339,10 +468,10 @@ def main() -> int:
     axes[-1].set_xlim(t_lo, t_hi)
     fig.suptitle(
         f"{sess.name} — {cmd.n}× (fire {cmd.fire_ms:.0f} ms @ {cmd.v_high:.1f} V "
-        f"→ cool {cmd.cool_ms:.0f} ms @ {cmd.v_low:.1f} V)",
+        f"→ cool {cmd.cool_ms:.0f} ms @ {cmd.v_low:.1f} V){stamp}",
         fontsize=13, color=INK, y=0.995)
     fig.tight_layout(rect=(0, 0, 1, 0.98))
-    out = sess / "cycles_timeline.png"
+    out = sess / f"cycles_timeline{sfx}.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
     plt.close(fig)
     log.info("wrote %s", out)
@@ -358,7 +487,7 @@ def main() -> int:
         ("curr", "Drive current", "A", False),
         ("res", f"SMA resistance — normalized to {r_ref_note}", "R/R₀", False),
         ("force", "Force (Δ vs pre-fire)", "N", True),
-        ("disp", "Displacement (Δ vs pre-fire)", "µm", True),
+        ("disp", f"Displacement (Δ vs pre-fire){disp_note}", "µm", True),
     ]
     fig, axes = plt.subplots(3, 2, figsize=(13, 10.5), facecolor=SURFACE)
     axes = axes.ravel()
@@ -429,9 +558,9 @@ def main() -> int:
             f"sensors {len(sig['force'][0]) / (sig['force'][0][-1] - sig['force'][0][0]):.0f} Hz",
             transform=ax.transAxes, fontsize=9, color=INK_2, va="top",
             linespacing=1.6)
-    fig.suptitle(f"{sess.name} — cycle overlay", fontsize=13, color=INK)
+    fig.suptitle(f"{sess.name} — cycle overlay{stamp}", fontsize=13, color=INK)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    out = sess / "cycles_overlay.png"
+    out = sess / f"cycles_overlay{sfx}.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
     plt.close(fig)
     log.info("wrote %s", out)
@@ -446,14 +575,18 @@ def main() -> int:
         tr, r = slice_cycle(*sig["res"], ot, span)
         r0 = _baseline(tr, r)
         ref = r_ref(i)
-        hot = (tr >= 0) & (tr <= fire_s * 2)
         row["R0_ref_ohm"] = ref
         row["R_pre_ohm"] = r0
         row["R_pre_norm"] = r0 / ref
-        row["R_peak_ohm"] = float(np.max(r[hot])) if hot.any() else float("nan")
-        row["dR_peak_ohm"] = row["R_peak_ohm"] - r0
+        # MEAN over the fire window — NOT max(). With ~3% per-sample noise the
+        # maximum of the window is just the largest noise excursion (and always
+        # positive), which hid the real effect: R *drops* ~3% during the fire.
+        # The window mean is the right estimator and ~√n less noisy.
+        hot = (tr >= 0) & (tr <= fire_s)
+        row["R_fire_ohm"] = float(np.mean(r[hot])) if hot.any() else float("nan")
+        row["dR_fire_ohm"] = row["R_fire_ohm"] - r0
         # ΔR as a fraction of the coil's own R₀ — the comparable, unit-free form.
-        row["dR_peak_pct"] = 100.0 * (row["R_peak_ohm"] - ref) / ref
+        row["dR_fire_pct"] = 100.0 * (row["R_fire_ohm"] - ref) / ref
         end = tr >= span - 0.5
         row["R_end_ohm"] = float(np.mean(r[end])) if end.any() else float("nan")
         row["R_end_norm"] = row["R_end_ohm"] / ref
@@ -482,19 +615,20 @@ def main() -> int:
         met.append(row)
 
     cols = ["cycle", "t_fire_s", "R0_ref_ohm", "R_pre_ohm", "R_pre_norm",
-            "R_peak_ohm", "dR_peak_ohm", "dR_peak_pct", "R_end_ohm", "R_end_norm",
+            "R_fire_ohm", "dR_fire_ohm", "dR_fire_pct", "R_end_ohm", "R_end_norm",
             "F_pre_N", "dF_peak_N", "t_F_peak_s", "dF_end_N",
             "dDisp_peak_um", "dDisp_in_fire_um", "dDisp_at_Fpeak_um"]
-    with open(sess / "cycles_metrics.csv", "w", newline="") as fh:
+    met_csv = sess / f"cycles_metrics{sfx}.csv"
+    with open(met_csv, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=cols)
         w.writeheader()
         for row in met:
             w.writerow({c: f"{row.get(c, float('nan')):.6g}" for c in cols})
-    log.info("wrote %s", sess / "cycles_metrics.csv")
+    log.info("wrote %s", met_csv)
 
     cyc = np.array([m["cycle"] for m in met])
     trends = [
-        ("dR_peak_pct", "Peak resistance rise, normalized", "ΔR/R₀ (%)", C_RES),
+        ("dR_fire_pct", "ΔR/R₀ averaged over the fire window", "ΔR/R₀ (%)", C_RES),
         ("dF_peak_N", "Peak force swing", "ΔF (N)", C_FORCE),
         ("R_pre_norm", "Pre-fire resistance (did it cool back to R₀?)",
          "R/R₀", C_RES),
@@ -503,7 +637,7 @@ def main() -> int:
     for ax, (key, name, unit, color) in zip(axes, trends):
         y = np.array([m.get(key, np.nan) for m in met], dtype=float)
         ax.set_facecolor(SURFACE)
-        if key == "dR_peak_pct":
+        if key == "dR_fire_pct":
             band = 100.0 * 2 * sd_r_n
             ax.axhspan(-band, band, color=C_REF, alpha=0.16, lw=0,
                        zorder=0, label=f"±2σ noise (±{band:.1f}%)")
@@ -544,15 +678,15 @@ def main() -> int:
         for s in ("left", "bottom"):
             ax.spines[s].set_color(AXIS)
         ax.tick_params(colors=MUTED, labelsize=8)
-    fig.suptitle(f"{sess.name} — cycle-to-cycle trend", fontsize=13, color=INK)
+    fig.suptitle(f"{sess.name} — cycle-to-cycle trend{stamp}", fontsize=13, color=INK)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
-    out = sess / "cycles_trend.png"
+    out = sess / f"cycles_trend{sfx}.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
     plt.close(fig)
     log.info("wrote %s", out)
 
     # Console summary.
-    dR = np.array([m["dR_peak_pct"] for m in met], dtype=float)
+    dR = np.array([m["dR_fire_pct"] for m in met], dtype=float)
     dF = np.array([m["dF_peak_N"] for m in met], dtype=float)
     print(f"\n{sess.name}: {len(onsets)} cycles "
           f"(fire {cmd.fire_ms:.0f} ms @ {cmd.v_high:.1f} V, "
@@ -560,14 +694,24 @@ def main() -> int:
     print(f"  force   : ΔF {np.nanmean(dF):+.4f} ± {np.nanstd(dF):.4f} N peak, "
           f"{np.nanmean([m['t_F_peak_s'] for m in met]):.2f} s after onset "
           f"(noise ±{sd_force:.4f} N) — RESOLVED")
-    print(f"  resist. : R₀ = {r0_global:.3f} Ω ({args.r_ref} ref); "
-          f"ΔR/R₀ {np.nanmean(dR):+.1f} ± {np.nanstd(dR):.1f} % vs a "
-          f"±{100 * 2 * sd_r_n:.1f} % (2σ) noise floor — NOT RESOLVED")
+    good = dR[np.isfinite(dR)]
+    sem = float(np.std(good, ddof=1) / np.sqrt(len(good))) if len(good) > 1 else float("nan")
+    tstat = float(np.mean(good) / sem) if sem else float("nan")
+    print(f"  resist. : R₀ = {r0_global:.3f} Ω ({args.r_ref} ref); ΔR/R₀ over the "
+          f"fire window = {np.mean(good):+.2f} ± {sem:.2f} % (SEM over "
+          f"{len(good)} cycles) → t={tstat:+.1f} "
+          f"{'RESOLVED' if abs(tstat) > 3 else 'not resolved'}")
+    print(f"            (single-sample noise is ±{100 * sd_r_n:.1f} %, so this is "
+          f"only visible by averaging the window AND the cycles — "
+          f"see fit_transition.py)")
     print(f"  laser   : {disp_in:+.2f} µm inside the fire window, "
           f"{disp_post:+.2f} µm at the force peak (noise ±{sd_disp:.2f} µm)"
           + (" — DRIVE FEEDTHROUGH, not motion" if feedthrough else ""))
-    print(f"  outputs : cycles_timeline.png, cycles_overlay.png, "
-          f"cycles_trend.png, cycles_metrics.csv\n")
+    if filt_label:
+        print(f"  ⚠ displacement FILTERED: {filt_label} "
+              f"(force/resistance untouched; raw PNGs preserved)")
+    print(f"  outputs : cycles_timeline{sfx}.png, cycles_overlay{sfx}.png, "
+          f"cycles_trend{sfx}.png, cycles_metrics{sfx}.csv\n")
     return 0
 
 

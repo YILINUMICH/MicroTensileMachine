@@ -229,6 +229,30 @@ cycle's own pre-fire R, drift divided out). Every per-cycle metric is drawn
 against its own **±2σ noise band**, so a "trend" that is really scatter reads as
 scatter.
 
+`fit_transition.py` answers "is the SMA transition actually there?" Single-cycle
+resistance is hopeless (σ ≈ 6% per sample vs a ~3% effect), but the run fires the
+SAME cycle N times, so the transient is recovered by **ensemble averaging**: fold
+every cycle onto the fire onset, average **within a window** and then **across
+cycles**. That drops the error to ~0.5% and the transition appears at >5σ:
+
+| window | ΔR/R₀ | verdict |
+|---|---|---|
+| during fire (0–100 ms) | **−3.13% ± 0.54%** | **RESOLVED** (t = −5.8) |
+| after fire (0.1–0.3 s) | **−2.08% ± 0.50%** | **RESOLVED** (t = −4.2) |
+| early cool (0.3–1.0 s) | −2.00% ± 0.79% | marginal |
+| late cool (2–3 s) | −0.42% ± 0.69% | recovered to baseline |
+
+**Resistance DROPS ~3% during the fire and recovers over the cool.** Note the
+sign: an estimator that takes `max()` over the fire window finds only the largest
+*noise* excursion (always positive) and reports a meaningless *rise* — which is
+exactly what an earlier version of `plot_cycles.py` did. Use the window **mean**.
+
+It also fits a first-order thermal model to the cooling phase. **τ_F ≳ 6 s while
+`cool_ms` is only 3 s**, so the coil never returns to baseline before the next
+fire — which is why the force baseline ratchets upward across the run. The fit
+warns when τ exceeds half the observation window (it is then only a lower bound).
+**Raise `cool_ms` to ≥ 3–5 × τ (~20–30 s) if you want clean, independent cycles.**
+
 ## Known signal artifacts — diagnose with `console_20260713_122906`
 
 **`data/console_20260713_122906/` is the reference diagnostic sample.** It is a
