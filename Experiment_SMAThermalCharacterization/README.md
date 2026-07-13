@@ -232,12 +232,31 @@ scatter.
 ## Known signal artifacts — diagnose with `console_20260713_122906`
 
 **`data/console_20260713_122906/` is the reference diagnostic sample.** It is a
-~19 s idle recording (no actuation, stage held) — nothing should be moving — so
-whatever appears in it is instrumentation, not SMA physics. Re-run
+~19 s recording with **the laser aimed at a rigid, immovable block** — no
+actuation, stage held, nothing mechanically able to move. So anything that shows
+up in it is **instrumentation, not SMA physics**, by construction. Re-run
 `python plot_laser.py --session data/console_20260713_122906` after any change to
-the laser wiring/ADC config and compare against the committed PNGs.
+the laser wiring / ADC config and compare against the committed PNGs.
+
+**Three artifacts are known. Ranked by how much they actually threaten a result:**
+
+| # | Artifact | Threat | Why |
+|---|---|---|---|
+| **3** | **Drive feedthrough on the laser during a fire** | **HIGH — this is the dangerous one** | It is **synchronous with the actuation**, landing exactly where the real displacement signal should be. No frequency filter can separate it, because it is not at a different frequency — it is *at* the signal. This is the one that can be mistaken for SMA contraction and quietly become a wrong result. |
+| 1 | 65.8 Hz laser tone | LOW — accepted | Out of band (66 Hz vs a DC–few-Hz signal) and stationary. Averages/filters away. Costs ~4× raw resolution, corrupts nothing. |
+| 2 | ~19% zero-order-hold duplicate rows | LOW — accepted | Effective rate is 400 Hz not 493. Only matters for row-count-derived rates/σ/spectra. Harmless to a force or displacement reading. |
+
+Underneath all three sits the harder open question: **in `115921` the real SMA
+displacement appears to sit below the laser's noise floor entirely** — only the
+*force* clearly responded to firing. So the live issue is not "the laser is
+noisy", it is "is the laser currently measuring anything at all?" That deserves
+more attention than artifacts 1 and 2 combined.
 
 ### 1. The laser's "noise" is a coherent ~65.8 Hz wave
+
+> **Verdict (2026-07-13): known, characterized, and ACCEPTED — not fatal.** It is
+> out of band and stationary; see "Why we are living with it" below. This section
+> exists so that if it ever *does* bite us, we know where to start looking.
 
 On a whole-session plot the laser looks like a ±1.4 µm noise band. It is not
 noise. Zoom in and it is a **clean periodic ripple**:
@@ -245,25 +264,78 @@ noise. Zoom in and it is a **clean periodic ripple**:
 | | |
 |---|---|
 | Frequency | **65.77 Hz** (period 15.21 ms, ~7.5 samples/cycle) |
-| Amplitude | **1.72 µm** (3.44 µm peak-to-peak) |
+| Amplitude | **1.72 µm** (3.44 µm peak-to-peak) — only **0.86 mV** on a 4.97 V signal |
 | Share of the laser's variance | **74%** |
 | σ with the tone removed | 1.41 µm → **0.72 µm** |
+| Stability | frequency drifts **< 0.01%** over 19 s; amplitude within 1% |
 | Present on load / ADC2? | **No** — no peak there at all |
 
-Because ADC2 is clean and both ADCs share the REF7050 reference, this is **not**
-a common-mode supply/reference artifact: it is specific to the **ADC1 / laser
-path** — the Keyence IL-030's analog output or the AIN4/AIN5 wiring. Autocorrelation
-peaks every 15.21 ms at r ≈ 0.9; the phase-fold panel shows the waveform shape.
+#### The evidence that it is instrumental, not mechanical
 
-**Why it matters:** in an actuation run the real SMA displacement sits *below*
-this band, so the tone — not the sensor — is what sets your displacement
-resolution. Kill it and the laser is worth ~4× more.
+Two independent facts, and together they are conclusive:
 
-> ⚠ **The frequency may be an alias.** The true conversion rate is 400 SPS
-> (Nyquist 200 Hz), so a tone reported at 65.77 Hz is equally consistent with a
-> real **335 Hz or 466 Hz** source. To pin it down, re-record at a higher ADC
-> data rate (1200/2400 SPS) and re-run `plot_laser.py`. Do this before chasing a
-> physical cause — 65.8 Hz and 335 Hz suggest very different culprits.
+1. **It survives an immovable target.** `122906` *is* the "point the laser at
+   something that cannot move" test. The tone is still there — so it is not the
+   SMA specimen, and not the fixture flexing under load.
+2. **It does not move when the mechanics change.** Fit the same tone in the
+   *actuation* session, which has a completely different mechanical setup (a
+   compliant SMA coil mounted and fired 10×, not a rigid block):
+
+   | session | setup | tone |
+   |---|---|---|
+   | `console_20260713_122906` | laser on an **immovable block** | **65.7774 Hz**, 1.77 µm |
+   | `console_20260713_115921` | **SMA specimen mounted, fired 10×** | **65.7724 Hz**, 1.62 µm |
+
+   Same frequency to **0.005 Hz (0.008%)** across two different masses and
+   stiffnesses. A real mechanical resonance would have shifted. It did not budge.
+   (Control: the same fit on the **load** channel finds nothing coherent in either
+   session — R² = 0.00, landing on a random frequency.)
+
+So the tone **does not care what the laser is pointed at** — it is manufactured
+inside the measurement chain, and it is locked to a crystal-grade clock (0.008%
+over 80 s is not a motor or a fan). Combined with ADC2 being clean while both
+ADCs share the REF7050 reference, that leaves exactly two places it can live:
+
+- **inside the Keyence IL-030** — its internal sampling, or ripple on its analog output; or
+- **in the AIN4/AIN5 wiring / the ADC1 front end**.
+
+#### Why we are living with it (and why that is defensible)
+
+The signal we actually care about — SMA contraction over a 100 ms fire and a 3 s
+cool — lives from DC to a few Hz. The interferer sits at 65.8 Hz, an order of
+magnitude above it, and is **stationary**: it does not change when we fire, and it
+does not drift. That makes it benign:
+
+- Averaging over the 3 s cool spans ~197 cycles of the tone → suppressed to nothing.
+- Even averaging over the 100 ms fire spans ~6.6 cycles → 1.7 µm collapses to < 0.1 µm.
+- A low-pass or notch recovers the channel fully in post: **σ 1.29 → 0.31 µm, ~4×**
+  (see `laser_before_after.png`).
+
+It costs ~4× in *raw displayed* resolution and makes raw plots ugly. It does not
+corrupt any slow measurement. **Nuisance, not defect.**
+
+#### If it bites us later — start looking here, in this order
+
+1. **Take the laser out of the loop.** Disconnect the IL-030 from AIN4/AIN5 and
+   feed ADC1 a steady DC voltage (battery + divider, or just short the inputs).
+   Record 20 s, run `plot_laser.py`.
+   - Tone **survives** → it is the **ADC front end / wiring / Portenta**; the
+     laser is innocent.
+   - Tone **vanishes** → the **IL-030 is generating it**; next question is its
+     analog output stage vs its internal sampling.
+
+   This is a five-minute test, needs no firmware change, and halves the search space.
+2. **Resolve the alias** (only if root-causing). At 400 SPS the Nyquist is 200 Hz,
+   so 65.77 Hz is equally consistent with a real **335 Hz or 466 Hz** source, and
+   those implicate very different culprits. Knowing the true frequency would likely
+   name the clock outright. **This needs a real firmware change, not a config
+   tweak** — see artifact 2 and the STATUS TODO: the M4's 2 ms `millis()` poll caps
+   the read path at ~500 Hz, so merely raising `ADS1263_400SPS` → `ADS1263_1200SPS`
+   would just discard conversions and change nothing.
+3. **Watch for it becoming non-stationary.** The whole "it's benign" argument rests
+   on the tone being out-of-band and steady. If it ever drifts in frequency, grows,
+   or acquires a low-frequency sibling, the argument collapses and this moves to the
+   top of the list.
 
 ### 2. ~19% of `h7.csv` rows are zero-order-hold duplicates
 
