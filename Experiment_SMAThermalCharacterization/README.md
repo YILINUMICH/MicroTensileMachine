@@ -207,6 +207,108 @@ those windows. Conversions are applied only where the coefficient is present
 in `meta.json` (or overridden on the CLI); otherwise the channel is plotted
 raw. LCR de-embedding auto-selects OPEN+SHORT (2-term) or SHORT-only.
 
+## Cycle-aligned + laser plots
+
+Two focused plotters sit alongside `analyze_sma.py` (which renders the flat
+whole-session dashboard):
+
+```sh
+python plot_cycles.py --session data/console_20260713_115921    # segment by the actuation pattern
+python plot_cycles.py --session <dir> --r-ref cycle             # normalize R to each cycle's own pre-fire R
+python plot_laser.py  --session data/console_20260713_122906    # laser-channel diagnostic
+```
+
+`plot_cycles.py` recovers the `cycle <v_high> <v_low> <fire_ms> <cool_ms> <n>`
+command from `events.csv`, locates each fire onset as a rising edge of `sma_v`,
+and writes `cycles_timeline.png`, `cycles_overlay.png` (all cycles folded onto
+fire-onset time), `cycles_trend.png` and `cycles_metrics.csv`. Resistance is
+plotted as **R/R₀** — raw ohms are not comparable across cycles because the
+pre-fire R drifts — with `--r-ref cold` (default; R₀ = the session's initial
+baseline reading, so the drift stays visible) or `--r-ref cycle` (R₀ = each
+cycle's own pre-fire R, drift divided out). Every per-cycle metric is drawn
+against its own **±2σ noise band**, so a "trend" that is really scatter reads as
+scatter.
+
+## Known signal artifacts — diagnose with `console_20260713_122906`
+
+**`data/console_20260713_122906/` is the reference diagnostic sample.** It is a
+~19 s idle recording (no actuation, stage held) — nothing should be moving — so
+whatever appears in it is instrumentation, not SMA physics. Re-run
+`python plot_laser.py --session data/console_20260713_122906` after any change to
+the laser wiring/ADC config and compare against the committed PNGs.
+
+### 1. The laser's "noise" is a coherent ~65.8 Hz wave
+
+On a whole-session plot the laser looks like a ±1.4 µm noise band. It is not
+noise. Zoom in and it is a **clean periodic ripple**:
+
+| | |
+|---|---|
+| Frequency | **65.77 Hz** (period 15.21 ms, ~7.5 samples/cycle) |
+| Amplitude | **1.72 µm** (3.44 µm peak-to-peak) |
+| Share of the laser's variance | **74%** |
+| σ with the tone removed | 1.41 µm → **0.72 µm** |
+| Present on load / ADC2? | **No** — no peak there at all |
+
+Because ADC2 is clean and both ADCs share the REF7050 reference, this is **not**
+a common-mode supply/reference artifact: it is specific to the **ADC1 / laser
+path** — the Keyence IL-030's analog output or the AIN4/AIN5 wiring. Autocorrelation
+peaks every 15.21 ms at r ≈ 0.9; the phase-fold panel shows the waveform shape.
+
+**Why it matters:** in an actuation run the real SMA displacement sits *below*
+this band, so the tone — not the sensor — is what sets your displacement
+resolution. Kill it and the laser is worth ~4× more.
+
+> ⚠ **The frequency may be an alias.** The true conversion rate is 400 SPS
+> (Nyquist 200 Hz), so a tone reported at 65.77 Hz is equally consistent with a
+> real **335 Hz or 466 Hz** source. To pin it down, re-record at a higher ADC
+> data rate (1200/2400 SPS) and re-run `plot_laser.py`. Do this before chasing a
+> physical cause — 65.8 Hz and 335 Hz suggest very different culprits.
+
+### 2. ~19% of `h7.csv` rows are zero-order-hold duplicates
+
+The stream is **read faster than the ADC converts**:
+
+- read rate (from `hw_us`): **492.85 Hz**
+- duplicate-`raw_code` fraction: **18.7% (laser/ADC1), 18.8% (load/ADC2)**
+- unique-sample rate: 492.85 × (1 − 0.187) = **400.7 Hz** — exactly the
+  configured 400 SPS
+
+So roughly 1 row in 5 is an exact repeat of the previous conversion, on **both**
+channels. **The effective sample rate is 400 Hz, not 493 Hz, and Nyquist is
+200 Hz.** Any rate/σ/spectrum computed from the row count is off by ~23%, and
+duplicated rows fake a smoother signal. Detect them with
+`np.diff(raw_code) == 0` and decimate to changed-code samples to recover the true
+400 SPS series.
+
+**Always use `hw_us` (the firmware clock) as the time base, never
+`host_timestamp_s`** — host timestamps are USB-batched and bursty (median dt
+1.06 ms but σ 3.4 ms), which smears any spectrum badly enough to hide the tone
+entirely. That is why this went unnoticed.
+
+### Outputs
+
+`plot_laser.py` writes, into the session dir:
+
+- `laser_diagnostics.png` — full trace, zoom (duplicates marked), amplitude
+  spectrum (laser vs load), phase-fold, autocorrelation, and the residual once
+  the tone is removed.
+- `laser_before_after.png` — the same data before vs after the two corrections
+  applied **in post** (drop the ZOH duplicates, notch the tone + harmonics):
+  σ **1.29 µm → 0.31 µm, ~4× better**. This is a post-processing demonstration
+  of what the channel is worth without the interferer — **no hardware change has
+  been made**, so treat it as an upper bound on the gain, not a fixed rig.
+
+### 3. The laser also picks up the SMA drive pulse
+
+Separately, on actuation runs the laser steps **+3.2 to +3.6 µm inside every
+fire window** and is back to 0 ± 0.3 µm by +0.25 s — exactly when the force is
+*peaking*. Real contraction visible in the force would still be present at the
+force peak; this isn't, and the step is unchanged even on a cycle where the force
+was 8× larger. It tracks the 0.7 A drive, not the mechanics: **drive feedthrough,
+not displacement.** `plot_cycles.py` tests for this automatically and labels the
+panel when it triggers.
+
 ## Files
 
 ```
@@ -222,7 +324,9 @@ Experiment_SMAThermalCharacterization/
 ├── sma_recorder.py        legacy interactive OPEN→SHORT→RAW entry point
 ├── run_experiment.py      RETIRED stub (use sma_console.py --headless)
 ├── operator_io.py         terminal prompts / progress / banners (legacy recorder)
-└── analyze_sma.py         offline de-embed + raw→physical + dashboards (console + phase)
+├── analyze_sma.py         offline de-embed + raw→physical + dashboards (console + phase)
+├── plot_cycles.py         segment a run by its actuation pattern (timeline/overlay/trend + metrics)
+└── plot_laser.py          laser-channel diagnostic — the 65.8 Hz tone + ZOH duplicates
 ```
 
 Cross-module drivers are imported via `sys.path` shims (canonical sources:

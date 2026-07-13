@@ -1,0 +1,103 @@
+2026-07-13 11:59:21,496  INFO   root                Session: console_20260713_115921
+2026-07-13 11:59:21,497  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260713_115921
+2026-07-13 11:59:21,497  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\config.yaml  headless=False
+2026-07-13 11:59:22,957  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-13 11:59:22,960  INFO   PortentaReader      boot banner (1 lines):
+2026-07-13 11:59:22,961  INFO   PortentaReader        242535	1	2147483647	5.000000	244706064	119278
+2026-07-13 11:59:24,240  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-07-13 11:59:24,271  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-07-13 11:59:24,272  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-07-13 11:59:24,958  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-13 11:59:24,958  INFO   RecordingCore       Running 10.0 s full system check...
+2026-07-13 11:59:25,009  WARNING  RecordingCore       HEALTH: laser reads a constant 5.0000 V — verify the sensor is live and the cable is seated
+2026-07-13 11:59:25,010  INFO   RecordingCore       health H7    PASS (55) — combined firmware, 55 samples
+2026-07-13 11:59:25,010  INFO   RecordingCore       health stage PASS (37) — 37 reads, pos~42.54 mm
+2026-07-13 11:59:26,136  ERROR  CameraWorker        Camera worker crashed: cannot open camera index 1 (check USB/driver)
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\workers.py", line 568, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\workers.py", line 606, in _main_loop
+    cap = self._open()
+          ^^^^^^^^^^^^
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\workers.py", line 588, in _open
+    raise RuntimeError(
+RuntimeError: cannot open camera index 1 (check USB/driver)
+2026-07-13 11:59:26,147  INFO   CameraWorker        Camera worker exit (written=0)
+2026-07-13 11:59:47,159  INFO   RecordingCore       camera: reconnect requested
+2026-07-13 11:59:53,583  INFO   CameraWorker        Camera ready: cam[1] 1280x720 MJPG
+2026-07-13 12:01:31,529  ERROR  H7Worker            H7 worker crashed: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\workers.py", line 232, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\workers.py", line 264, in _main_loop
+    for kind, item in reader.iter_events():
+                      ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 413, in iter_events
+    line = self._readline()
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 363, in _readline
+    raw = self._ser.readline()
+          ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialwin32.py", line 275, in read
+    raise SerialException("ClearCommError failed ({!r})".format(ctypes.WinError()))
+serial.serialutil.SerialException: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-13 12:01:31,544  INFO   H7Worker            H7 worker exit  (pushed=125134, dropped=0, filtered=0)
+2026-07-13 12:01:32,609  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-07-13 12:01:34,601  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:34,668  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:34,728  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:34,793  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:34,857  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:34,918  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:34,977  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,041  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,102  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,166  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,228  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,291  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,352  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,417  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,492  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,552  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,614  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,674  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,737  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,793  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,853  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,921  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:35,981  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,041  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,109  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,163  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,233  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,290  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,355  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,416  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,483  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,544  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,606  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,667  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,729  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,789  WARNING  PortentaReader      send_command('disarm') ignored — port not open
+2026-07-13 12:01:36,824  INFO   RecordingCore       H7: reconnect requested
+2026-07-13 12:01:36,827  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-13 12:01:37,857  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-07-13 12:01:38,610  INFO   PortentaReader      boot banner (35 lines):
+2026-07-13 12:01:38,610  INFO   PortentaReader          Running     : YES
+2026-07-13 12:01:38,610  INFO   PortentaReader          ADC2CFG rb  : 0x88
+2026-07-13 12:01:38,610  INFO   PortentaReader        Frame INTERFACE=0x05 → RDATA1=6B, RDATA2=6B (incl. 00h pad)
+2026-07-13 12:01:38,610  INFO   PortentaReader        ---------------------------------
+2026-07-13 12:01:38,610  INFO   PortentaReader        [M4] REGDUMP ID=0x23 POWER=0x13 INPMUX=0x45 MODE1=0x40 MODE2=0x8 REFMUX=0x9 ADC2CFG=0x88 ADC2MUX=0x23
+2026-07-13 12:01:38,611  INFO   PortentaReader        [M4 cp 11] sampling via timed poll (no DRDY ISR)
+2026-07-13 12:01:38,611  INFO   PortentaReader        [M4] streaming via ring buffer. format: t_ms\tsrc\traw\th\ cl,=a[ADC1] STas0GAGL3980	1	2135261201	4.971542	4021526	0
+2026-07-13 12:01:38,611  INFO   PortentaReader        3980	2	3882310	2.314037	4021835	0
+2026-07-13 12:01:40,613  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-13 12:03:28,081  INFO   RecordingCore       Baseline: arming at 0.500 V probe (non-heating) for 2.0 s...
+2026-07-13 12:03:30,395  INFO   RecordingCore       Baseline: cold_R=4.323 Ω, laser_rest=4.972 V, load_rest=2.469 V (offset applied), 0 warning(s)
+2026-07-13 12:03:40,747  INFO   RecordingCore       Recording STARTED
+2026-07-13 12:05:00,865  INFO   RecordingCore       Recording STOPPED
+2026-07-13 12:05:56,352  INFO   H7Worker            H7 worker exit  (pushed=264069, dropped=0, filtered=0)
+2026-07-13 12:05:56,529  INFO   Driver_ZaberStage   Disconnected
+2026-07-13 12:05:56,529  INFO   ZaberWorker         Zaber worker exit  (pushed=18825, dropped=0)
+2026-07-13 12:05:57,362  INFO   CameraWorker        Camera worker exit (written=0)
+2026-07-13 12:05:57,390  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260713_115921\meta.json
