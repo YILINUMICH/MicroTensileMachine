@@ -15,3 +15,12 @@ env/
 # Regenerable, so not versioned — except the driver's documented template.
 zaber_config.json
 !Driver_ZaberStage/zaber_config.json
+
+# PlatformIO build output — regenerable; churns on every compile (was tracked,
+# which made VS Code Source Control lag / "lose track"). Files stay on disk.
+.pio/
+
+# Experiment console session outputs — machine-generated per run, large. The
+# recorder writes these; they are not source. Calibrate_*/data/ (dated
+# calibration runs) is intentionally NOT ignored — it feeds the analyzers.
+**/data/console_*/
