@@ -56,8 +56,46 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import matplotlib
-matplotlib.use("Agg")
+# Interactive backend when --show is requested (zoom/pan + cursor coordinate
+# readout via the toolbar); headless Agg otherwise (just writes PNGs). Decided
+# from argv here because the backend must be chosen before pyplot is imported.
+_SHOW = ("--show" in sys.argv)
+if _SHOW:
+    for _bk in ("QtAgg", "Qt5Agg", "TkAgg"):
+        try:
+            matplotlib.use(_bk)
+            break
+        except Exception:  # noqa: BLE001
+            continue
+else:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+
+def _close(fig) -> None:
+    """Close the figure unless we're going to show it interactively (--show),
+    in which case keep it open for the final plt.show()."""
+    if not _SHOW:
+        plt.close(fig)
+
+
+def _attach_cursor(fig) -> None:
+    """--show only: add hover tooltips showing the (t, value) at the nearest
+    data point, if `mplcursors` is installed (pip install mplcursors). Without
+    it, the matplotlib toolbar's bottom-bar coordinate readout still shows the
+    value under the cursor — so zoom + value-readout work either way."""
+    if not _SHOW:
+        return
+    try:
+        import mplcursors
+    except Exception:  # noqa: BLE001
+        return
+    lines = [ln for ax in fig.axes for ln in ax.get_lines()]
+    if not lines:
+        return
+    cur = mplcursors.cursor(lines, hover=True)
+    cur.connect("add", lambda sel: sel.annotation.set_text(
+        f"t={sel.target[0]:.4f}s\ny={sel.target[1]:.4g}"))
 from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.cm import ScalarMappable
 
@@ -593,7 +631,8 @@ def view_cycles(args) -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.98))
     out = sess / f"cycles_timeline{sfx}.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
-    plt.close(fig)
+    _attach_cursor(fig)        # hover value readout when --show
+    _close(fig)
     log.info("wrote %s", out)
 
     # ---- Figure 2: every cycle overlaid on fire-onset time -------------------
@@ -673,7 +712,7 @@ def view_cycles(args) -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     out = sess / f"cycles_overlay{sfx}.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
-    plt.close(fig)
+    _close(fig)
     log.info("wrote %s", out)
 
     # ---- per-cycle metrics + Figure 3: the cycle-to-cycle trend --------------
@@ -781,7 +820,7 @@ def view_cycles(args) -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     out = sess / f"cycles_trend{sfx}.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
-    plt.close(fig)
+    _close(fig)
     log.info("wrote %s", out)
 
     # ---- summary ------------------------------------------------------------
@@ -983,7 +1022,7 @@ def view_laser(args) -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     out = sess / "laser_diagnostics.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
-    plt.close(fig)
+    _close(fig)
     log.info("wrote %s", out)
 
     # ---- Figure 2: BEFORE vs AFTER the two corrections -----------------------
@@ -1072,7 +1111,7 @@ def view_laser(args) -> int:
     fig2.tight_layout(rect=(0, 0, 1, 0.95))
     out2 = sess / "laser_before_after.png"
     fig2.savefig(out2, dpi=args.dpi, facecolor=SURFACE)
-    plt.close(fig2)
+    _close(fig2)
     log.info("wrote %s", out2)
 
     print(f"\n{sess.name} — laser channel")
@@ -1283,7 +1322,7 @@ def view_transition(args) -> int:
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     out = sess / "transition_fit.png"
     fig.savefig(out, dpi=args.dpi, facecolor=SURFACE)
-    plt.close(fig)
+    _close(fig)
 
     # ---- Figure 2: PER CYCLE -------------------------------------------------
     # The ensemble proves the effect exists; it hides whether every cycle does the
@@ -1371,7 +1410,7 @@ def view_transition(args) -> int:
     fig2.tight_layout(rect=(0, 0, 1, 0.96))
     out2 = sess / "transition_per_cycle.png"
     fig2.savefig(out2, dpi=args.dpi, facecolor=SURFACE)
-    plt.close(fig2)
+    _close(fig2)
 
     print("\n" + "=" * 70)
     print("PER-CYCLE ΔR/R₀ in the fire window (each from its OWN ~8 samples)")
@@ -1409,6 +1448,9 @@ def main() -> int:
         sp.add_argument("--session", default=None,
                         help="session directory (default: latest data/console_*)")
         sp.add_argument("--dpi", type=int, default=140)
+        sp.add_argument("--show", action="store_true",
+                        help="open INTERACTIVE windows (zoom/pan + cursor shows "
+                             "the value) in addition to writing PNGs")
         return sp
 
     c = common(sub.add_parser("cycles", help="segment the run by its actuation pattern"))
@@ -1458,26 +1500,32 @@ def main() -> int:
         print(f"ERROR: no such session dir: {sess}", file=sys.stderr)
         return 2
 
-    if args.view == "cycles":
-        return view_cycles(args)
-    if args.view == "laser":
-        return view_laser(args)
-    if args.view == "transition":
-        return view_transition(args)
-
-    # `all` — give each view its own defaults, then run them in turn.
     rc = 0
-    for name, fn, defaults in (
-        ("cycles", view_cycles, dict(r_ref="cold", notch=None, notch_q=30.0,
-                                     notch_harmonics=3, lowpass=None)),
-        ("transition", view_transition, dict(bin_ms=150.0)),
-        ("laser", view_laser, dict(fmin=5.0, fmax=195.0, zoom_s=0.20, notch_hw=1.0)),
-    ):
-        ns = argparse.Namespace(session=args.session, dpi=args.dpi, view=name,
-                                **defaults)
-        log.info("=== %s ===", name)
-        r = fn(ns)
-        rc = r or rc
+    if args.view == "cycles":
+        rc = view_cycles(args)
+    elif args.view == "laser":
+        rc = view_laser(args)
+    elif args.view == "transition":
+        rc = view_transition(args)
+    else:
+        # `all` — give each view its own defaults, then run them in turn.
+        for name, fn, defaults in (
+            ("cycles", view_cycles, dict(r_ref="cold", notch=None, notch_q=30.0,
+                                         notch_harmonics=3, lowpass=None)),
+            ("transition", view_transition, dict(bin_ms=150.0)),
+            ("laser", view_laser,
+             dict(fmin=5.0, fmax=195.0, zoom_s=0.20, notch_hw=1.0)),
+        ):
+            ns = argparse.Namespace(session=args.session, dpi=args.dpi,
+                                    show=_SHOW, view=name, **defaults)
+            log.info("=== %s ===", name)
+            r = fn(ns)
+            rc = r or rc
+
+    if _SHOW:                          # blocks until the windows are closed
+        log.info("interactive: zoom with the toolbar; the cursor readout (bottom "
+                 "of the window) shows the value. Close the windows to exit.")
+        plt.show()
     return rc
 
 
