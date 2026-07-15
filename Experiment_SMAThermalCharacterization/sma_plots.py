@@ -252,9 +252,30 @@ def resolve_session(arg: Optional[str]) -> Path:
     return s
 
 
+def _config_meta_fallback() -> dict:
+    """Minimal meta dict from the module's config.yaml — for sessions with NO
+    meta.json (didn't finalize, e.g. a crash). The recorder writes meta's
+    calibration straight from config.yaml, so these values match a finalized
+    session's; the SMA V/I/R and timing don't need meta at all."""
+    import yaml
+    cfg = Path(__file__).resolve().parent / "config.yaml"
+    try:
+        d = yaml.safe_load(cfg.read_text()) or {}
+    except Exception:  # noqa: BLE001
+        d = {}
+    return {"calibration": d.get("calibration") or {},
+            "sma": d.get("sma") or {}, "baseline": {}}
+
+
 def load_meta(sess: Path) -> tuple:
     """(meta, k_mV_per_um, V0_mV, load_scale_N_per_V, load_offset_V, cold_R)"""
-    meta = json.loads((sess / "meta.json").read_text())
+    mp = sess / "meta.json"
+    if mp.exists():
+        meta = json.loads(mp.read_text())
+    else:
+        log.warning("%s has no meta.json (session didn't finalize) — falling "
+                    "back to config.yaml calibration", sess.name)
+        meta = _config_meta_fallback()
     cal = meta.get("calibration", {})
     return (meta,
             cal.get("laser", {}).get("k_mV_per_um"),
