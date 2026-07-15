@@ -196,7 +196,7 @@ for _dir in (_KEYSIGHT_DIR, _CAL_DIR, _ZABER_DIR):
 from lcr_meter import (  # noqa: E402  (sys.path shim)
     LCRMeter, MeasurementConfig, MeasurementFunction,
 )
-from portenta_reader import PortentaReader  # noqa: E402  (sys.path shim)
+from portenta_reader import PortentaReader, UdpReader  # noqa: E402  (sys.path shim)
 import zaber_stage  # noqa: E402  (sys.path shim)
 
 
@@ -356,6 +356,7 @@ class H7Worker(threading.Thread):
         self.n_glitch = 0
         self.error: Optional[BaseException] = None
         self.reader: Optional[PortentaReader] = None
+        self.udp: Optional[UdpReader] = None
         # Outbound SMA commands. The GUI/core thread only ENQUEUES here; the
         # reader thread drains and actually writes them (see _pump_commands),
         # so the serial port has exactly one thread touching it. Unbounded so a
@@ -388,6 +389,58 @@ class H7Worker(threading.Thread):
                 # A bounded write_timeout turns a stalled port into this, rather
                 # than a UI freeze. Log and move on; the command is dropped.
                 self.logger.warning("H7 command %r failed: %s", cmd, e)
+
+    def _push_status(self, fields: dict) -> None:
+        """Enqueue one [STATUS] frame. Source-agnostic (serial or UDP mode)."""
+        if self.status_queue is None:
+            return
+        try:
+            self.status_queue.put_nowait(StatusSample(
+                host_timestamp_s=time.time(), monotonic_s=time.monotonic(),
+                fields=fields))
+            self.n_status += 1
+        except queue.Full:
+            pass
+
+    def _push_sample(self, s, keep) -> None:
+        """Filter + enqueue one parsed Sample. Source-agnostic (serial or UDP)."""
+        ch = s.channel  # None for srcless 3-col legacy builds
+        if keep and ch is not None and ch not in keep:
+            self.n_filtered += 1
+            return
+        # Firmware voltage-glitch guard: the combined firmware emits a laser/load
+        # sample with voltage==0 on ~every 32nd ADC1 frame while its raw ADC code
+        # is a normal non-zero value (internally inconsistent — V can't be 0 for
+        # code!=0). Drop it; the raw code is correct. Restricted to laser/load
+        # (SMA src=4/5 legitimately carry raw_code=0; src=3 idle V can be ~0).
+        if (ch in ("laser", "load") and s.voltage_V == 0.0
+                and s.raw_code not in (None, 0)):
+            self.n_glitch += 1
+            if self.n_glitch == 1 or self.n_glitch % 500 == 0:
+                self.logger.warning(
+                    "H7 dropped %d laser/load voltage-glitch sample(s) (V=0 with "
+                    "non-zero raw code — firmware bug; raw stream is fine)",
+                    self.n_glitch)
+            return
+        sample = H7Sample(
+            host_timestamp_s=time.time(),
+            monotonic_s=time.monotonic(),
+            firmware_timestamp_us=s.timestamp_us,
+            src=s.adc_source,
+            channel=ch,
+            value=s.voltage_V,
+            raw_code=s.raw_code,
+            hw_us=s.hw_us,
+            seq=s.seq,
+        )
+        try:
+            self.out_queue.put_nowait(sample)
+            self.n_pushed += 1
+        except queue.Full:
+            self.n_dropped += 1
+            if self.n_dropped == 1 or self.n_dropped % 200 == 0:
+                self.logger.warning(
+                    "H7 queue full — dropped %d samples", self.n_dropped)
 
     def run(self) -> None:
         try:
@@ -428,70 +481,52 @@ class H7Worker(threading.Thread):
                     self.logger.warning("H7 startup_command %r failed: %s", cmd, e)
             self.logger.info("H7 ready: port=%s baud=%d channels=%s",
                              self.cfg.port, self.cfg.baud, sorted(keep))
-            self.ready.set()
-            while not self.stop_event.is_set():
-                # This thread is the SOLE owner of the serial port: send any
-                # queued outbound commands here (NOT from the GUI thread) so a
-                # write can never race the read on the same handle (that caused
-                # the ClearCommError crash) nor block the UI/CSV-writer thread.
-                self._pump_commands(reader)
-                ev = reader.poll_event()
-                if ev is None:
-                    continue                 # read timeout — loop, recheck stop
-                kind, item = ev
-                if kind == "status":
-                    if self.status_queue is not None:
-                        try:
-                            self.status_queue.put_nowait(StatusSample(
-                                host_timestamp_s=time.time(),
-                                monotonic_s=time.monotonic(),
-                                fields=item))
-                            self.n_status += 1
-                        except queue.Full:
-                            pass
-                    continue
-                s = item
-                ch = s.channel  # None for srcless 3-col legacy builds
-                if keep and ch is not None and ch not in keep:
-                    self.n_filtered += 1
-                    continue
-                # Firmware voltage-glitch guard. The combined firmware emits a
-                # laser/load sample with voltage==0 on ~every 32nd ADC1 frame
-                # while its raw ADC code is a normal non-zero value — i.e. the
-                # reported voltage is internally inconsistent with the raw code
-                # (V = code*vref/full_scale can't be 0 for code!=0). It shows
-                # up as a huge periodic spike to 0 on the plot. Drop it here;
-                # the raw code is correct, only the firmware's V field is bad.
-                # Restricted to laser/load: SMA src=4/5 legitimately carry
-                # raw_code=0, and src=3 idle voltage can be ~0.
-                if (ch in ("laser", "load") and s.voltage_V == 0.0
-                        and s.raw_code not in (None, 0)):
-                    self.n_glitch += 1
-                    if self.n_glitch == 1 or self.n_glitch % 500 == 0:
-                        self.logger.warning(
-                            "H7 dropped %d laser/load voltage-glitch sample(s) "
-                            "(V=0 with non-zero raw code — firmware bug; raw "
-                            "stream is otherwise fine)", self.n_glitch)
-                    continue
-                sample = H7Sample(
-                    host_timestamp_s=time.time(),
-                    monotonic_s=time.monotonic(),
-                    firmware_timestamp_us=s.timestamp_us,
-                    src=s.adc_source,
-                    channel=ch,
-                    value=s.voltage_V,
-                    raw_code=s.raw_code,
-                    hw_us=s.hw_us,
-                    seq=s.seq,
-                )
+            # Optional UDP transport for the high-rate sample stream. Samples
+            # then arrive over Ethernet (fire-and-forget) instead of serial, so
+            # a busy host can't back-pressure the M7 and distort SMA timing.
+            # Commands + [STATUS] stay on serial; `netcfg` tells the H7 where.
+            udp = None
+            if getattr(self.cfg, "transport", "usb") == "udp":
                 try:
-                    self.out_queue.put_nowait(sample)
-                    self.n_pushed += 1
-                except queue.Full:
-                    self.n_dropped += 1
-                    if self.n_dropped == 1 or self.n_dropped % 200 == 0:
-                        self.logger.warning(
-                            "H7 queue full — dropped %d samples", self.n_dropped)
+                    udp = UdpReader(bind_port=self.cfg.udp_port, adc_source=None)
+                    udp.open()
+                    self.udp = udp
+                    reader.send_command(
+                        f"netcfg {self.cfg.pc_ip} {self.cfg.udp_port}")
+                    self.logger.info("H7 transport=udp: bound :%d, netcfg %s %d",
+                                     self.cfg.udp_port, self.cfg.pc_ip,
+                                     self.cfg.udp_port)
+                except Exception as e:  # noqa: BLE001
+                    self.logger.warning("UDP transport init failed (%s) — "
+                                        "falling back to serial", e)
+                    udp = None
+
+            self.ready.set()
+            try:
+                while not self.stop_event.is_set():
+                    # This thread is the SOLE owner of the serial port — commands
+                    # go out here, never from the GUI thread (avoids the
+                    # read/write race + UI-freeze on one COM handle).
+                    self._pump_commands(reader)
+                    if udp is not None:
+                        # [STATUS]/boot still arrive on serial — drain non-block.
+                        for _k, fields in reader.poll_status_nb():
+                            self._push_status(fields)
+                        ev = udp.poll_event()        # samples over UDP
+                    else:
+                        ev = reader.poll_event()     # samples + status over serial
+                    if ev is None:
+                        continue                     # timeout — loop, recheck stop
+                    kind, item = ev
+                    if kind == "status":
+                        self._push_status(item)
+                        continue
+                    self._push_sample(item, keep)
+            finally:
+                if udp is not None:
+                    udp.close()
+                    self.logger.info("UDP reader: recv=%d samples=%d lost=%d",
+                                     udp.n_recv, udp.n_samples, udp.n_lost)
 
 
 # ---------------------------------------------------------------------------

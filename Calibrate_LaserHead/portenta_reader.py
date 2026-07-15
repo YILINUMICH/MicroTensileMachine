@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import logging
 import re
+import socket
 import sys
 import threading
 import time
@@ -240,6 +241,105 @@ def parse_status_line(line: str) -> Optional[dict]:
 
 
 # ---------------------------------------------------------------------------
+# UDP reader — the high-rate sample stream over Ethernet (fire-and-forget)
+# ---------------------------------------------------------------------------
+class UdpReader:
+    """Receives the src=1..5 sample stream sent by the UDP-transport firmware
+    (env portenta_m7_udp). Presents the same poll_event() surface as
+    PortentaReader so H7Worker can swap it in for the sample path, while commands
+    + [STATUS] stay on the serial PortentaReader.
+
+    Each datagram carries whole TSV lines (the firmware flushes on line
+    boundaries), reused verbatim through parse_line(). Per-src `seq` gaps are
+    counted as loss (UDP has no retransmit — by design; see the migration plan).
+    """
+
+    def __init__(self, bind_port: int = 7777, adc_source: Optional[int] = None,
+                 rx_buffer_bytes: int = 4 * 1024 * 1024, recv_timeout_s: float = 0.1):
+        self.bind_port = bind_port
+        self.adc_source = adc_source
+        self.rx_buffer_bytes = rx_buffer_bytes
+        self.recv_timeout_s = recv_timeout_s
+        self._sock: Optional[socket.socket] = None
+        self._lines: List[bytes] = []       # parsed-but-not-yet-returned lines
+        self._buf = b""                     # partial trailing line across dgrams
+        self._next_seq: dict = {}           # per-src expected next seq
+        self.n_recv = 0                     # datagrams received
+        self.n_samples = 0
+        self.n_lost = 0                     # samples missing (seq gaps)
+        self.logger = logging.getLogger("UdpReader")
+
+    def open(self) -> None:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, self.rx_buffer_bytes)
+        except OSError:
+            pass
+        s.bind(("0.0.0.0", self.bind_port))
+        s.settimeout(self.recv_timeout_s)
+        self._sock = s
+        got = s.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+        self.logger.info("UDP reader bound :%d  SO_RCVBUF=%d", self.bind_port, got)
+
+    def close(self) -> None:
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._sock = None
+
+    def __enter__(self) -> "UdpReader":
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    def poll_event(self):
+        """Return ('sample', Sample) or None. One event per call (matching
+        PortentaReader.poll_event); recvs a fresh datagram only when the parsed-
+        line buffer is empty. None on recv timeout."""
+        while True:
+            if self._lines:
+                raw = self._lines.pop(0)
+                if not raw:
+                    continue
+                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+                if not line:
+                    continue
+                s = parse_line(line, adc_source=self.adc_source)
+                if s is not None:
+                    self._track_loss(s)
+                    self.n_samples += 1
+                    return ("sample", s)
+                continue
+            if self._sock is None:
+                return None
+            try:
+                data, _addr = self._sock.recvfrom(65535)
+            except socket.timeout:
+                return None
+            except OSError:
+                return None
+            self.n_recv += 1
+            buf = self._buf + data
+            parts = buf.split(b"\n")
+            self._buf = parts[-1]            # trailing partial (usually b"")
+            self._lines = parts[:-1]
+
+    def _track_loss(self, s) -> None:
+        src, seq = s.adc_source, s.seq
+        if src is None or seq is None:
+            return
+        exp = self._next_seq.get(src)
+        if exp is not None and seq > exp:
+            self.n_lost += (seq - exp)
+        self._next_seq[src] = seq + 1
+
+
+# ---------------------------------------------------------------------------
 # Reader
 # ---------------------------------------------------------------------------
 class PortentaReader:
@@ -280,7 +380,34 @@ class PortentaReader:
         self.write_timeout_s = write_timeout_s
         self._ser: Optional[serial.Serial] = None
         self._write_lock = threading.Lock()
+        self._rx_buf = b""              # for poll_status_nb() line reassembly
         self.logger = logging.getLogger("PortentaReader")
+
+    def poll_status_nb(self) -> "list[tuple[str, dict]]":
+        """Non-blocking: read whatever bytes are waiting and return ('status',
+        dict) events for any complete [STATUS] lines. Used in UDP-transport mode,
+        where samples arrive over UDP but [STATUS]/boot text still comes on the
+        serial command channel — so we drain serial without blocking the loop."""
+        if self._ser is None or not self._ser.is_open:
+            return []
+        try:
+            n = self._ser.in_waiting
+            if not n:
+                return []
+            self._rx_buf += self._ser.read(n)
+        except Exception:  # noqa: BLE001
+            return []
+        events: "list[tuple[str, dict]]" = []
+        while b"\n" in self._rx_buf:
+            raw, self._rx_buf = self._rx_buf.split(b"\n", 1)
+            line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+            if not line:
+                continue
+            st = parse_status_line(line)
+            if st is not None:
+                events.append(("status", st))
+            # else: boot banner / [SMA]/[NET] command replies — ignored here.
+        return events
 
     # -- lifecycle ----------------------------------------------------------
     def open(self, boot_wait_s: float = 4.0) -> None:

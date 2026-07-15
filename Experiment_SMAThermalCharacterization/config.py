@@ -61,6 +61,13 @@ class H7Config:
     reader_priority: str = "above_normal"  # normal|above_normal|highest ("normal"=off)
     reader_core: int = -1                  # -1=auto (last logical core);
                                            #   >=0 pin to that core; <=-2 = don't pin
+    # Sample-stream transport. "usb" = serial (default). "udp" = the src=1..5
+    # stream arrives over Ethernet (fire-and-forget) from the portenta_m7_udp
+    # firmware, so a busy host can't back-pressure the M7 and distort SMA timing.
+    # Commands + [STATUS] stay on the serial `port` either way.
+    transport: str = "usb"                 # "usb" | "udp"
+    udp_port: int = 7777                   # host bind port for the UDP stream
+    pc_ip: str = "169.254.245.100"         # host IP the H7 streams to (netcfg)
 
 
 @dataclass

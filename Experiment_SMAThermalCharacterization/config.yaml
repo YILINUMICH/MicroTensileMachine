@@ -30,6 +30,13 @@ h7:
   # starve it (starvation back-pressures the M7 and distorts cycle timing).
   reader_priority: above_normal # normal | above_normal | highest ("normal" = off)
   reader_core: -1 # -1 = auto (last logical core); >=0 = pin to that core; <=-2 = off
+  # Sample-stream transport. "usb" = serial (default). "udp" needs the
+  # portenta_m7_udp firmware: the src=1..5 stream arrives over Ethernet
+  # (fire-and-forget) so a busy host can't stall the M7 / distort SMA timing.
+  # Commands + [STATUS] stay on `port`. See docs/UDP_stream_migration_plan.md.
+  transport: usb # usb | udp
+  udp_port: 7777 # host bind port for the UDP stream
+  pc_ip: 169.254.245.100 # host IP the H7 streams to (sent via netcfg)
 
 # ── Zaber linear stage (X-LSQ300A-E01) ────────────────────────────────
 stage:
