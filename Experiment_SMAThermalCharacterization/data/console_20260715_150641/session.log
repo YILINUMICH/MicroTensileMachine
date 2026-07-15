@@ -1,0 +1,62 @@
+2026-07-15 15:06:41,604  INFO   root                Session: console_20260715_150641
+2026-07-15 15:06:41,604  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260715_150641
+2026-07-15 15:06:41,604  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\config.yaml  headless=False
+2026-07-15 15:06:42,465  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-15 15:06:43,725  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-07-15 15:06:43,756  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-07-15 15:06:43,757  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-07-15 15:06:45,977  INFO   CameraWorker        camera index 0: max width 4000
+2026-07-15 15:06:46,488  WARNING  PortentaReader      Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-07-15 15:06:46,548  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-15 15:06:46,548  INFO   RecordingCore       Running 10.0 s full system check...
+2026-07-15 15:06:49,826  INFO   CameraWorker        Camera ready: cam[0] 1920x1080 MJPG
+2026-07-15 15:06:56,562  WARNING  RecordingCore       health H7    FAIL (0) — only 0 samples (need >=20)
+2026-07-15 15:06:56,562  INFO   RecordingCore       health stage PASS (631) — 631 reads, pos~80.00 mm
+2026-07-15 15:07:01,577  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,196  ERROR  H7Worker            H7 worker crashed: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\workers.py", line 337, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\workers.py", line 375, in _main_loop
+    ev = reader.poll_event()
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 423, in poll_event
+    line = self._readline()
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 372, in _readline
+    raw = self._ser.readline()
+          ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\AppData\Local\Programs\Python\Python312\Lib\site-packages\serial\serialwin32.py", line 275, in read
+    raise SerialException("ClearCommError failed ({!r})".format(ctypes.WinError()))
+serial.serialutil.SerialException: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-15 15:07:05,198  INFO   H7Worker            H7 worker exit  (pushed=0, dropped=0, filtered=0)
+2026-07-15 15:07:10,262  INFO   RecordingCore       H7: reconnect requested
+2026-07-15 15:07:10,265  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-15 15:07:11,350  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-07-15 15:07:12,287  INFO   PortentaReader      boot banner (34 lines):
+2026-07-15 15:07:12,287  INFO   PortentaReader          Running     : YES
+2026-07-15 15:07:12,287  INFO   PortentaReader          ADC2CFG rb  : 0x88
+2026-07-15 15:07:12,287  INFO   PortentaReader        Frame INTERFACE=0x05 → RDATA1=6B, RDATA2=6B (incl. 00h pad)
+2026-07-15 15:07:12,287  INFO   PortentaReader        ---------------------------------
+2026-07-15 15:07:12,287  INFO   PortentaReader        [M4] REGDUMP ID=0x23 POWER=0x13 INPMUX=0x45 MODE1=0x40 MODE2=0x8 REFMUX=0x9 ADC2CFG=0x88 ADC2MUX=0x23
+2026-07-15 15:07:12,287  INFO   PortentaReader        [M4 cp 11] sampling via timed poll (no DRDY ISR)
+2026-07-15 15:07:12,287  INFO   PortentaReader        [M4] streaming via ring buffer. format: t_ms\tsrc\traw\tV\th_ c1asd[ADC1] AS(CAA 
+2026-07-15 15:07:12,287  INFO   PortentaReader        3980	1	2104786478	4.900588	4023253	0
+2026-07-15 15:07:14,283  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-15 15:07:20,813  INFO   RecordingCore       Recording STARTED
+2026-07-15 15:08:58,144  INFO   RecordingCore       Recording STOPPED
+2026-07-15 15:09:08,451  INFO   H7Worker            H7 worker exit  (pushed=137820, dropped=0, filtered=0)
+2026-07-15 15:09:08,652  INFO   Driver_ZaberStage   Disconnected
+2026-07-15 15:09:08,652  INFO   ZaberWorker         Zaber worker exit  (pushed=6892, dropped=0)
+2026-07-15 15:09:08,747  INFO   CameraWorker        Camera worker exit (written=270)
+2026-07-15 15:09:08,819  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260715_150641\meta.json

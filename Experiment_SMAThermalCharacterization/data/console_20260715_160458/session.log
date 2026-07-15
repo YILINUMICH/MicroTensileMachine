@@ -1,0 +1,23 @@
+2026-07-15 16:04:58,173  INFO   root                Session: console_20260715_160458
+2026-07-15 16:04:58,173  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260715_160458
+2026-07-15 16:04:58,173  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\config.yaml  headless=False
+2026-07-15 16:04:59,384  INFO   H7Worker            H7 reader thread pinned: priority=above_normal core=31
+2026-07-15 16:04:59,389  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-15 16:04:59,394  INFO   PortentaReader      boot banner (1 lines):
+2026-07-15 16:04:59,394  INFO   PortentaReader        3425305	1	2132133894	4.964261	3471211822	1696661
+2026-07-15 16:05:00,632  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-07-15 16:05:00,663  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-07-15 16:05:00,663  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-07-15 16:05:01,393  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-15 16:05:01,393  INFO   RecordingCore       Running 10.0 s full system check...
+2026-07-15 16:05:01,445  INFO   RecordingCore       health H7    PASS (56) — combined firmware, 56 samples
+2026-07-15 16:05:01,445  INFO   RecordingCore       health stage PASS (39) — 39 reads, pos~80.00 mm
+2026-07-15 16:05:03,387  INFO   CameraWorker        camera index 0: max width 4000
+2026-07-15 16:05:07,267  INFO   CameraWorker        Camera ready: cam[0] 1920x1080 MJPG
+2026-07-15 16:07:26,190  INFO   RecordingCore       Recording STARTED
+2026-07-15 16:08:56,858  INFO   RecordingCore       Recording STOPPED
+2026-07-15 16:09:01,483  INFO   H7Worker            H7 worker exit  (pushed=283019, dropped=0, filtered=0)
+2026-07-15 16:09:01,651  INFO   Driver_ZaberStage   Disconnected
+2026-07-15 16:09:01,651  INFO   ZaberWorker         Zaber worker exit  (pushed=11288, dropped=0)
+2026-07-15 16:09:01,822  INFO   CameraWorker        Camera worker exit (written=147)
+2026-07-15 16:09:01,922  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260715_160458\meta.json

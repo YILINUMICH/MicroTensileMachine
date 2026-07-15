@@ -20,7 +20,5 @@ zaber_config.json
 # which made VS Code Source Control lag / "lose track"). Files stay on disk.
 .pio/
 
-# Experiment console session outputs — machine-generated per run, large. The
-# recorder writes these; they are not source. Calibrate_*/data/ (dated
-# calibration runs) is intentionally NOT ignored — it feeds the analyzers.
-**/data/console_*/
+# NOTE: experiment session data under */data/ IS tracked on purpose (so results
+# are available on other machines). Only .pio build output is ignored above.
