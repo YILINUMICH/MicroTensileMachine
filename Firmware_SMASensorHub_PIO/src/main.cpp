@@ -62,6 +62,17 @@
 #include <Wire.h>
 #include <Adafruit_MCP4728.h>
 
+// Optional UDP transport for the high-rate sample stream (Step 2 of the UDP
+// migration; see docs/UDP_stream_migration_plan.md). Default build is unchanged.
+#ifndef H7_TRANSPORT_UDP
+#define H7_TRANSPORT_UDP 0
+#endif
+#if H7_TRANSPORT_UDP
+#include <PortentaEthernet.h>
+#include <Ethernet.h>
+#include <EthernetUdp.h>
+#endif
+
 // ──────────────────────────────────────────────────────────────────────
 //  SMA drive-path hardware (ported verbatim from Firmware_SMADriver_PIO)
 // ──────────────────────────────────────────────────────────────────────
@@ -386,13 +397,43 @@ static uint32_t last_m4_ms    = 0;   // newest sample timestamp_ms (M4 millis())
 // Float without printf-%f (not linked on nano newlib): sign + integer +
 // zero-padded 6-digit fraction, byte-identical to what Serial.print(v, 6) and
 // pumpSensors() emit, so the host parser is unchanged.
+// ── Sample-stream transport: USB-CDC (default) or UDP (fire-and-forget) ───
+// With -D H7_TRANSPORT_UDP and after the host sends 'netcfg <ip> <port>' over
+// serial, the src=1..5 lines go out as UDP datagrams. UDP has no flow control,
+// so the send never blocks the M7 loop -> serviceSma() timing is never stalled
+// by a slow host. Commands, [STATUS], boot banner stay on USB-CDC.
+#if H7_TRANSPORT_UDP
+static IPAddress   udp_h7_ip(169, 254, 245, 50);   // H7 static IP (direct link)
+static const uint16_t udp_local_port = 7777;       // H7 socket port
+static EthernetUDP  udp;
+static IPAddress    udp_pc_ip;                      // set by 'netcfg'
+static uint16_t     udp_pc_port = 0;                // 0 = not configured yet
+static bool         udp_on = false;                 // armed after a valid netcfg
+#endif
+
+// Emit one already-formatted chunk of sample lines: a UDP datagram if streaming
+// is armed, else USB-CDC (the original path). Callers keep len <= ~1400 (whole
+// lines, under the Ethernet MTU) so each datagram carries only complete lines.
+static inline void streamWrite(const uint8_t* buf, size_t len) {
+    if (len == 0) return;
+#if H7_TRANSPORT_UDP
+    if (udp_on) {
+        udp.beginPacket(udp_pc_ip, udp_pc_port);
+        udp.write(buf, len);
+        udp.endPacket();
+        return;
+    }
+#endif
+    Serial.write(buf, len);
+}
+
 static char sma_batch[512];
 static size_t sma_off = 0;
 
 static void smaAppend(uint8_t src, int32_t raw, float volts,
                       uint32_t hw, uint32_t ms) {
     if (sizeof(sma_batch) - sma_off < 96) {          // guard: never overflow
-        Serial.write((const uint8_t*)sma_batch, sma_off);
+        streamWrite((const uint8_t*)sma_batch, sma_off);
         sma_off = 0;
     }
     bool vneg = volts < 0.0f;
@@ -410,7 +451,7 @@ static void smaAppend(uint8_t src, int32_t raw, float volts,
 
 static inline void smaFlush() {
     if (sma_off) {
-        Serial.write((const uint8_t*)sma_batch, sma_off);   // ONE write
+        streamWrite((const uint8_t*)sma_batch, sma_off);   // ONE datagram/write
         sma_off = 0;
     }
 }
@@ -795,6 +836,31 @@ static void dispatch(String in) {
     if (low == "read")  { cmdRead(); return; }
     if (low == "abort") { abortSma(); return; }
     if (low == "ping")  { wdt_last_ping = millis(); return; }   // heartbeat (silent)
+#if H7_TRANSPORT_UDP
+    if (low.startsWith("netcfg ")) {                // netcfg <a.b.c.d> <port>
+        String rest = in.substring(7); rest.trim();
+        int sp = rest.indexOf(' ');
+        if (sp < 0) { smaTag(); Serial.println(F("[NET] usage: netcfg <ip> <port>")); return; }
+        String ipStr = rest.substring(0, sp);
+        long port = rest.substring(sp + 1).toInt();
+        int oct[4], parts = 0, start = 0;
+        for (int i = 0; i <= (int)ipStr.length() && parts < 4; i++) {
+            if (i == (int)ipStr.length() || ipStr[i] == '.') {
+                oct[parts++] = ipStr.substring(start, i).toInt();
+                start = i + 1;
+            }
+        }
+        if (parts != 4 || port <= 0 || port > 65535) {
+            smaTag(); Serial.println(F("[NET] bad netcfg args")); return;
+        }
+        udp_pc_ip   = IPAddress(oct[0], oct[1], oct[2], oct[3]);
+        udp_pc_port = (uint16_t)port;
+        udp_on      = true;                          // sample stream now on UDP
+        smaTag(); Serial.print(F("[NET] UDP stream -> "));
+        Serial.print(udp_pc_ip); Serial.print(':'); Serial.println(udp_pc_port);
+        return;
+    }
+#endif
     if (low == "stop") {                            // graceful stop → idle-low (armed)
         cycleStop(F("host stop"));
         return;
@@ -1039,8 +1105,10 @@ static void pumpSensors() {
     AdcSample s;
     int n_batch = 0;
     while (ring_pop(SAMPLE_RING, s) && n_batch < SENSOR_BATCH) {
-        if (sizeof(batch) - off < 96) {           // guard: never overflow the buffer
-            Serial.write((const uint8_t*)batch, off);
+        // Flush at <= ~1400 B of WHOLE lines so each USB write / UDP datagram
+        // stays under the Ethernet MTU and carries only complete lines.
+        if (off >= 1400 || sizeof(batch) - off < 96) {
+            streamWrite((const uint8_t*)batch, off);
             off = 0;
         }
         bool vneg = s.voltage_V < 0.0f;
@@ -1071,7 +1139,7 @@ static void pumpSensors() {
         else                                pop_count_other++;
         n_batch++;
     }
-    if (off) Serial.write((const uint8_t*)batch, off);   // one USB write per pass
+    if (off) streamWrite((const uint8_t*)batch, off);    // flush the tail
 
     // 3. Periodic [STATUS] telemetry frame (every 1 s).
     uint32_t now = millis();
@@ -1220,6 +1288,16 @@ void setup() {
     smaTag(); Serial.println(F("      ping (heartbeat) | stop | wdt <ms> (0=off) | abort |"));
     smaTag(); Serial.println(F("      step <code>[ms] | sweep|csv [step] | read | info |"));
     smaTag(); Serial.println(F("      gain|shunt|ioffset|vdd|offset|aref <x> | reset"));
+
+#if H7_TRANSPORT_UDP
+    // Bring up Ethernet (static IP, no DHCP). The src=1..5 stream stays on
+    // USB-CDC until the host sends 'netcfg <pc_ip> <port>'.
+    Ethernet.begin(udp_h7_ip);
+    udp.begin(udp_local_port);
+    smaTag(); Serial.print(F("[NET] H7 IP ")); Serial.print(Ethernet.localIP());
+    Serial.print(F("  link ")); Serial.println(Ethernet.linkStatus() == LinkON ? F("ON") : F("?"));
+    smaTag(); Serial.println(F("[NET] UDP build — send 'netcfg <pc_ip> <port>' to move the stream to UDP"));
+#endif
 }
 
 // M7 loop-period instrumentation. serviceSma() streams at most ONE sample per
