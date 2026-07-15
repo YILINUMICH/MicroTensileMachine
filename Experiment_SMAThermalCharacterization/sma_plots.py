@@ -141,19 +141,69 @@ def load_h7(path: Path) -> Dict[str, dict]:
             for ch, d in acc.items() if d["t"]}
 
 
-def timebase(d: dict) -> np.ndarray:
+def timebase(d: dict, offset_us: float = 0.0) -> np.ndarray:
     """Analysis time base for one channel, in seconds. Prefer the firmware clock
     (`hw`, µs) over the host clock (`t`): the host stream is BURSTY — when the PC
     falls behind (camera/GUI) it logs samples late, which smears cycle timing
     (fires look mis-spaced / cools look long) even though the firmware ran on
-    time. `hw` is stamped at the instant of conversion, so it's immune. Falls
-    back to the host clock only if `hw` is missing/degenerate. Both H7 cores boot
-    together, so all channels' hw share a common (~boot) origin — safe to compare
-    a drive-channel onset against a sensor-channel window."""
+    time. `hw` is stamped at conversion, so it's immune. Falls back to the host
+    clock only if `hw` is missing/degenerate.
+
+    IMPORTANT: laser/load run on the M4 core, SMA on M7 — two DIFFERENT clocks
+    with a constant offset (M7 boots M4, so M7's µs runs ahead by ~2 s). Pass
+    `offset_us = m7_us - m4_us` (from [STATUS]) for the M4 channels to shift them
+    onto the M7 timeline; otherwise a fire onset in sma_v (M7) is compared against
+    a force/disp window (M4) that is seconds off. SMA channels use offset_us=0."""
     hw = d.get("hw")
     if hw is not None and hw.size and np.isfinite(hw).all() and (hw[-1] > hw[0]):
-        return hw / 1e6
+        return hw / 1e6 + offset_us / 1e6
     return d["t"]
+
+
+def load_m4_to_m7_offset_us(sess: Path) -> float:
+    """Median (m7_us - m4_us) over the session's [STATUS] frames, in µs — the
+    constant offset to add to M4 (laser/load) hw to put it on the M7 timeline.
+    0.0 if status.csv is absent or carries no m7_us/m4_us (then M4/M7 stay on
+    their own clocks — cross-core slices may be seconds off; a warning is
+    logged)."""
+    p = sess / "status.csv"
+    if not p.exists():
+        return 0.0
+    diffs = []
+    for r in _rows(p):
+        try:
+            f = json.loads(r.get("fields_json") or "{}")
+            m7, m4 = f.get("m7_us"), f.get("m4_us")
+            if m7 is not None and m4 is not None:
+                diffs.append(float(m7) - float(m4))
+        except (ValueError, KeyError, TypeError):
+            continue
+    if not diffs:
+        return 0.0
+    diffs.sort()
+    return diffs[len(diffs) // 2]
+
+
+def latest_session(base: Optional[Path] = None) -> Optional[Path]:
+    """Newest data/console_* session dir. Names are timestamped, so a name sort
+    is chronological — the last one is the most recent run."""
+    if base is None:
+        base = Path(__file__).resolve().parent / "data"
+    cands = sorted(p for p in base.glob("console_*") if p.is_dir())
+    return cands[-1] if cands else None
+
+
+def resolve_session(arg: Optional[str]) -> Path:
+    """Return the --session dir, or auto-pick the latest console_* when omitted."""
+    if arg:
+        return Path(arg)
+    s = latest_session()
+    if s is None:
+        print("ERROR: no --session given and no data/console_* session found",
+              file=sys.stderr)
+        sys.exit(2)
+    log.info("no --session given — using latest: %s", s.name)
+    return s
 
 
 def load_meta(sess: Path) -> tuple:
@@ -398,12 +448,22 @@ def view_cycles(args) -> int:
                     filt_label, sd_before, float(np.std(disp_um)))
 
     # Time base = firmware clock (hw), NOT the bursty host clock — see timebase().
+    # laser/load are on the M4 core clock; shift them onto the M7 (SMA) timeline
+    # by the constant m7-m4 offset so fire onsets (M7) line up with force/disp
+    # (M4). Without this they are ~2 s apart.
+    off_us = load_m4_to_m7_offset_us(sess)
+    if off_us:
+        log.info("M4->M7 clock offset: %.3f s (laser/load shifted onto SMA timeline)",
+                 off_us / 1e6)
+    else:
+        log.warning("no m7_us/m4_us in status.csv — laser/load NOT aligned to the "
+                    "SMA clock; force/disp timing vs the fire may be off")
     sig = {
-        "volt": (timebase(h7["sma_v"]), h7["sma_v"]["v"]),
-        "curr": (timebase(h7["sma_i"]), h7["sma_i"]["v"]),
-        "res": (timebase(h7["sma_r"]), h7["sma_r"]["v"]),
-        "force": (timebase(h7["load"]), force_N),
-        "disp": (timebase(h7["laser"]), disp_um),
+        "volt": (timebase(h7["sma_v"]), h7["sma_v"]["v"]),          # M7
+        "curr": (timebase(h7["sma_i"]), h7["sma_i"]["v"]),          # M7
+        "res": (timebase(h7["sma_r"]), h7["sma_r"]["v"]),           # M7
+        "force": (timebase(h7["load"], off_us), force_N),           # M4 -> M7
+        "disp": (timebase(h7["laser"], off_us), disp_um),           # M4 -> M7
     }
     _tb = "firmware (hw_us)" if (np.isfinite(h7["sma_v"]["hw"]).all()
                                  and h7["sma_v"]["hw"][-1] > h7["sma_v"]["hw"][0]) \
@@ -1329,7 +1389,8 @@ def main() -> int:
     sub = p.add_subparsers(dest="view", required=True)
 
     def common(sp):
-        sp.add_argument("--session", required=True, help="session directory")
+        sp.add_argument("--session", default=None,
+                        help="session directory (default: latest data/console_*)")
         sp.add_argument("--dpi", type=int, default=140)
         return sp
 
@@ -1369,7 +1430,8 @@ def main() -> int:
 
     args = p.parse_args()
 
-    sess = Path(args.session)
+    sess = resolve_session(args.session)     # auto-latest when --session omitted
+    args.session = str(sess)                 # downstream views read args.session
     if not sess.exists():
         print(f"ERROR: no such session dir: {sess}", file=sys.stderr)
         return 2

@@ -613,9 +613,10 @@ def _run_analysis(out_dir: Path, label: str, args,
                    h7, disp_um, force_N, deemb, stage, baseline=baseline)
 
     # Annotated per-cycle video from the camera JPEGs (video/ lives in the
-    # recording dir, not necessarily out_dir).
+    # recording dir, not necessarily out_dir). OPT-IN: off unless --video, since
+    # it's slow and the analysis/plots don't need it.
     vid_src = (session_dir or out_dir) / "video"
-    if not args.no_video and vid_src.exists():
+    if args.video and not args.no_video and vid_src.exists():
         make_cycle_videos(
             vid_src,
             h7["laser"]["t"] if "laser" in h7 else None, disp_um,
@@ -738,10 +739,32 @@ def analyze_console_session(session_dir: Path, args) -> int:
                          session_dir=session_dir, meta=meta)
 
 
+def latest_session(base=None):
+    """Newest data/console_* session dir (timestamped names sort chronologically)."""
+    if base is None:
+        base = Path(__file__).resolve().parent / "data"
+    cands = sorted(p for p in base.glob("console_*") if p.is_dir())
+    return cands[-1] if cands else None
+
+
+def resolve_session(arg):
+    """The --session dir, or auto-pick the latest console_* when omitted."""
+    if arg:
+        return Path(arg)
+    s = latest_session()
+    if s is None:
+        print("ERROR: no --session given and no data/console_* session found",
+              file=sys.stderr)
+        sys.exit(2)
+    log.info("no --session given — using latest: %s", s.name)
+    return s
+
+
 def _main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     p = argparse.ArgumentParser(description="Analyze + visualize a V3 SMA session")
-    p.add_argument("--session", required=True, help="session directory")
+    p.add_argument("--session", default=None,
+                   help="session directory (default: latest data/console_*)")
     p.add_argument("--mode", default="auto", choices=("auto", "console", "phase"),
                    help="layout: 'console' (continuous + events.csv), 'phase' "
                         "(legacy OPEN/SHORT/RAW files), or 'auto' (default)")
@@ -758,13 +781,18 @@ def _main() -> int:
     p.add_argument("--v0", type=float, default=None, help="laser V0_mV override")
     p.add_argument("--load-scale", type=float, default=None)
     p.add_argument("--load-offset", type=float, default=None)
+    p.add_argument("--video", action="store_true",
+                   help="ALSO build annotated per-cycle camera videos from the "
+                        "JPEG frames (off by default — the plots/analysis don't "
+                        "need it, and it's slow)")
     p.add_argument("--no-video", action="store_true",
-                   help="skip building the annotated per-cycle camera videos")
+                   help="(deprecated; video is already off by default) force-skip "
+                        "video even if --video is given")
     p.add_argument("--video-fps", type=float, default=15.0,
-                   help="playback fps for the per-cycle videos (default: 15)")
+                   help="playback fps for --video (default: 15)")
     args = p.parse_args()
 
-    session_dir = Path(args.session)
+    session_dir = resolve_session(args.session)   # auto-latest when omitted
     if not session_dir.exists():
         print(f"ERROR: session dir not found: {session_dir}", file=sys.stderr)
         return 2
