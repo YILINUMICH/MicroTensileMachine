@@ -53,7 +53,7 @@ stage:
 # fps dropdowns, transient + heartbeat fields). Auxiliary: a failure warns.
 camera:
   enabled: true
-  use_subprocess: false # true = run the camera in its OWN process (separate
+  use_subprocess: true # true = run the camera in its OWN process (separate
   #   GIL/core) so camera CPU can never stall the H7 reader/GUI. Same USB port;
   #   preview comes back over IPC. false = in-thread (default; lighter).
   index: 0 # DirectShow index of the 12MP U3 camera (VID_32E4 PID_6577). NOTE:

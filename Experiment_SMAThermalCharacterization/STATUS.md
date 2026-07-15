@@ -187,14 +187,23 @@
 > **Believed cause of the ~4–5 s reader starvation:** the in-thread camera's
 > fast-capture window (≈ `stop_dwell_s`) holding the GIL / saturating a core.
 >
+> **FAILED (2026-07-15, reverted):** firmware non-blocking write gated on
+> `Serial.availableForWrite()` **dropped ALL data** — on the Portenta mbed
+> USB-CDC that call returns ≈0 almost always (immediate endpoint capacity, not a
+> buffered free-space count), so `nbWrite` dropped nearly every sample
+> (`tx_drop` climbed at the full sample rate; host got only `[STATUS]`). **Do NOT
+> gate firmware writes on `availableForWrite()`.** A real firmware non-blocking
+> write needs a SOFTWARE TX ring buffer (or mbed `send_nb()`), a bigger change.
+>
 > **NEXT STEP (in order):**
-> 1. **Bench-test** with `camera.use_subprocess: true` + the 4 MB RX buffer +
->    reader priority already in place. If the M7 stalls vanish (cool back to
->    ~3.1 s on the `hw_us` timeline, ~400 Hz sensor rate sustained, no bursts),
->    the actuation + data-loss are fixed with **no firmware change, no drops**.
-> 2. If stalls persist → **firmware non-blocking `streamSma()`**: skip the write
->    when `Serial.availableForWrite()` is short, but ALWAYS service the cool
->    timer. Guarantees actuation timing; with the 4 MB buffer, drops ≈ 0.
+> 1. **Bench-test the host-side fix with the CONSOLE** (not `pio device
+>    monitor` — it has no big buffer): `camera.use_subprocess: true` + the 4 MB
+>    RX buffer + reader priority, on the WORKING (blocking) firmware. If
+>    `usbser.sys` keeps filling the 4 MB buffer while the app is busy, the M7's
+>    blocking write returns fast → no stall, **no firmware change, no drops**.
+>    Verify: cool ~3.1 s on the `hw_us` timeline, ~400 Hz sensor rate, no
+>    firmware-clock gaps.
+> 2. If stalls persist → **firmware SOFTWARE TX RING** (NOT `availableForWrite`).
 > 3. Long-term ideal: **UDP over the H7 Ethernet** — fire-and-forget, the control
 >    loop structurally cannot block. Biggest lift; only if 1–2 are insufficient.
 >

@@ -626,6 +626,11 @@ def view_cycles(args) -> int:
         tr, f = slice_cycle(*sig["force"], ot, span)
         f0_ = baseline(tr, f)
         row["F_pre_N"] = f0_
+        # Default nan: a cycle whose sensor window is EMPTY (a real data gap when
+        # the M7 stalled and the M4 ring overflowed) must still yield every
+        # metric key, or the DictWriter below raises KeyError.
+        row["dF_peak_N"] = float("nan")
+        row["t_F_peak_s"] = float("nan")
         if len(f):
             j = int(np.argmax(np.abs(f - f0_)))
             row["dF_peak_N"] = float(f[j] - f0_)
@@ -635,6 +640,7 @@ def view_cycles(args) -> int:
 
         tr, d = slice_cycle(*sig["disp"], ot, span)
         d0 = baseline(tr, d)
+        row["dDisp_peak_um"] = float("nan")
         if len(d):
             j = int(np.argmax(np.abs(d - d0)))
             row["dDisp_peak_um"] = float(d[j] - d0)
