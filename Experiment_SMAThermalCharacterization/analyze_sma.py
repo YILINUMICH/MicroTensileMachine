@@ -740,10 +740,15 @@ def analyze_console_session(session_dir: Path, args) -> int:
 
 
 def latest_session(base=None):
-    """Newest data/console_* session dir (timestamped names sort chronologically)."""
+    """Newest data/console_* session that actually HAS data (h7.csv beyond a
+    header) — skips empty sessions. Falls back to the newest even if empty."""
     if base is None:
         base = Path(__file__).resolve().parent / "data"
     cands = sorted(p for p in base.glob("console_*") if p.is_dir())
+    for p in reversed(cands):
+        h7 = p / "h7.csv"
+        if h7.exists() and h7.stat().st_size > 200:
+            return p
     return cands[-1] if cands else None
 
 

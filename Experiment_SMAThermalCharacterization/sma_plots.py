@@ -186,11 +186,17 @@ def load_m4_to_m7_offset_us(sess: Path) -> float:
 
 
 def latest_session(base: Optional[Path] = None) -> Optional[Path]:
-    """Newest data/console_* session dir. Names are timestamped, so a name sort
-    is chronological — the last one is the most recent run."""
+    """Newest data/console_* session that actually HAS data (h7.csv beyond a
+    header) — skips empty sessions (e.g. opened then closed without recording).
+    Names are timestamped, so name-sort is chronological. Falls back to the
+    newest session even if empty."""
     if base is None:
         base = Path(__file__).resolve().parent / "data"
     cands = sorted(p for p in base.glob("console_*") if p.is_dir())
+    for p in reversed(cands):
+        h7 = p / "h7.csv"
+        if h7.exists() and h7.stat().st_size > 200:
+            return p
     return cands[-1] if cands else None
 
 
@@ -1394,7 +1400,9 @@ def main() -> int:
                         format="%(levelname)s %(name)s: %(message)s")
     p = argparse.ArgumentParser(
         description="Analysis + figures for an SMA thermal console session.")
-    sub = p.add_subparsers(dest="view", required=True)
+    # Subcommand is optional: bare `python sma_plots.py` -> `all` on the latest
+    # session, so you can just run it after a session with no arguments.
+    sub = p.add_subparsers(dest="view", required=False)
 
     def common(sp):
         sp.add_argument("--session", default=None,
@@ -1437,6 +1445,11 @@ def main() -> int:
     a = common(sub.add_parser("all", help="run every view with its defaults"))
 
     args = p.parse_args()
+
+    if getattr(args, "view", None) is None:  # bare invocation -> all + latest
+        args.view = "all"
+        args.session = getattr(args, "session", None)
+        args.dpi = getattr(args, "dpi", 140)
 
     sess = resolve_session(args.session)     # auto-latest when --session omitted
     args.session = str(sess)                 # downstream views read args.session
