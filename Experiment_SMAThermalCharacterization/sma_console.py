@@ -360,10 +360,11 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                 w.setStyleSheet(_dot(None))
                 h.addWidget(w)
             h.addStretch(1)
-            self.lbl_rec = QtWidgets.QLabel("REC ●")
+            self.lbl_rec = QtWidgets.QLabel("DATA ●")   # data recording (auto-on)
             self.lbl_rec.setStyleSheet(_dot(None))
             h.addWidget(self.lbl_rec)
-            self.btn_rec = QtWidgets.QPushButton("Start REC")
+            self.btn_rec = QtWidgets.QPushButton("Rec Video")  # camera video only
+            self.btn_rec.setToolTip("Record camera VIDEO (data is always recorded)")
             self.btn_rec.setStyleSheet(
                 "background:#27ae60; color:white; font-weight:bold; padding:4px 16px;")
             self.btn_rec.clicked.connect(self.on_toggle_record)
@@ -408,13 +409,9 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                 row.addWidget(b)
             f.addRow(row)
             self._refresh_arm_button()   # initial (disarmed) colour
-            # Baseline / sensor-zero phase: cold R + laser/load tare. Arms at a
-            # low non-heating probe, measures, auto-disarms. Refused while
-            # recording (it drains the queues). Disabled if baseline is off.
-            self.btn_baseline = QtWidgets.QPushButton("measure baseline (cold R + zero)")
-            self.btn_baseline.clicked.connect(self.on_measure_baseline)
-            self.btn_baseline.setEnabled(cfg.baseline.enabled)
-            f.addRow(self.btn_baseline)
+            # (No separate "measure baseline" button: the first actuation arms
+            #  the board for 3 s of idle-hold first — that recorded idle window
+            #  is the cold baseline for cycle 1. See on_start_actuation.)
             self.lbl_sma_read = QtWidgets.QLabel("V — / I — / R — / code —")
             f.addRow(self.lbl_sma_read)
             v.addWidget(sma_box)
@@ -605,27 +602,20 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                     "See the event log. Disarm is still available.")
             self.core.discard_backlog()
             self.core.reset_health_baseline()
-            # Optional automatic baseline / sensor-zero phase (cold R + tare),
-            # run once here while nothing else drains the queues. Skipped on a
-            # critical health failure (don't arm into a broken H7).
-            if (cfg.baseline.enabled and cfg.baseline.auto_on_start
-                    and critical_ok):
-                self.append_log("Auto baseline (cold R + sensor zero)...")
-                res = self.core.measure_baseline()
-                if res.get("ok"):
-                    for w in (res.get("warnings") or []):
-                        self.append_log(f"  ⚠ {w}")
-                self.core.discard_backlog()
             self._started = True
             self.timer = QtCore.QTimer(self)
             self.timer.timeout.connect(self.on_tick)
             self.timer.start(GUI_TICK_MS)
-            # Recording is NOT started automatically — live plots/readouts run
-            # now, but nothing is written to disk until the operator clicks
-            # "Start REC". (Output dir: paths.session_dir.)
-            self.append_log("Live preview running — press \"Start REC\" to "
-                            "begin recording to disk.")
-            self.append_log(f"Output (when recording): {paths.session_dir}")
+            # DATA recording auto-starts on launch — h7/stage/status stream to
+            # disk from the moment the session opens. The REC button is now for
+            # the CAMERA video only. Skip only on a critical health failure.
+            if critical_ok and self.core.start_recording():
+                self.append_log("Data recording STARTED automatically.")
+            else:
+                self.append_log("Data recording NOT started (critical health "
+                                "failure) — fix the H7 and restart.")
+            self.append_log(f"Output: {paths.session_dir}")
+            self.append_log("REC button records CAMERA video only.")
 
         def _apply_verdicts(self, verdicts: "list[StreamVerdict]"):
             by = {v.label: v for v in verdicts}
@@ -661,11 +651,13 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                 _dot(self.core.stream_status(STREAM_STAGE)))
             self.lbl_cam.setStyleSheet(
                 _dot(self.core.stream_status(STREAM_CAMERA)))
+            # Data recording (auto-on). Green = data streaming to disk. The
+            # camera video is a separate toggle (the "Rec Video" button).
             if self.core.recording:
-                self.lbl_rec.setText("REC ●")
+                self.lbl_rec.setText("DATA ●")
                 self.lbl_rec.setStyleSheet(_dot(True))
             else:
-                self.lbl_rec.setText("REC ○")
+                self.lbl_rec.setText("DATA ○")
                 self.lbl_rec.setStyleSheet(_dot(None))
             self._refresh_arm_button()
 
@@ -765,67 +757,28 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
                 self.core.disarm()
                 self._refresh_arm_button()
 
-        def on_measure_baseline(self):
-            """Run the baseline / sensor-zero phase (cold R + laser/load tare).
-            Pauses the tick so the phase is the sole queue drainer, then reports
-            the result + any warnings. Refused while recording."""
-            if self.core is None:
-                return
-            if self.core.recording:
-                self.append_log("Baseline refused: stop recording first.")
-                return
-            self.btn_baseline.setEnabled(False)
-            paused = self.timer.isActive() if getattr(self, "timer", None) else False
-            if paused:
-                self.timer.stop()
-            self.append_log("Measuring baseline (arming at probe level)...")
-            QtWidgets.QApplication.processEvents()
-            try:
-                res = self.core.measure_baseline()
-            finally:
-                if paused:
-                    self.timer.start(GUI_TICK_MS)
-                self.btn_baseline.setEnabled(self.core is not None
-                                             and cfg.baseline.enabled)
-            if not res.get("ok"):
-                self.append_log(f"Baseline FAILED: {res.get('reason','?')}")
-                QtWidgets.QMessageBox.warning(
-                    self, "Baseline failed",
-                    f"Baseline could not run:\n{res.get('reason','unknown')}")
-                return
-            def g(x):
-                return f"{x:.4g}" if isinstance(x, (int, float)) else "—"
-            self.append_log(
-                f"Baseline: cold_R={g(res.get('cold_r_ohm'))} Ω  "
-                f"laser_rest={g(res.get('laser_rest_V'))} V  "
-                f"load_rest={g(res.get('load_rest_V'))} V  "
-                f"load_offset={'applied' if res.get('applied_load_offset_V') is not None else 'NOT applied'}")
-            warns = res.get("warnings") or []
-            for w in warns:
-                self.append_log(f"  ⚠ {w}")
-            if warns:
-                QtWidgets.QMessageBox.warning(
-                    self, "Baseline warnings", "\n\n".join(warns))
-
         def on_toggle_record(self):
+            # DATA recording is auto-on; this button toggles CAMERA VIDEO only.
             if not self.core:
                 return
-            if self.core.recording:
-                self.core.stop_recording()
-                self.btn_rec.setText("Start REC")
+            if self.core.camera_recording:
+                self.core.stop_camera_recording()
+                self.btn_rec.setText("Rec Video")
                 self.btn_rec.setStyleSheet(
                     "background:#27ae60; color:white; font-weight:bold; "
                     "padding:4px 16px;")
-                self.append_log("Recording stopped.")
+                self.append_log("Camera video recording stopped.")
             else:
-                if self.core.start_recording():
-                    self.btn_rec.setText("Stop REC")
+                if self.core.start_camera_recording():
+                    self.btn_rec.setText("Stop Video")
                     self.btn_rec.setStyleSheet(
                         "background:#7f8c8d; color:white; font-weight:bold; "
                         "padding:4px 16px;")
-                    self.append_log("Recording started.")
-            # Resolution/fps reopen the camera, so lock them while recording.
-            locked = self.core.recording
+                    self.append_log("Camera video recording started.")
+                else:
+                    self.append_log("Camera video: no session dir / camera off.")
+            # Resolution/fps reopen the camera, so lock them while it records.
+            locked = self.core.camera_recording
             if hasattr(self, "cmb_cam_res"):
                 self.cmb_cam_res.setEnabled(not locked)
                 self.cmb_cam_fps.setEnabled(not locked)
@@ -853,10 +806,26 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             if p is None:
                 return
             v_high, v_idle, t_high, t_idle, n = p
-            if self.chk_cycle.isChecked():
-                self.core.cycle(v_high, v_idle, t_high, t_idle, n)
+
+            def _go():
+                if self.chk_cycle.isChecked():
+                    self.core.cycle(v_high, v_idle, t_high, t_idle, n)
+                else:
+                    self.core.fire(v_high, t_high)
+
+            # First actuation: arm + hold idle for 3 s so the run has a cold
+            # (armed-idle) baseline for cycle 1 — it's recorded because data
+            # recording is auto-on — THEN start. If already armed/actuating
+            # (re-fire), start immediately.
+            if not (self.core.armed or self.core.actuating):
+                self.core.arm()
+                self.core.set_idle(v_idle)
+                self._refresh_arm_button()
+                self.core.log_event("baseline", "3s armed-idle baseline before cycle 1")
+                self.append_log("Arming 3 s idle baseline before first cycle…")
+                QtCore.QTimer.singleShot(3000, _go)
             else:
-                self.core.fire(v_high, t_high)
+                _go()
 
         def on_stop_actuation(self):
             if self.core:

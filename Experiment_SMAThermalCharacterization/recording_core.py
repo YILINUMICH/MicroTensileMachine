@@ -198,8 +198,9 @@ class RecordingCore:
         # queues never overflow while idle), but sample rows are written to the
         # CSVs only while `recording` is True. The console flips this on with an
         # explicit "Start REC"; the headless runner turns it on automatically.
-        self.recording = False
+        self.recording = False           # DATA (h7/stage/status CSV) — auto-on
         self.recording_started_at: Optional[float] = None
+        self.camera_recording = False    # camera VIDEO — the REC button only
 
         # Sample tallies (for meta + readouts). Count only RECORDED rows.
         self.n_lcr = self.n_h7 = self.n_stage = self.n_status = 0
@@ -581,6 +582,20 @@ class RecordingCore:
         self._log("info", "Recording STARTED")
         return True
 
+    def start_camera_recording(self) -> bool:
+        """Start writing camera VIDEO (frames.csv + per-cycle JPEGs). Independent
+        of data recording (which auto-starts on launch); the REC button drives
+        only this. The camera worker opens/closes its own files off is_recording."""
+        if self.paths.session_dir is None:
+            return False
+        self.camera_recording = True
+        if self.camera_worker is not None:
+            self.camera_worker.mark_fast()
+        return True
+
+    def stop_camera_recording(self) -> None:
+        self.camera_recording = False
+
     def stop_recording(self) -> None:
         """Stop writing samples to the CSVs (queues keep draining for plots).
         Does NOT touch the SMA / actuation state — use disarm() for safety."""
@@ -721,11 +736,12 @@ class RecordingCore:
 
     def reconnect_camera(self) -> "tuple[bool, str]":
         """Restart the camera worker to apply a new resolution/fps. Refused
-        while recording (would interrupt the video). Stops only the camera."""
+        while the CAMERA is recording video (would interrupt it). Data recording
+        is auto-on and does not block this. Stops only the camera."""
         if not self.cfg.camera.enabled:
             return False, "camera is disabled for this session"
-        if self.recording:
-            return False, "stop recording before changing camera resolution/fps"
+        if self.camera_recording:
+            return False, "stop camera video before changing resolution/fps"
         old = self.camera_worker
         if old is not None:
             old.stop_local()
@@ -740,7 +756,7 @@ class RecordingCore:
         """Wire a CameraWorker's hooks to this core (recording gate, laser
         history, session dir, event log). Called at build and on reconnect."""
         cam.laser_provider = self.get_laser_hist
-        cam.is_recording = lambda: self.recording
+        cam.is_recording = lambda: self.camera_recording   # REC button, not data
         cam.session_dir = lambda: self.paths.session_dir
         cam.on_event = self.log_event
         self.camera_worker = cam

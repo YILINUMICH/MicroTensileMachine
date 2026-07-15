@@ -79,6 +79,7 @@ C_CURR = "#1baf7a"    # slot 2 aqua    — drive current / "after"
 C_RES = "#4a3aa7"     # slot 5 violet  — resistance
 C_FORCE = "#e34948"   # slot 6 red     — force / duplicate samples
 C_DISP = "#eb6834"    # slot 8 orange  — displacement / laser
+C_POWER = "#c9349b"   # magenta        — drive power (P = V·I)
 C_FIRE = "#eb6834"    # fire-window wash
 C_REF = "#898781"     # reference lines and noise bands
 C_FIT = "#0b0b0b"     # fitted curves
@@ -536,14 +537,21 @@ def view_cycles(args) -> int:
     sd_r_n = sd_r / float(r0_global)
 
     # ---- Figure 1: timeline (one panel per measure — never two y-scales) -----
+    # Drive power P = V·I — align current onto the voltage timeline (same M7
+    # clock; interp covers any per-channel length mismatch from dropped samples).
+    _tv, _vv = sig["volt"]
+    _ti, _iv = sig["curr"]
+    sig["power"] = (_tv, _vv * (np.interp(_tv, _ti, _iv) if len(_ti)
+                                else np.zeros_like(_vv)))
     rows = [
         ("volt", "drive V", "V", C_VOLT),
         ("curr", "drive I", "A", C_CURR),
+        ("power", "drive power\n(P = V·I)", "W", C_POWER),
         ("res", f"SMA resistance\n(R/R₀, R₀={r0_global:.2f} Ω)", "R/R₀", C_RES),
         ("force", "force", "N", C_FORCE),
         ("disp", f"displacement (Δ vs start){disp_note}", "µm", C_DISP),
     ]
-    fig, axes = plt.subplots(len(rows), 1, figsize=(12, 11), sharex=True,
+    fig, axes = plt.subplots(len(rows), 1, figsize=(12, 13), sharex=True,
                              facecolor=SURFACE)
     t_lo, t_hi = -PRE_S - 0.6, onsets[-1] - t0 + span + 0.6
     for ax, (key, name, unit, color) in zip(axes, rows):
