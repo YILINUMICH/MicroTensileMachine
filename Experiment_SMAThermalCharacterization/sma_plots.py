@@ -141,6 +141,21 @@ def load_h7(path: Path) -> Dict[str, dict]:
             for ch, d in acc.items() if d["t"]}
 
 
+def timebase(d: dict) -> np.ndarray:
+    """Analysis time base for one channel, in seconds. Prefer the firmware clock
+    (`hw`, µs) over the host clock (`t`): the host stream is BURSTY — when the PC
+    falls behind (camera/GUI) it logs samples late, which smears cycle timing
+    (fires look mis-spaced / cools look long) even though the firmware ran on
+    time. `hw` is stamped at the instant of conversion, so it's immune. Falls
+    back to the host clock only if `hw` is missing/degenerate. Both H7 cores boot
+    together, so all channels' hw share a common (~boot) origin — safe to compare
+    a drive-channel onset against a sensor-channel window."""
+    hw = d.get("hw")
+    if hw is not None and hw.size and np.isfinite(hw).all() and (hw[-1] > hw[0]):
+        return hw / 1e6
+    return d["t"]
+
+
 def load_meta(sess: Path) -> tuple:
     """(meta, k_mV_per_um, V0_mV, load_scale_N_per_V, load_offset_V, cold_R)"""
     meta = json.loads((sess / "meta.json").read_text())
@@ -382,13 +397,18 @@ def view_cycles(args) -> int:
                     "resistance are untouched; outputs get a '_filt' suffix.",
                     filt_label, sd_before, float(np.std(disp_um)))
 
+    # Time base = firmware clock (hw), NOT the bursty host clock — see timebase().
     sig = {
-        "volt": (h7["sma_v"]["t"], h7["sma_v"]["v"]),
-        "curr": (h7["sma_i"]["t"], h7["sma_i"]["v"]),
-        "res": (h7["sma_r"]["t"], h7["sma_r"]["v"]),
-        "force": (h7["load"]["t"], force_N),
-        "disp": (h7["laser"]["t"], disp_um),
+        "volt": (timebase(h7["sma_v"]), h7["sma_v"]["v"]),
+        "curr": (timebase(h7["sma_i"]), h7["sma_i"]["v"]),
+        "res": (timebase(h7["sma_r"]), h7["sma_r"]["v"]),
+        "force": (timebase(h7["load"]), force_N),
+        "disp": (timebase(h7["laser"]), disp_um),
     }
+    _tb = "firmware (hw_us)" if (np.isfinite(h7["sma_v"]["hw"]).all()
+                                 and h7["sma_v"]["hw"][-1] > h7["sma_v"]["hw"][0]) \
+        else "host (hw_us unavailable — timing may be smeared)"
+    log.info("cycle time base: %s", _tb)
 
     onsets = find_fire_onsets(*sig["volt"], cmd.v_high, cmd.v_low)
     log.info("found %d fire onset(s) in sma_v (commanded %d)", len(onsets), cmd.n)

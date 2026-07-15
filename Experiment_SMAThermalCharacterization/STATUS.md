@@ -148,6 +148,60 @@
 
 ## TODOs
 
+> ### ▶ OPEN ISSUE — CYCLE TIMING DISTORTED BY USB-CDC BACK-PRESSURE (2026-07-15)
+>
+> **Symptom.** In firmware-timed `cycle` runs the cool phase overshoots: the
+> first ~2 cools are correct (~3.1 s) then cools stretch to 5–8 s. Also seen:
+> "fire N early", force plot shows vertical lines, sensor rate drops. Sessions:
+> `console_20260715_150641`, `console_20260715_160458`.
+>
+> **Root cause (confirmed from data).** The M7 runs a *cooperative* state machine
+> — `serviceSma()` checks the cool timer (`t_rel >= cyc_cool_ms`) in the **same
+> super-loop** that does the **blocking** `Serial.write` stream. When the host PC
+> falls behind reading the serial (the camera/GUI starving the H7 reader thread),
+> the M7's write blocks; `millis()` keeps running, so the cool-timer check is
+> serviced late → cool overshoots. Measured: **8 M7 stalls of 4–5 s each**
+> (firmware clock jumps with zero samples produced). During a stall the M4→M7
+> sensor **ring overflows → lost laser/load samples** (92 Hz vs 400), and the
+> backlog arrives in a **burst** (→ compressed host timestamps → vertical lines).
+> The `ping` heartbeat stays regular because that's the *opposite* USB direction.
+>
+> **Two distinct problems:** (a) REAL actuation distortion (the wire genuinely
+> cooled 5–8 s) + REAL sensor-sample loss (ring overflow); (b) MEASUREMENT
+> smearing (host timestamps logged late). Confirm with firmware clock: fire
+> intervals on `hw_us` read 3.22 s (cycles 2–3, correct) then 5.7–7.8 s (real).
+>
+> **Tried / done (host-side, no dropped samples):**
+> - `hw_us` time base in `sma_plots.py` (`timebase()`): analysis reads the
+>   firmware clock, not the bursty host clock → fixes (b) only. (Measurement.)
+> - `portenta_reader.py`: `write_timeout=0.5 s` (a stalled write can't freeze the
+>   UI) + `set_buffer_size(rx=4 MB)` (bridge ~30 s of host stall so the M7 never
+>   back-pressures — targets (a) WITHOUT dropping samples).
+> - Single serial owner: SMA commands enqueued to the H7 reader thread, never
+>   written from the GUI thread (no read/write race on one COM handle).
+> - H7 reader thread self-pins to a dedicated core + `above_normal` priority.
+> - Camera: loop pacing (grab() busy-spin fix), decoupled cheap preview
+>   (`preview_hz`/`preview_width`), and OPT-IN `camera.use_subprocess: true`
+>   (camera in its OWN process → its GIL/core can't stall the H7 reader).
+>
+> **Believed cause of the ~4–5 s reader starvation:** the in-thread camera's
+> fast-capture window (≈ `stop_dwell_s`) holding the GIL / saturating a core.
+>
+> **NEXT STEP (in order):**
+> 1. **Bench-test** with `camera.use_subprocess: true` + the 4 MB RX buffer +
+>    reader priority already in place. If the M7 stalls vanish (cool back to
+>    ~3.1 s on the `hw_us` timeline, ~400 Hz sensor rate sustained, no bursts),
+>    the actuation + data-loss are fixed with **no firmware change, no drops**.
+> 2. If stalls persist → **firmware non-blocking `streamSma()`**: skip the write
+>    when `Serial.availableForWrite()` is short, but ALWAYS service the cool
+>    timer. Guarantees actuation timing; with the 4 MB buffer, drops ≈ 0.
+> 3. Long-term ideal: **UDP over the H7 Ethernet** — fire-and-forget, the control
+>    loop structurally cannot block. Biggest lift; only if 1–2 are insufficient.
+>
+> Note: this is SEPARATE from the "`cool_ms` too short vs τ_F≈6 s" thermal TODO
+> below — that's about physics (independence of cycles); this is about the
+> firmware not holding the *commanded* 3 s in the first place.
+
 > ### ▶ NEXT SESSION — START HERE (2026-07-13 EOD)
 >
 > The 1 kHz SMA config is **ported into `Firmware_SMASensorHub_PIO` and builds

@@ -26,6 +26,10 @@ h7:
     #   ["gain 10", "shunt 0.1"]). EMPTY by default —
     #   the recorder stays a pure logger. Inert hook
     #   for future scripted actuation.
+  # Isolate the serial reader from the camera/GUI so heavy camera work can't
+  # starve it (starvation back-pressures the M7 and distorts cycle timing).
+  reader_priority: above_normal # normal | above_normal | highest ("normal" = off)
+  reader_core: -1 # -1 = auto (last logical core); >=0 = pin to that core; <=-2 = off
 
 # ── Zaber linear stage (X-LSQ300A-E01) ────────────────────────────────
 stage:
@@ -49,15 +53,30 @@ stage:
 # fps dropdowns, transient + heartbeat fields). Auxiliary: a failure warns.
 camera:
   enabled: true
-  index: 1 # DirectShow index of the 12MP U3 camera
-  resolution: [1280, 720] # dropdown: 640x360..4000x3000 (see README)
-  fps_fast: 120 # dropdown; options adapt to resolution
+  use_subprocess: false # true = run the camera in its OWN process (separate
+  #   GIL/core) so camera CPU can never stall the H7 reader/GUI. Same USB port;
+  #   preview comes back over IPC. false = in-thread (default; lighter).
+  index: 0 # DirectShow index of the 12MP U3 camera (VID_32E4 PID_6577). NOTE:
+  # DSHOW index is positional, not pinned to the device — it was 1 when the
+  # Lenovo built-in webcam occupied 0; with the built-in absent the 12MP is 0.
+  # If capture fails with "can't be used to capture by index", re-probe indices.
+  resolution: [1920, 1080] # 1080p is the camera's fast MJPG mode. AVOID 1280x720:
+  # this sensor has NO MJPG descriptor at 720p, so DSHOW falls back to raw YUY2
+  # and caps at 10 fps. Measured MJPG rates: 1080p=85, 1440p=48, 4000x3000=15 fps.
+  fps_fast: 60 # RECORDING rate at 1080p MJPG (85 fps ceiling; 60 has margin).
+  # This is the capture stream — keep it high so recording is fast. The live
+  # preview does NOT run at this rate; it samples the stream (see preview_* below).
   fps_heartbeat: 1.0 # sparse rate once the SMA has settled
   transient_guarantee_s: 1.0 # force fast this long after a heat/idle event
   change_threshold_mm: 1.0 # net (median-filtered) laser move that counts
   median_window_ms: 200 # laser noise/jump rejection
   stop_dwell_s: 4.0 # no >threshold move this long -> drop to heartbeat
   jpeg_quality: 90
+  # ── Live view (cheap; independent of recording) ──────────────────────
+  preview_hz: 10 # frames/s DECODED for the on-screen view (the CPU lever).
+  #   Lower = cheaper live view, no effect on recording fps. ~16 ms/decode at
+  #   1080p, so 10 Hz ≈ 16% of one core; 5 Hz ≈ 8%. Recording still gets fps_fast.
+  preview_width: 400 # downscaled display width (px); smaller = lighter to draw
 
 # ── SMA cyclic actuation (the ON-M7 experiment state machine) ─────────
 # The firmware runs the heat/cool cycle deterministically off M7's own

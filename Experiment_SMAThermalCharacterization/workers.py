@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import csv
 import logging
+import os
 import queue
 import statistics
 import sys
@@ -45,6 +46,141 @@ try:
 except Exception:  # noqa: BLE001
     cv2 = None
     _HAVE_CV2 = False
+
+
+# Windows thread-priority constants (relative to the process priority class).
+_WIN_THREAD_PRIORITY = {
+    "idle": -15, "lowest": -2, "below_normal": -1, "normal": 0,
+    "above_normal": 1, "highest": 2, "time_critical": 15,
+}
+
+
+def _pin_current_thread(core, priority, logger):
+    """Best-effort: raise the CURRENT thread's scheduling priority and pin it to
+    one CPU core, so heavy work on other threads (the camera) can't preempt it.
+    MUST be called from inside the thread it should affect. Windows uses the
+    Win32 API via ctypes; other platforms use sched_setaffinity where present.
+    Never raises — a failure just logs and leaves the thread at defaults."""
+    # priority == "normal"/None means "leave it"; core is None/<0 means "no pin".
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            k32 = ctypes.windll.kernel32
+            k32.GetCurrentThread.restype = ctypes.c_void_p
+            k32.SetThreadPriority.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            k32.SetThreadAffinityMask.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+            k32.SetThreadAffinityMask.restype = ctypes.c_size_t
+            h = k32.GetCurrentThread()
+            prio = _WIN_THREAD_PRIORITY.get(priority)
+            if prio is not None and priority != "normal":
+                if not k32.SetThreadPriority(h, prio):
+                    logger.warning("SetThreadPriority(%s) failed", priority)
+            if core is not None and core >= 0:
+                if k32.SetThreadAffinityMask(h, ctypes.c_size_t(1 << core)) == 0:
+                    logger.warning("SetThreadAffinityMask(core=%d) failed", core)
+            logger.info("H7 reader thread pinned: priority=%s core=%s",
+                        priority, core if (core is not None and core >= 0) else "any")
+        except Exception as e:  # noqa: BLE001
+            logger.warning("could not set reader thread priority/affinity: %s", e)
+    else:
+        try:
+            if core is not None and core >= 0 and hasattr(os, "sched_setaffinity"):
+                os.sched_setaffinity(0, {core})
+                logger.info("H7 reader thread pinned to core %d", core)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("could not set reader thread affinity: %s", e)
+
+
+def _resolve_reader_core(cfg):
+    """Map cfg.reader_core to an actual core index or None (don't pin).
+    -1 = auto (last logical core); >=0 = that core; <=-2 = disabled."""
+    rc = getattr(cfg, "reader_core", -1)
+    if rc is None or rc <= -2:
+        return None
+    if rc == -1:
+        n = os.cpu_count() or 1
+        return n - 1                       # last logical core, usually least busy
+    return rc
+
+
+# A big sensor (the 12MP) reports a >= this width when asked for 4000x3000; a
+# webcam clamps far below. Used to tell the 12MP apart from a built-in cam when
+# DSHOW indices shift (they are positional, not pinned to the device).
+_BIG_SENSOR_MIN_WIDTH = 3000
+
+
+def _dshow_device_names():
+    """DSHOW device names in index order, or None if pygrabber isn't installed.
+    OpenCV itself can't enumerate device names, so name-pinning is best-effort."""
+    try:
+        from pygrabber.dshow_graph import FilterGraph  # optional dep
+        return list(FilterGraph().get_input_devices())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _probe_width(cap):
+    """Ask an already-open capture for 4000x3000 MJPG; return the width granted.
+    A big sensor grants ~4000; a webcam clamps far below."""
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 4000)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 3000)
+    return int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+
+
+def _resolve_camera(cfg, logger, prefer=None, max_probe=4):
+    """Find the 12MP camera, robust to DSHOW index shuffling. Returns
+    (index, open_cap_or_None) — when the cap is not None the caller OWNS it and
+    should reconfigure rather than reopen (a DSHOW open of this camera is ~4 s,
+    so reusing the probe handle roughly halves startup / reconnect time).
+
+    Order of trust:
+      1. pygrabber name match against cfg.name_hint (if pygrabber is present).
+      2. capability probe: the configured/last-used index wins immediately if it
+         is the big sensor; otherwise scan indices and take the widest one.
+    Raises RuntimeError if nothing capturable is found."""
+    names = _dshow_device_names()
+    if names:
+        logger.info("DSHOW cameras: %s", names)
+        hint = (getattr(cfg, "name_hint", "") or "").lower()
+        if hint:
+            for i, nm in enumerate(names):
+                if hint in nm.lower():
+                    logger.info("camera matched name '%s' at index %d", nm, i)
+                    return i, None
+
+    if not getattr(cfg, "auto_detect", True):
+        return cfg.index, None
+
+    # Try the preferred / configured index first so the common case is one probe.
+    order, seen = [], set()
+    for i in [prefer, cfg.index, *range(max_probe)]:
+        if i is not None and i not in seen and i >= 0:
+            order.append(i)
+            seen.add(i)
+
+    best_idx, best_w = None, 0
+    for i in order:
+        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            with contextlib.suppress(Exception):
+                cap.release()
+            continue
+        w = _probe_width(cap)
+        logger.info("camera index %d: max width %d", i, w)
+        if i in (prefer, cfg.index) and w >= _BIG_SENSOR_MIN_WIDTH:
+            return i, cap                  # configured index IS the 12MP — reuse
+        with contextlib.suppress(Exception):
+            cap.release()
+        if w > best_w:
+            best_idx, best_w = i, w
+
+    if best_idx is None:
+        raise RuntimeError(
+            f"no capturable camera found (probed indices {order})")
+    logger.info("camera auto-detected at index %d (max width %d)",
+                best_idx, best_w)
+    return best_idx, None
 
 
 # Sibling-module imports via sys.path shims. Each driver/ reader is the
@@ -220,12 +356,38 @@ class H7Worker(threading.Thread):
         self.n_glitch = 0
         self.error: Optional[BaseException] = None
         self.reader: Optional[PortentaReader] = None
+        # Outbound SMA commands. The GUI/core thread only ENQUEUES here; the
+        # reader thread drains and actually writes them (see _pump_commands),
+        # so the serial port has exactly one thread touching it. Unbounded so a
+        # safety 'disarm' can never be refused; commands are tiny and rare.
+        self.cmd_queue: "queue.Queue[str]" = queue.Queue()
         # Set once the port is open + drained and the reader is ready to
         # accept commands / stream. Consumers wait on this instead of
         # gating on sample count (the combined firmware emits NO sample
         # lines while idle — SMA src=3/4/5 only appear during actuation).
         self.ready = threading.Event()
         self.logger = logging.getLogger("H7Worker")
+
+    def send_command(self, cmd: str) -> None:
+        """Enqueue one command for the reader thread to transmit. Thread-safe,
+        non-blocking — safe to call from the GUI/CSV-writer thread. The write
+        itself happens on the reader thread so it can never race the read or
+        stall the caller (a stalled write only delays this queue, not the UI)."""
+        self.cmd_queue.put_nowait(cmd)
+
+    def _pump_commands(self, reader: "PortentaReader") -> None:
+        """Drain and transmit queued commands. Runs ONLY on the reader thread."""
+        while True:
+            try:
+                cmd = self.cmd_queue.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                reader.send_command(cmd)
+            except Exception as e:  # noqa: BLE001
+                # A bounded write_timeout turns a stalled port into this, rather
+                # than a UI freeze. Log and move on; the command is dropped.
+                self.logger.warning("H7 command %r failed: %s", cmd, e)
 
     def run(self) -> None:
         try:
@@ -243,6 +405,12 @@ class H7Worker(threading.Thread):
                              self.n_pushed, self.n_dropped, self.n_filtered)
 
     def _main_loop(self) -> None:
+        # Runs on the H7 reader thread. Give it priority + a dedicated core so
+        # the camera/GUI can't starve it — a starved reader stops draining the
+        # serial, which back-pressures the M7 and distorts cycle timing.
+        _pin_current_thread(_resolve_reader_core(self.cfg),
+                            getattr(self.cfg, "reader_priority", "above_normal"),
+                            self.logger)
         keep = set(self.cfg.channels or [])
         # adc_source=None → keep ALL src; we filter by channel name below.
         reader = PortentaReader(
@@ -261,9 +429,16 @@ class H7Worker(threading.Thread):
             self.logger.info("H7 ready: port=%s baud=%d channels=%s",
                              self.cfg.port, self.cfg.baud, sorted(keep))
             self.ready.set()
-            for kind, item in reader.iter_events():
-                if self.stop_event.is_set():
-                    break
+            while not self.stop_event.is_set():
+                # This thread is the SOLE owner of the serial port: send any
+                # queued outbound commands here (NOT from the GUI thread) so a
+                # write can never race the read on the same handle (that caused
+                # the ClearCommError crash) nor block the UI/CSV-writer thread.
+                self._pump_commands(reader)
+                ev = reader.poll_event()
+                if ev is None:
+                    continue                 # read timeout — loop, recheck stop
+                kind, item = ev
                 if kind == "status":
                     if self.status_queue is not None:
                         try:
@@ -504,12 +679,17 @@ class CameraWorker(threading.Thread):
     stop_event (mirrors LcrWorker/ZaberWorker).
     """
 
-    PREVIEW_WIDTH = 480
+    PREVIEW_WIDTH = 480     # fallback defaults if cfg lacks the fields
     PREVIEW_HZ = 15.0
 
     def __init__(self, cfg: CameraConfig, stop_event: threading.Event):
         super().__init__(name="CameraWorker", daemon=True)
         self.cfg = cfg
+        # Live-view sampling — independent of the capture/recording rate so a
+        # cheap preview never limits recording fps (and vice versa).
+        self.preview_hz = float(getattr(cfg, "preview_hz", None) or self.PREVIEW_HZ)
+        self.preview_width = int(getattr(cfg, "preview_width", None)
+                                 or self.PREVIEW_WIDTH)
         self.stop_event = stop_event
         # Hooks (safe defaults; rebound after core creation).
         self.laser_provider: Callable[[], List[Tuple[float, float]]] = lambda: []
@@ -525,6 +705,7 @@ class CameraWorker(threading.Thread):
         self.mode = "idle"
 
         self._cap = None
+        self._resolved_index: Optional[int] = None  # last index that opened OK
         self._preview = None
         self._preview_lock = threading.Lock()
         self._fast_until = 0.0
@@ -551,6 +732,18 @@ class CameraWorker(threading.Thread):
     def stop_local(self) -> None:
         """Stop only this worker (for a resolution/fps reconnect)."""
         self._local_stop.set()
+
+    def _stop_requested(self) -> bool:
+        return self.stop_event.is_set() or self._local_stop.is_set()
+
+    def _interruptible_sleep(self, dur: float) -> bool:
+        """Sleep up to `dur` seconds, returning True early if a stop is set."""
+        end = time.monotonic() + dur
+        while time.monotonic() < end:
+            if self._stop_requested():
+                return True
+            time.sleep(min(0.05, max(0.0, end - time.monotonic())))
+        return self._stop_requested()
 
     # -- public API (called from the GUI / core thread) -------------------
     def mark_fast(self) -> None:
@@ -583,10 +776,21 @@ class CameraWorker(threading.Thread):
     def _open(self):
         if not _HAVE_CV2:
             raise RuntimeError("opencv-python (cv2) not installed — camera off")
-        cap = cv2.VideoCapture(self.cfg.index, cv2.CAP_DSHOW)
-        if not cap.isOpened():
+        # Resolve the device by capability/name (robust to DSHOW index shuffling)
+        # rather than trusting a fixed cfg.index. Prefers the last good index so
+        # a reconnect is one probe in the common case, and reuses the probe's
+        # open handle when possible (a DSHOW open of this camera is ~4 s).
+        idx, cap = _resolve_camera(self.cfg, self.logger,
+                                   prefer=self._resolved_index)
+        if cap is None:
+            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        if cap is None or not cap.isOpened():
+            with contextlib.suppress(Exception):
+                if cap is not None:
+                    cap.release()
             raise RuntimeError(
-                f"cannot open camera index {self.cfg.index} (check USB/driver)")
+                f"cannot open camera index {idx} (check USB/driver)")
+        self._resolved_index = idx
         w, h = self.cfg.res_tuple()
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
@@ -596,57 +800,129 @@ class CameraWorker(threading.Thread):
         ah = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.actual_res = (aw, ah)
         self.actual_fps = self.cfg.fps_fast
-        self.info = f"cam[{self.cfg.index}] {aw}x{ah} MJPG"
+        self.info = f"cam[{idx}] {aw}x{ah} MJPG"
+        if (aw, ah) != (int(w), int(h)):
+            self.logger.warning("camera granted %dx%d, not requested %dx%d "
+                                 "(mode not supported?)", aw, ah, w, h)
         # Warm up (the first couple of reads on DSHOW can be ~1 s each).
         for _ in range(2):
             cap.read()
         return cap
 
     def _main_loop(self) -> None:
-        cap = self._open()
-        self._cap = cap
-        self.logger.info("Camera ready: %s", self.info)
-        while not (self.stop_event.is_set() or self._local_stop.is_set()):
-            if not cap.grab():          # paces to camera fps; keeps buffer fresh
+        """Capture loop with a watchdog + auto-reconnect. A USB hiccup used to
+        either freeze the loop forever (grab() returning False) or kill the
+        thread (a raised exception) with no recovery — unlike every other
+        stream. Now a stalled or erroring device is released and reopened, and
+        recording state (open frames.csv) survives the reconnect."""
+        cap = None
+        backoff = 0.5
+        last_good = time.monotonic()     # last time the device proved alive
+        while not self._stop_requested():
+            # (Re)open the camera if we don't currently hold a live handle.
+            if cap is None:
+                try:
+                    cap = self._open()
+                    self._cap = cap
+                    self.error = None
+                    last_good = time.monotonic()
+                    backoff = 0.5
+                    self.logger.info("Camera ready: %s", self.info)
+                except Exception as e:  # noqa: BLE001
+                    self.error = e
+                    self.logger.warning("camera open failed: %s (retry in %.1fs)",
+                                        e, backoff)
+                    self._emit("camera", f"open failed: {e}")
+                    if self._interruptible_sleep(backoff):
+                        break
+                    backoff = min(backoff * 2.0, 5.0)
+                    continue
+
+            # Grab paces to camera fps and keeps the buffer fresh. A successful
+            # grab is our liveness signal; a stall past reconnect_timeout_s or a
+            # raised error triggers a reopen.
+            try:
+                got = cap.grab()
+            except Exception as e:  # noqa: BLE001
+                self.logger.warning("camera grab raised: %s -> reconnect", e)
+                got = False
+            now = time.monotonic()
+            if not got:
+                if now - last_good > self.cfg.reconnect_timeout_s:
+                    self.logger.warning("no frame for %.1fs -> reconnecting camera",
+                                        now - last_good)
+                    self._emit("camera", "stalled -> reconnecting")
+                    self._release(cap)
+                    cap = None
+                    continue
                 time.sleep(0.005)
                 continue
-            now = time.monotonic()
+            last_good = now
 
-            # Recording edges (driven by the console's Start/Stop REC).
-            rec = False
             try:
-                rec = bool(self.is_recording())
-            except Exception:  # noqa: BLE001
+                # Recording edges (driven by the console's Start/Stop REC).
                 rec = False
-            if rec and not self._rec_active:
-                self._open_files()
-            elif not rec and self._rec_active:
-                self._close_files()
+                try:
+                    rec = bool(self.is_recording())
+                except Exception:  # noqa: BLE001
+                    rec = False
+                if rec and not self._rec_active:
+                    self._open_files()
+                elif not rec and self._rec_active:
+                    self._close_files()
 
-            mode = self._decide_mode(now)
-            entering_fast = (mode == "fast" and self.mode != "fast")
-            if self._rec_active and entering_fast:
-                self._begin_cycle()
-            self.mode = mode
+                mode = self._decide_mode(now)
+                entering_fast = (mode == "fast" and self.mode != "fast")
+                if self._rec_active and entering_fast:
+                    self._begin_cycle()
+                self.mode = mode
 
-            interval = (1.0 / self.cfg.fps_fast if mode == "fast"
-                        else 1.0 / max(self.cfg.fps_heartbeat, 1e-3))
-            need_write = self._rec_active and (now - self._last_write) >= interval
-            need_preview = (now - self._last_preview) >= (1.0 / self.PREVIEW_HZ)
-            need_snap = self._rec_active and self._snapshot_pending
+                interval = (1.0 / self.cfg.fps_fast if mode == "fast"
+                            else 1.0 / max(self.cfg.fps_heartbeat, 1e-3))
+                need_write = self._rec_active and (now - self._last_write) >= interval
+                need_preview = (now - self._last_preview) >= (1.0 / max(self.preview_hz, 1e-3))
+                need_snap = self._rec_active and self._snapshot_pending
 
-            if need_write or need_preview or need_snap:
-                ok, frame = cap.retrieve()
-                if ok and frame is not None:
-                    if need_snap:
-                        self._write_snapshot(frame, now)
-                        self._snapshot_pending = False
-                    if need_preview:
-                        self._update_preview(frame)
-                        self._last_preview = now
-                    if need_write:
-                        self._write_frame(frame, now, mode)
-                        self._last_write = now
+                if need_write or need_preview or need_snap:
+                    ok, frame = cap.retrieve()
+                    if ok and frame is not None:
+                        if need_snap:
+                            self._write_snapshot(frame, now)
+                            self._snapshot_pending = False
+                        if need_preview:
+                            self._update_preview(frame)
+                            self._last_preview = now
+                        if need_write:
+                            self._write_frame(frame, now, mode)
+                            self._last_write = now
+            except Exception as e:  # noqa: BLE001
+                # A decode/write error shouldn't kill the worker; drop the handle
+                # and reconnect (recording files stay open across the reopen).
+                self.logger.warning("camera loop error: %s -> reconnect", e)
+                self._emit("camera", f"loop error: {e}")
+                self._release(cap)
+                cap = None
+                continue
+
+            # Pace the loop. cv2.VideoCapture.grab() on CAP_DSHOW does NOT block
+            # to the frame rate (measured ~millions of calls/s) — without this
+            # sleep the loop busy-spins a whole CPU core, starving the Qt event
+            # loop and the H7 serial reader (the "console lags once the camera is
+            # online" symptom). grab() is ~free, so pacing to fps_fast keeps the
+            # driver buffer fresh (low-latency preview) at negligible CPU.
+            period = 1.0 / max(float(self.cfg.fps_fast), 1.0)
+            elapsed = time.monotonic() - now
+            if elapsed < period:
+                time.sleep(period - elapsed)
+
+    def _release(self, cap) -> None:
+        """Safely release a capture handle (ignore driver errors on teardown)."""
+        if cap is None:
+            return
+        with contextlib.suppress(Exception):
+            cap.release()
+        if self._cap is cap:
+            self._cap = None
 
     # -- adaptive-rate decision ------------------------------------------
     def _filtered_laser(self, now: float) -> Optional[float]:
@@ -754,9 +1030,9 @@ class CameraWorker(threading.Thread):
 
     def _update_preview(self, frame) -> None:
         h, w = frame.shape[:2]
-        if w > self.PREVIEW_WIDTH:
-            scale = self.PREVIEW_WIDTH / float(w)
-            small = cv2.resize(frame, (self.PREVIEW_WIDTH, int(h * scale)))
+        if w > self.preview_width:
+            scale = self.preview_width / float(w)
+            small = cv2.resize(frame, (self.preview_width, int(h * scale)))
         else:
             small = frame.copy()
         with self._preview_lock:

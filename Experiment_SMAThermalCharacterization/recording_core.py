@@ -45,6 +45,7 @@ from collections import deque
 
 import h7_commands as h7
 from config import AppConfig
+from camera_process import make_camera
 from workers import (CameraWorker, H7Sample, H7Worker, LcrSample, LcrWorker,
                      StageSample, StatusSample, ZaberWorker)
 
@@ -659,7 +660,7 @@ class RecordingCore:
                 return False, "camera is disabled for this session"
             if self.camera_worker is not None and self.camera_worker.is_alive():
                 return False, "camera already connected"
-            cam = CameraWorker(self.cfg.camera, self.stop_event)
+            cam = make_camera(self.cfg.camera, self.stop_event)
             self.bind_camera(cam)
             cam.start()
         else:
@@ -841,21 +842,25 @@ class RecordingCore:
     # SMA control — every command routed through h7_commands + logged
     # ------------------------------------------------------------------
     def sma_send(self, cmd: str, *, kind: str = "cmd") -> bool:
-        """Send one command to the H7 over the H7Worker's reader and log it to
-        events.csv. Safe no-op (returns False) if the H7 is disabled or the
-        reader hasn't opened yet."""
-        reader = getattr(self.h7_worker, "reader", None)
-        if reader is None:
-            self._log("warning", f"SMA command {cmd!r} dropped — H7 reader unavailable")
-            self.log_event("error", f"dropped {cmd!r}: H7 reader unavailable")
+        """Queue one command for the H7Worker to transmit and log it to
+        events.csv. Returns False only if the H7 is disabled / has no worker.
+
+        The command is ENQUEUED (non-blocking) and physically written by the
+        reader thread — this thread (GUI + sole CSV writer) never touches the
+        serial port, so a stalled firmware can neither freeze the console nor
+        race the reader on the shared handle."""
+        w = self.h7_worker
+        if w is None or not hasattr(w, "send_command"):
+            self._log("warning", f"SMA command {cmd!r} dropped — H7 unavailable")
+            self.log_event("error", f"dropped {cmd!r}: H7 unavailable")
             return False
         try:
-            reader.send_command(cmd)
+            w.send_command(cmd)          # enqueue -> sent on the H7 reader thread
             self.log_event(kind, cmd)
             return True
         except Exception as e:  # noqa: BLE001
-            self._log("warning", f"SMA send_command({cmd!r}) failed: {e}")
-            self.log_event("error", f"send failed {cmd!r}: {e}")
+            self._log("warning", f"SMA send_command({cmd!r}) enqueue failed: {e}")
+            self.log_event("error", f"enqueue failed {cmd!r}: {e}")
             return False
 
     def arm(self) -> bool:

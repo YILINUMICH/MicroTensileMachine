@@ -55,6 +55,12 @@ class H7Config:
     channels: List[str] = field(
         default_factory=lambda: ["laser", "load", "sma_v", "sma_i", "sma_r"])
     startup_commands: List[str] = field(default_factory=list)
+    # Isolate the serial-reader thread from the camera/GUI so heavy camera work
+    # can't starve it (that starvation back-pressures the M7 and distorts cycle
+    # timing). Windows-only (best-effort; no-op elsewhere).
+    reader_priority: str = "above_normal"  # normal|above_normal|highest ("normal"=off)
+    reader_core: int = -1                  # -1=auto (last logical core);
+                                           #   >=0 pin to that core; <=-2 = don't pin
 
 
 @dataclass
@@ -85,15 +91,41 @@ class CameraConfig:
     the camera). fps_heartbeat / transient_guarantee_s / thresholds are live.
     """
     enabled: bool = False
-    index: int = 1                       # DirectShow device index (12MP = 1)
-    resolution: List[int] = field(default_factory=lambda: [1280, 720])
-    fps_fast: float = 60.0               # capture rate while the SMA is moving
+    use_subprocess: bool = False         # run the camera in its OWN process
+                                         #   (separate GIL/core) so camera CPU
+                                         #   can never stall the H7 reader/GUI.
+                                         #   False = in-thread (default).
+    index: int = 0                       # DirectShow device index — POSITIONAL,
+                                         #   not pinned to the device (a built-in
+                                         #   webcam at 0 pushes the 12MP to 1).
+                                         #   auto_detect re-finds it by capability
+                                         #   if this index is wrong.
+    name_hint: str = "12MP U3 Camera"    # matched against DSHOW device names when
+                                         #   pygrabber is installed (optional).
+    auto_detect: bool = True             # if the configured index fails/looks
+                                         #   wrong, scan indices and pick the
+                                         #   highest-resolution sensor (the 12MP;
+                                         #   a webcam can't do 4000x3000).
+    resolution: List[int] = field(default_factory=lambda: [1920, 1080])
+    fps_fast: float = 60.0               # capture rate while the SMA is moving.
+                                         #   AVOID 1280x720: no MJPG mode -> YUY2
+                                         #   fallback caps at 10 fps. 1080p=85 max.
     fps_heartbeat: float = 1.0           # sparse rate once settled (guard record)
     transient_guarantee_s: float = 10.0  # force fast this long after a heat/idle
     change_threshold_mm: float = 1.0     # net laser move that counts as "moving"
     median_window_ms: float = 200.0      # laser noise/jump rejection window
     stop_dwell_s: float = 4.0            # settled this long with no move -> slow
     jpeg_quality: int = 90
+    # Live preview is decoupled from recording: the capture stream runs at
+    # resolution/fps_fast (what recording uses); the on-screen preview just
+    # samples it. Lower these to spend less CPU on the live view WITHOUT
+    # slowing recording. preview_hz sets how many frames/s are decoded for the
+    # view (the real CPU lever); preview_width is the downscaled display size.
+    preview_hz: float = 10.0             # live-view refresh (was 15)
+    preview_width: int = 400             # live-view downscale width px (was 480)
+    reconnect_timeout_s: float = 2.0     # no good frame this long -> reopen the
+                                         #   camera (watchdog; other streams have
+                                         #   one, the camera used to just freeze).
 
     def res_tuple(self) -> tuple:
         w, h = self.resolution

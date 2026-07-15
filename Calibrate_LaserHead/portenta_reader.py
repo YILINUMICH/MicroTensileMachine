@@ -257,11 +257,27 @@ class PortentaReader:
                  port: str,
                  baud: int = 115200,
                  timeout_s: float = 1.0,
-                 adc_source: int = 2):
+                 adc_source: int = 2,
+                 write_timeout_s: float = 0.5,
+                 rx_buffer_bytes: int = 4 * 1024 * 1024):
         self.port = port
         self.baud = baud
         self.timeout_s = timeout_s
         self.adc_source = adc_source
+        # Large OS driver RX buffer so a busy host (camera/GUI) can fall seconds
+        # behind WITHOUT the firmware's USB-CDC write blocking. The M7 services
+        # its heat/cool timer in the same loop as the stream write, so a blocked
+        # write stalls the cycle and stretches the cool. At ~130 KB/s this buffer
+        # bridges ~30 s of host stall — no back-pressure, no dropped samples.
+        # (SetupComm is a request; Windows may cap it — verify what it grants.)
+        self.rx_buffer_bytes = rx_buffer_bytes
+        # Bound every write so a stalled firmware (USB-CDC RX not being drained)
+        # cannot block the caller indefinitely. send_command() runs on the GUI /
+        # CSV-writer thread, so an unbounded write() there freezes the whole
+        # console; with a timeout it raises SerialTimeoutException instead, which
+        # send_command's callers already handle. Commands are a few bytes, so
+        # 0.5 s is enormous headroom for a healthy port.
+        self.write_timeout_s = write_timeout_s
         self._ser: Optional[serial.Serial] = None
         self._write_lock = threading.Lock()
         self.logger = logging.getLogger("PortentaReader")
@@ -285,7 +301,18 @@ class PortentaReader:
             port=self.port,
             baudrate=self.baud,
             timeout=0.1,            # short reads — we're polling a boot window
+            write_timeout=self.write_timeout_s,  # never block the writer forever
         )
+        # Enlarge the driver RX buffer so the M7 never back-pressures (see note
+        # in __init__). Best-effort — SetupComm can be capped by the OS driver.
+        if self.rx_buffer_bytes:
+            try:
+                self._ser.set_buffer_size(rx_size=self.rx_buffer_bytes,
+                                          tx_size=64 * 1024)
+                self.logger.info("Requested RX buffer %.1f MB (driver may cap it)",
+                                 self.rx_buffer_bytes / (1024 * 1024))
+            except Exception as e:  # noqa: BLE001
+                self.logger.warning("set_buffer_size failed: %s", e)
         self.logger.info("Opened %s @ %d baud, waiting %.1fs for firmware boot...",
                          self.port, self.baud, boot_wait_s)
 
@@ -405,21 +432,31 @@ class PortentaReader:
             if s is not None:
                 yield s
 
+    def poll_event(self):
+        """Read ONE line and classify it: returns ('status', dict),
+        ('sample', Sample), or None on a read timeout / non-data line. Lets a
+        caller interleave its own work (e.g. transmitting queued commands on the
+        same thread) between reads instead of being trapped in iter_events()'s
+        internal loop — the key to keeping all port I/O single-threaded."""
+        line = self._readline()
+        if not line:
+            return None
+        st = parse_status_line(line)
+        if st is not None:
+            return ("status", st)
+        s = parse_line(line, adc_source=self.adc_source)
+        if s is not None:
+            return ("sample", s)
+        return None
+
     def iter_events(self):
         """Yield ('sample', Sample) and ('status', dict) tuples so a single
         consumer can capture BOTH the sample stream and the [STATUS] frames
         from the one USB port. Additive — iter_samples() is unchanged."""
         while True:
-            line = self._readline()
-            if not line:
-                continue
-            st = parse_status_line(line)
-            if st is not None:
-                yield ("status", st)
-                continue
-            s = parse_line(line, adc_source=self.adc_source)
-            if s is not None:
-                yield ("sample", s)
+            ev = self.poll_event()
+            if ev is not None:
+                yield ev
 
     def read_samples(self, n: int, timeout_s: Optional[float] = None) -> List[Sample]:
         """

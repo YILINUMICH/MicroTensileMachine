@@ -47,6 +47,7 @@ from recording_core import (RecordingCore, StreamVerdict, make_console_paths,
                             HEALTH_TIMEOUT_S,
                             STREAM_H7, STREAM_STAGE, STREAM_CAMERA)
 from workers import (H7Worker, ZaberWorker, CameraWorker)
+from camera_process import make_camera
 
 
 _THIS_DIR = Path(__file__).resolve().parent
@@ -114,7 +115,7 @@ def build_core(cfg: AppConfig, paths, stop_event: threading.Event,
 
     camera_worker = None
     if cfg.camera.enabled:
-        camera_worker = CameraWorker(cfg.camera, stop_event)
+        camera_worker = make_camera(cfg.camera, stop_event)
     else:
         logging.info("Camera stream disabled in config")
 
@@ -1074,4 +1075,8 @@ def _main() -> None:
 
 
 if __name__ == "__main__":
+    # Required before any multiprocessing (the optional camera subprocess) so a
+    # spawned child re-importing this module doesn't relaunch the GUI.
+    import multiprocessing
+    multiprocessing.freeze_support()
     _main()

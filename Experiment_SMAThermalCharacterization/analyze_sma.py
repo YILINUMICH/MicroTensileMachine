@@ -12,7 +12,7 @@ Dashboard panels: displacement, force, SMA R/V/I, de-embedded LCR R/L, and SMA
 electrical power (P = V.I) vs time. All values are plotted RAW - no filtering.
 
 Usage:
-    python analyze_sma.py --session data/sma_20260621_153000
+    python analyze_sma.py --session data/console_20260621_153000
     python analyze_sma.py --session <dir> --phase raw
     python analyze_sma.py --session <dir> --k -0.1171 --v0 566.957 \\
                           --load-scale 50.0 --load-offset 0.0
