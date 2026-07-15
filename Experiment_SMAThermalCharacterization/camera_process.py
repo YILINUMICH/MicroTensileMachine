@@ -130,6 +130,7 @@ class CameraProcessProxy:
         self.session_dir: Callable[[], Optional[object]] = lambda: None
         self.on_event: Optional[Callable[[str, str], None]] = None
 
+        self.name = "CameraProcess"      # so Thread-style callers (.name) work
         self.error: Optional[BaseException] = None
         self.info: Optional[str] = None
         self.actual_res: Optional[Tuple[int, int]] = None
@@ -185,6 +186,16 @@ class CameraProcessProxy:
             if self._proc.is_alive():
                 self.logger.warning("camera process did not exit; terminating")
                 self._proc.terminate()
+                self._proc.join(timeout=2.0)   # let SIGTERM land so is_alive()→False
+        # Release the mp.Queue feeder threads so the PARENT (console) exits
+        # cleanly — a terminated child can otherwise leave the parent hung on
+        # queue flush, which was blocking finalize / meta.json.
+        for q in (self._cmd_q, self._out_q):
+            try:
+                q.close()
+                q.cancel_join_thread()
+            except Exception:  # noqa: BLE001
+                pass
 
     # -- internal --------------------------------------------------------
     def _send(self, msg) -> None:

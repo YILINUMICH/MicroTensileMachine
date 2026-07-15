@@ -1134,10 +1134,16 @@ class RecordingCore:
                   self.camera_worker):
             if w is None:
                 continue
-            w.join(timeout=WORKER_JOIN_TIMEOUT_S)
-            if w.is_alive():
-                self._log("warning",
-                          f"{w.name} did not stop within {WORKER_JOIN_TIMEOUT_S:.1f} s")
+            # Robust: a worker that's slow to stop (esp. the camera SUBPROCESS,
+            # which is not a Thread and has no .name) must NEVER abort finalize
+            # before meta.json is written.
+            name = getattr(w, "name", type(w).__name__)
+            with contextlib.suppress(Exception):
+                w.join(timeout=WORKER_JOIN_TIMEOUT_S)
+            with contextlib.suppress(Exception):
+                if w.is_alive():
+                    self._log("warning",
+                              f"{name} did not stop within {WORKER_JOIN_TIMEOUT_S:.1f} s")
 
     def finalize(self, outcome: str = "complete") -> None:
         """Idempotent teardown: disarm, stop workers, final drain, meta.json,

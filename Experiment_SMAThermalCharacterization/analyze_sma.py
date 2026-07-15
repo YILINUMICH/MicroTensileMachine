@@ -747,7 +747,8 @@ def latest_session(base=None):
     cands = sorted(p for p in base.glob("console_*") if p.is_dir())
     for p in reversed(cands):
         h7 = p / "h7.csv"
-        if h7.exists() and h7.stat().st_size > 200:
+        if (h7.exists() and h7.stat().st_size > 200
+                and (p / "meta.json").exists()):     # finalized (has meta)
             return p
     return cands[-1] if cands else None
 
