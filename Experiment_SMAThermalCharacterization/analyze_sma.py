@@ -560,7 +560,20 @@ def _read_meta_and_cal(session_dir: Path, args):
     if meta_path.exists():
         meta = json.loads(meta_path.read_text())
     else:
-        log.warning("No meta.json in %s — using CLI args / raw output", session_dir)
+        # No meta.json (session didn't finalize — e.g. crashed). Fall back to the
+        # module's config.yaml: it has the same calibration/lcr key structure and
+        # the recorder writes meta's calibration straight from it, so the values
+        # match a finalized session. Lets orphaned sessions still be analyzed.
+        try:
+            import yaml
+            cfg_path = Path(__file__).resolve().parent / "config.yaml"
+            meta = yaml.safe_load(cfg_path.read_text()) or {}
+            log.warning("No meta.json in %s — falling back to config.yaml "
+                        "calibration", session_dir.name)
+        except Exception as e:  # noqa: BLE001
+            log.warning("No meta.json in %s and config.yaml fallback failed (%s) "
+                        "— using CLI args / raw output", session_dir.name, e)
+            meta = {}
     freq = args.frequency or _cfg_get(meta, "lcr", "frequency_hz", default=1.0e6)
     k = args.k if args.k is not None else _cfg_get(meta, "calibration", "laser", "k_mV_per_um")
     v0 = args.v0 if args.v0 is not None else _cfg_get(meta, "calibration", "laser", "V0_mV")
