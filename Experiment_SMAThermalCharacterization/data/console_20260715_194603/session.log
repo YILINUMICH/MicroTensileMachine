@@ -1,0 +1,27 @@
+2026-07-15 19:46:03,843  INFO   root                Session: console_20260715_194603
+2026-07-15 19:46:03,843  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260715_194603
+2026-07-15 19:46:03,843  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\config.yaml  headless=False
+2026-07-15 19:46:04,532  INFO   H7Worker            H7 reader thread pinned: priority=above_normal core=31
+2026-07-15 19:46:04,536  INFO   PortentaReader      Requested RX buffer 4.0 MB (driver may cap it)
+2026-07-15 19:46:04,537  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-15 19:46:04,541  INFO   CameraProxy         camera process started (pid=186700)
+2026-07-15 19:46:05,785  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-07-15 19:46:05,816  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-07-15 19:46:05,816  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-07-15 19:46:08,578  INFO   PortentaReader      boot banner (8 lines):
+2026-07-15 19:46:08,579  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0xCD PGAL_ALM PGAH_ALM
+2026-07-15 19:46:08,579  INFO   PortentaReader        [STATUS] t_ms=1783174 hwm=3 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1848108253 m4_us=1847463543 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=2596 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:46:08,579  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0xCD PGAL_ALM PGAH_ALM
+2026-07-15 19:46:08,579  INFO   PortentaReader        [STATUS] t_ms=1784174 hwm=3 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1849144763 m4_us=1848500071 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=3388 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:46:08,579  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0x4D PGAL_ALM PGAH_ALM
+2026-07-15 19:46:08,579  INFO   PortentaReader        [STATUS] t_ms=1785174 hwm=4 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1850181282 m4_us=1849536592 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=3046 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:46:08,579  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0x4D PGAL_ALM PGAH_ALM
+2026-07-15 19:46:08,579  INFO   PortentaReader        [STATUS] t_ms=1786174 hwm=3 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1851218011 m4_us=1850573108 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=3038 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:46:08,579  WARNING  PortentaReader      Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-07-15 19:46:08,642  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-15 19:46:08,642  INFO   UdpReader           UDP reader bound :7777  SO_RCVBUF=4194304
+2026-07-15 19:46:08,642  INFO   H7Worker            H7 transport=udp: bound :7777, netcfg 169.254.245.100 7777
+2026-07-15 19:46:08,643  INFO   RecordingCore       Running 10.0 s full system check...
+2026-07-15 19:46:08,694  INFO   RecordingCore       health H7    PASS (50) — combined firmware, 50 samples
+2026-07-15 19:46:08,694  INFO   RecordingCore       health stage PASS (142) — 142 reads, pos~80.00 mm
+2026-07-15 19:46:08,695  INFO   RecordingCore       Recording STARTED

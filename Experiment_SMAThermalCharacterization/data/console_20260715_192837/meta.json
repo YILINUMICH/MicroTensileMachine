@@ -1,0 +1,122 @@
+{
+  "session_id": "console_20260715_192837",
+  "schema": "sma_v3_console",
+  "started_at_utc": "2026-07-15T23:28:37Z",
+  "ended_at_utc": "2026-07-15T23:29:56Z",
+  "outcome": "complete",
+  "errors": [],
+  "counts": {
+    "h7": 166963,
+    "stage": 3482,
+    "status": 71,
+    "events": 57
+  },
+  "h7": {
+    "enabled": true,
+    "port": "COM8",
+    "baud": 115200,
+    "channels": [
+      "laser",
+      "load",
+      "sma_v",
+      "sma_i",
+      "sma_r"
+    ],
+    "startup_commands": [],
+    "reader_priority": "above_normal",
+    "reader_core": -1,
+    "transport": "udp",
+    "udp_port": 7777,
+    "pc_ip": "169.254.245.100",
+    "n_dropped": 0,
+    "active": true
+  },
+  "stage": {
+    "enabled": true,
+    "port": "COM5",
+    "position_limits_mm": [
+      40,
+      150
+    ],
+    "max_velocity_mm_s": 10.0,
+    "reading_rate_hz": 100,
+    "home_on_start": false,
+    "move_to_zero_on_start": false,
+    "zero_mm": 40.0,
+    "poll_interval_s": 0.02,
+    "info": "DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)",
+    "n_dropped": 0,
+    "active": true
+  },
+  "camera": {
+    "enabled": true,
+    "use_subprocess": true,
+    "index": 0,
+    "name_hint": "12MP U3 Camera",
+    "auto_detect": true,
+    "resolution": [
+      1920,
+      1080
+    ],
+    "fps_fast": 60,
+    "fps_heartbeat": 1.0,
+    "transient_guarantee_s": 1.0,
+    "change_threshold_mm": 1.0,
+    "median_window_ms": 200,
+    "stop_dwell_s": 4.0,
+    "jpeg_quality": 90,
+    "preview_hz": 10,
+    "preview_width": 400,
+    "reconnect_timeout_s": 2.0,
+    "info": "cam[0] 1920x1080 MJPG",
+    "actual_res": [
+      1920,
+      1080
+    ],
+    "n_written": 0,
+    "active": true
+  },
+  "sma": {
+    "enabled": false,
+    "v_high": 3.0,
+    "v_low": 0.5,
+    "fire_ms": 100,
+    "cool_ms": 3000,
+    "n_cycles": 10,
+    "wdt_ms": 5000
+  },
+  "baseline_config": {
+    "enabled": true,
+    "auto_on_start": false,
+    "probe_v": 0.5,
+    "duration_s": 2.0,
+    "settle_s": 0.3,
+    "apply_load_offset": true,
+    "load_saturation_warn_frac": 0.8
+  },
+  "baseline": null,
+  "calibration": {
+    "laser": {
+      "k_mV_per_um": -0.49779577092171906,
+      "V0_mV": 2503.7500968693835
+    },
+    "load_cell": {
+      "scale_N_per_V": 0.09803089999362627,
+      "offset_V": -0.03418552305418667
+    },
+    "current_sense": {
+      "gain_V_per_V": 10.0,
+      "shunt_ohm": 0.1,
+      "ioffset_V": 0.0
+    }
+  },
+  "run": {
+    "operator": "",
+    "notes": "",
+    "output_dir": "data"
+  },
+  "host": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.10"
+  }
+}

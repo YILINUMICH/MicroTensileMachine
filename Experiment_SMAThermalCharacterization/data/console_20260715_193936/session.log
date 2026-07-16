@@ -1,0 +1,33 @@
+2026-07-15 19:39:36,653  INFO   root                Session: console_20260715_193936
+2026-07-15 19:39:36,653  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260715_193936
+2026-07-15 19:39:36,653  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\config.yaml  headless=False
+2026-07-15 19:39:37,316  INFO   H7Worker            H7 reader thread pinned: priority=above_normal core=31
+2026-07-15 19:39:37,320  INFO   PortentaReader      Requested RX buffer 4.0 MB (driver may cap it)
+2026-07-15 19:39:37,320  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-15 19:39:37,324  INFO   CameraProxy         camera process started (pid=38080)
+2026-07-15 19:39:38,569  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-07-15 19:39:38,601  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-07-15 19:39:38,601  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-07-15 19:39:41,378  INFO   PortentaReader      boot banner (8 lines):
+2026-07-15 19:39:41,378  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0xCD PGAL_ALM PGAH_ALM
+2026-07-15 19:39:41,378  INFO   PortentaReader        [STATUS] t_ms=1409173 hwm=4 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1460464455 m4_us=1459819752 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=3030 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:39:41,378  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0x4D PGAL_ALM PGAH_ALM
+2026-07-15 19:39:41,378  INFO   PortentaReader        [STATUS] t_ms=1410173 hwm=4 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1461501119 m4_us=1460856203 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=3405 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:39:41,378  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0x4D PGAL_ALM PGAH_ALM
+2026-07-15 19:39:41,378  INFO   PortentaReader        [STATUS] t_ms=1411173 hwm=3 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1462537295 m4_us=1461892635 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=3267 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:39:41,378  INFO   PortentaReader        [ADC1] STATUS alarm(s): 0x8D PGAL_ALM PGAH_ALM
+2026-07-15 19:39:41,378  INFO   PortentaReader        [STATUS] t_ms=1412173 hwm=3 cap=256 dropped=0 dropped_total=0 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 sma_state=0 m7_us=1463573787 m4_us=1462929051 vdd=5.500 offset=0.3100 aref=3.145 loop_us_avg=49 loop_us_max=3029 loop_hz=20408 cycle_log_ms=1 n_cycle=4
+2026-07-15 19:39:41,378  WARNING  PortentaReader      Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-07-15 19:39:41,443  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-15 19:39:41,443  INFO   UdpReader           UDP reader bound :7777  SO_RCVBUF=4194304
+2026-07-15 19:39:41,443  INFO   H7Worker            H7 transport=udp: bound :7777, netcfg 169.254.245.100 7777
+2026-07-15 19:39:41,443  INFO   RecordingCore       Running 10.0 s full system check...
+2026-07-15 19:39:41,494  WARNING  RecordingCore       HEALTH: laser reads a constant 5.0000 V — verify the sensor is live and the cable is seated
+2026-07-15 19:39:41,495  INFO   RecordingCore       health H7    PASS (50) — combined firmware, 50 samples
+2026-07-15 19:39:41,495  INFO   RecordingCore       health stage PASS (143) — 143 reads, pos~40.00 mm
+2026-07-15 19:39:41,495  INFO   RecordingCore       Recording STARTED
+2026-07-15 19:41:04,470  INFO   H7Worker            UDP reader: recv=112501 samples=175750 lost=0
+2026-07-15 19:41:04,471  INFO   H7Worker            H7 worker exit  (pushed=175750, dropped=0, filtered=0)
+2026-07-15 19:41:04,648  INFO   Driver_ZaberStage   Disconnected
+2026-07-15 19:41:04,648  INFO   ZaberWorker         Zaber worker exit  (pushed=4068, dropped=0)
+2026-07-15 19:41:09,661  WARNING  CameraProxy         camera process did not exit; terminating
