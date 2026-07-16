@@ -23,7 +23,10 @@
 #include <EthernetUdp.h>
 
 static IPAddress kH7Ip(169, 254, 245, 50);          // H7 static (host is .100)
-static IPAddress kBroadcast(169, 254, 255, 255);    // link-local /16 broadcast
+static IPAddress kPcIp(169, 254, 245, 100);         // send straight to the PC.
+// (Was a /16 broadcast, but Ethernet.begin(ip) defaults the H7 to a /24 subnet,
+//  so 169.254.255.255 is off-subnet and gets dropped. Unicast to the PC — ping
+//  proved that path works both ways — is the robust choice for a direct link.)
 static const uint16_t kPort = 7777;
 
 static EthernetUDP Udp;
@@ -51,9 +54,9 @@ void setup() {
 
     Serial.print("[UDP-TEST] H7 IP  : "); Serial.println(Ethernet.localIP());
     Serial.print("[UDP-TEST] link   : "); Serial.println(linkStr());
-    Serial.print("[UDP-TEST] target : "); Serial.print(kBroadcast);
+    Serial.print("[UDP-TEST] target : "); Serial.print(kPcIp);
     Serial.print(":"); Serial.println(kPort);
-    Serial.println("[UDP-TEST] broadcasting 1 Hz heartbeats — run udp_listen.py on the PC");
+    Serial.println("[UDP-TEST] sending 1 Hz heartbeats — run udp_listen.py on the PC");
 }
 
 void loop() {
@@ -66,7 +69,7 @@ void loop() {
                      (unsigned long)seq, (unsigned long)now);
 
     uint32_t s0 = micros();
-    Udp.beginPacket(kBroadcast, kPort);
+    Udp.beginPacket(kPcIp, kPort);
     Udp.write((const uint8_t*)buf, (size_t)n);
     Udp.endPacket();
     uint32_t dt = micros() - s0;                    // <-- the number that matters
