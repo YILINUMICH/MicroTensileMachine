@@ -162,7 +162,7 @@ See [docs/README.md](docs/README.md) for the per-PDF index and the operator memo
 | If you want to… | Go to |
 |---|---|
 | Run an SMA characterization experiment | [`Experiment_SMACharacterizationV3/`](Experiment_SMACharacterizationV3/) — `python sma_console.py` |
-| Run an SMA **thermal** characterization experiment | [`Experiment_SMAThermalCharacterization/`](Experiment_SMAThermalCharacterization/) — `python sma_console.py` |
+| Run an SMA **thermal** characterization experiment | [`Experiment_SMAThermalCharacterization/`](Experiment_SMAThermalCharacterization/) — `python operator_console.py` (analysis: `operator_explore.ipynb`) |
 | Re-calibrate the laser head before a run | [`Calibrate_LaserHead/`](Calibrate_LaserHead/) — `python run_calibration.py` |
 | Re-calibrate the load cell before a run | [`Calibrate_LoadCell/`](Calibrate_LoadCell/) — `python run_calibration.py` |
 | Flash/modify the production firmware (sensing **and** SMA drive) | [`Firmware_SMASensorHub_PIO/`](Firmware_SMASensorHub_PIO/) |

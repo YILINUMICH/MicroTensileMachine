@@ -69,7 +69,7 @@ python Driver_KeysightLCR/test_lcr_meter.py --quick      # LCR connection smoke 
 python <module>/portenta_reader.py                # H7 serial-stream sanity check
 ```
 
-`Experiment_SMAThermalCharacterization/` is a fork of V3 adding an SMA-thermal focus (adaptive-FPS camera, LCR removed); its entry point is likewise `sma_console.py`.
+`Experiment_SMAThermalCharacterization/` is a fork of V3 adding an SMA-thermal focus (adaptive-FPS camera, LCR removed). Its files carry role prefixes: **`operator_`** (run directly — `operator_console.py`, `operator_explore.ipynb`) and **`lib_`** (imported internals — `lib_recording_core.py`, `lib_workers.py`, `lib_camera.py`, `lib_config.py`, `lib_h7_commands.py`, `lib_analysis.py`). The former CLI plotters (`analyze_sma.py`/`sma_plots.py`) and legacy recorder (`sma_recorder.py`/`session.py`/`operator_io.py`/`run_experiment.py`) were removed here (they remain in V3 and git history). Entry point: `operator_console.py`; offline analysis: `operator_explore.ipynb` (Plotly, imports `lib_analysis.py`).
 
 ### Recorder architecture (`Experiment_SMACharacterizationV3/`)
 

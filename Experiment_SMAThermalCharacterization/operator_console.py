@@ -42,12 +42,12 @@ from collections import deque
 from pathlib import Path
 from typing import Optional
 
-from config import AppConfig
-from recording_core import (RecordingCore, StreamVerdict, make_console_paths,
+from lib_config import AppConfig
+from lib_recording_core import (RecordingCore, StreamVerdict, make_console_paths,
                             HEALTH_TIMEOUT_S,
                             STREAM_H7, STREAM_STAGE, STREAM_CAMERA)
-from workers import (H7Worker, ZaberWorker, CameraWorker)
-from camera_process import make_camera
+from lib_workers import (H7Worker, ZaberWorker, CameraWorker)
+from lib_camera import make_camera
 
 
 _THIS_DIR = Path(__file__).resolve().parent

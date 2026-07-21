@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
 
-from config import CameraConfig, LcrConfig, H7Config, StageConfig
+from lib_config import CameraConfig, LcrConfig, H7Config, StageConfig
 
 # OpenCV is only needed for the camera worker; import defensively so the rest
 # of the recorder runs even where opencv-python isn't installed.

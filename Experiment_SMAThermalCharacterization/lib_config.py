@@ -20,7 +20,7 @@ from typing import Any, List, Optional
 
 import yaml
 
-import h7_commands as h7
+import lib_h7_commands as h7
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +233,7 @@ class CalibrationConfig:
 class RunConfig:
     operator: str = ""
     notes: str = ""
-    output_dir: str = "data"             # relative to sma_recorder.py
+    output_dir: str = "data"             # relative to the module dir
 
 
 # ---------------------------------------------------------------------------

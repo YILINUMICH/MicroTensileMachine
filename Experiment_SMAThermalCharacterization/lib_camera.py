@@ -28,7 +28,7 @@ import threading
 import time
 from typing import Callable, List, Optional, Tuple
 
-from config import CameraConfig
+from lib_config import CameraConfig
 
 
 # ---------------------------------------------------------------------------
@@ -36,7 +36,7 @@ from config import CameraConfig
 # ---------------------------------------------------------------------------
 def _camera_proc_main(cfg: CameraConfig, cmd_q, out_q, stop_evt) -> None:
     # Imported here so the heavy cv2/workers import happens in the CHILD only.
-    from workers import CameraWorker
+    from lib_workers import CameraWorker
 
     logging.basicConfig(level=logging.INFO,
                         format="%(asctime)s  %(levelname)s  CameraProc  %(message)s")
@@ -272,5 +272,5 @@ def make_camera(cfg: CameraConfig, stop_event: threading.Event):
     CameraWorker. Both expose the same interface to the rest of the app."""
     if getattr(cfg, "use_subprocess", False):
         return CameraProcessProxy(cfg, stop_event)
-    from workers import CameraWorker
+    from lib_workers import CameraWorker
     return CameraWorker(cfg, stop_event)

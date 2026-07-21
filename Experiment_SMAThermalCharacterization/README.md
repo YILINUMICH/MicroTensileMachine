@@ -5,7 +5,7 @@
 Forked from `Experiment_SMACharacterizationV3` to focus on **thermal**
 characterization of the SMA (Joule-heating temperature response). It keeps
 the same session backbone: **one config file** sets every instrument and
-sensor parameter, a **single continuously-logging console** (`sma_console.py`)
+sensor parameter, a **single continuously-logging console** (`operator_console.py`)
 records **raw** streams from the combined-firmware H7 (sensors *and* SMA) and
 the Zaber stage while controlling both, and an **offline analyzer** converts
 raw→physical and renders dashboards.
@@ -35,7 +35,7 @@ config.yaml ─► startup: stage.home/velocity, (optional H7 cmds)   [no LCR]
                     │ queues
          SessionController  (sole CSV writer, OPEN→SHORT→RAW state machine)
                     │
-   per-phase CSVs + meta.json ─► analyze_sma.py ─► dashboards + joined CSV
+   session CSVs + meta.json ─► operator_explore.ipynb (lib_analysis) ─► interactive plots
 ```
 
 Workers stream continuously across all phases; the controller is the only
@@ -68,13 +68,13 @@ raw to one `*_h7.csv` per phase (with `src`/`channel` columns). For
 `src=4/5` the `value` column carries **amps / ohms** (firmware-computed),
 not volts.
 
-## Run a session — `sma_console.py` (primary entry point)
+## Run a session — `operator_console.py` (primary entry point)
 
 ```sh
 pip install -r requirements.txt          # + PySide6 or PyQt5 for the GUI
-python sma_console.py                     # GUI console (layout A)
-python sma_console.py --headless          # scripted run, no GUI (Ctrl+C to stop)
-python sma_console.py --session-id flexinol_run01
+python operator_console.py                     # GUI console (layout A)
+python operator_console.py --headless          # scripted run, no GUI (Ctrl+C to stop)
+python operator_console.py --session-id flexinol_run01
 ```
 
 One window (or one headless loop) controls the **stage, SMA, and camera** and
@@ -126,12 +126,6 @@ dependency: it opens outputs, runs the startup check, optionally starts the
 `config.sma` cycle (arm + cycle + 1 Hz `ping`), records until Ctrl+C, then
 stops + disarms + writes `meta.json`. Use it for scripted/automated runs.
 
-### Legacy recorder — `sma_recorder.py`
-
-The older interactive OPEN→SHORT→RAW recorder is still present (backed by
-`session.py` / `operator_io.py`) and writes the per-phase
-`{open,short,raw}_{lcr,h7,stage}.csv` layout. The console supersedes it.
-
 ### SMA actuation — the state machine runs on M7
 
 By default (`sma.enabled: false`) the recorder is a **pure logger** and you
@@ -157,96 +151,48 @@ sma:
   wdt_ms: 5000
 ```
 
-## One-shot automated experiment — `run_experiment.py` (RETIRED)
-
-`run_experiment.py` is **retired** — it is now a stub that refuses to run. It
-built firmware command strings inline and never sent `arm`, which the rebuilt
-`Firmware_SMASensorHub_PIO` rejects. Its drive/cycle one-shot is just the
-console with `n` set; use:
+Scripted/automated runs use the console headless — the cycle comes from
+`config.yaml`'s `sma:` block:
 
 ```sh
-python sma_console.py --headless        # scripted drive+log (Ctrl+C to stop)
+python operator_console.py --headless        # scripted drive+log (Ctrl+C to stop)
 ```
 
-The cycle still comes from `config.yaml`'s `sma:` block. The original
-implementation remains in git history.
+## Analyze + visualize — `operator_explore.ipynb`
 
-## Analyze + visualize
+Analysis now lives in an **interactive Plotly notebook**, `operator_explore.ipynb`
+(open it with the repo-root `.venv` kernel). It imports every loader, calibration,
+clock-alignment and segmentation helper from **`lib_analysis.py`** (the shared core
+extracted from the former `sma_plots.py`), so the notebook stays thin and
+single-sourced. Three parts:
 
-Two entry points, and they do different jobs:
+1. **Raw sanity** — no conversion, in mV / mA: `V_LDO` (`sma_v`), `I_SMA`, `V_laser`,
+   `V_load`. ADC-rail saturation flagged red. "Are the readings sane?"
+2. **Converted + actuation-marked** — R [Ω], power P = V·I [W], displacement [mm],
+   force [mN], and ΔR/R₀ [%], with fire windows shaded.
+3. **Cross-plots** — displacement & force vs resistance (shared x) and vs power
+   (shared x), colored by fire-vs-cool phase to reveal the hysteresis loop.
 
-| script | job |
-|---|---|
-| **`analyze_sma.py`** | the flat whole-session dashboard on **raw** values, the legacy OPEN/SHORT/RAW layout, LCR de-embedding, and the annotated per-cycle videos |
-| **`sma_plots.py`** | everything that reasons about the **actuation pattern** — `cycles` / `laser` / `transition` (next section) |
+Save any zoomed view with the figure's camera-icon (high-DPI PNG). Calibration
+constants come from `config.yaml` (or `meta.json` when present); the notebook
+uses the firmware clock (`hw_us`) and shifts the M4 (laser/load) channels onto
+the M7 (SMA) timeline so fire onsets line up.
 
-Start with `sma_plots.py all --session <dir>`; reach for `analyze_sma.py` when you
-want the raw dashboard, a legacy phase-layout session, or the camera videos.
+> **Not yet ported (methods live in `lib_analysis.py`, no notebook cell renders
+> them yet):** the **laser-tone diagnostic** (`fit_tone` / `notch_fft` / ZOH-dup
+> marking → the old `laser_diagnostics.png`), the **per-cycle overlay**
+> (fire-onset-folded cycles), and the **transition ensemble + first-order cooling
+> fit** (`fit_exp` → the old `transition_fit.png`). The methods and findings below
+> still apply — they describe what the analysis does; the CLI that rendered them
+> was `sma_plots.py`, now removed. Porting these into notebook parts is a TODO.
 
-```sh
-# console layout (events.csv) and legacy per-phase layout both auto-detect
-python analyze_sma.py --session data/console_20260624_153000
-python analyze_sma.py --session <dir> --ref-window 8          # console refs
-python analyze_sma.py --session <dir> --mode phase --phase raw  # legacy
-python analyze_sma.py --session <dir> --k -0.1171 --v0 566.957 --load-scale 50.0
-```
+### Analysis parameters
 
-`--mode auto` (default) picks **console** when `events.csv` + `h7.csv` are
-present, else the **legacy per-phase** layout. Produces, in the session dir:
+These were the `sma_plots.py` CLI flags; the knobs still exist as `lib_analysis`
+function arguments and are documented here as the reference to wire up when the
+`cycles` / `laser` / `transition` views are ported into notebook cells.
 
-- `<label>_dashboard.png` — multi-panel: displacement, force, SMA R/V/I,
-  de-embedded LCR R/L, and **SMA electrical power P = V·I vs time** (`<label>` =
-  `console` or the phase name). The power panel annotates peak / idle power and
-  the total energy delivered (∫P dt). It **replaced** a load-vs-laser voltage
-  cross-plot: for a thermal run the Joule heating driving the transformation is
-  what matters, and with the stage held fixed the displacement axis barely moved
-  (what it did show was drive feedthrough, not motion). The **stage panel is dropped** (held fixed for a thermal run);
-  position is still in the joined CSV. The **Force panel flags ADC-rail
-  saturation** (load samples pinned at ±2²³ → invalid force, marked red with a
-  "null the LCA-9PC ZERO pot" note), and the **SMA panel draws the cold-R
-  reference** from the `baseline` block in `meta.json` (if the baseline phase
-  ran). The console summary also prints the saturation % and the measured
-  cold R / applied load tare.
-- `<label>_joined.csv` — all streams interpolated onto a uniform 100 Hz grid
-  (now including `sma_power_W`).
-- `video/cycle_NN.mp4` — **annotated per-cycle video** stitched from the camera
-  JPEGs, with a burned-in overlay (cycle, time, mode, and the displacement/force
-  interpolated onto each frame) so a frame is self-explanatory. Needs
-  `opencv-python`; skip with `--no-video`, set playback rate with `--video-fps`
-  (default 15).
-
-In **console mode** the OPEN/SHORT de-embed references are the LCR samples in
-the `--ref-window` seconds (default 10) after each `ref_open`/`ref_short`
-marker in `events.csv`; the actuation trace is every LCR sample *outside*
-those windows. Conversions are applied only where the coefficient is present
-in `meta.json` (or overridden on the CLI); otherwise the channel is plotted
-raw. LCR de-embedding auto-selects OPEN+SHORT (2-term) or SHORT-only.
-
-## Cycle-aligned + laser plots — `sma_plots.py`
-
-`analyze_sma.py` renders the flat whole-session dashboard on **raw** values and
-is unchanged. Everything that reasons about the **actuation pattern** lives in
-one script, `sma_plots.py`, with three views:
-
-```sh
-python sma_plots.py all        --session data/console_20260713_115921
-python sma_plots.py cycles     --session <dir> [--r-ref cycle] [--notch auto] [--lowpass 20]
-python sma_plots.py laser      --session data/console_20260713_122906
-python sma_plots.py transition --session <dir> [--bin-ms 150]
-```
-
-| view | answers | writes |
-|---|---|---|
-| `cycles` | what happened in each fire/cool cycle | `cycles_{timeline,overlay,trend}.png`, `cycles_metrics.csv` |
-| `laser` | is the laser trustworthy | `laser_diagnostics.png`, `laser_before_after.png` |
-| `transition` | is the SMA transition real, and how fast | `transition_fit.png`, `transition_per_cycle.png` |
-| `all` | run all three with their defaults | everything above |
-
-### Flags
-
-Every view takes `--session <dir>` (required) and `--dpi` (default 140).
-
-| view | flag | default | what it does |
+| view | knob | default | what it does |
 |---|---|---|---|
 | `cycles` | `--r-ref cold\|cycle` | `cold` | R₀ that resistance is normalized to. `cold` = the session's initial baseline reading (one reference for the run, so the cycle-to-cycle drift stays **visible**); `cycle` = each cycle's own pre-fire R (drift **divided out**). |
 | `cycles` | `--notch HZ\|auto` | *off* | Notch this frequency + harmonics out of the **displacement** channel. `auto` fits the tone in 40–90 Hz. |
@@ -258,17 +204,11 @@ Every view takes `--session <dir>` (required) and `--dpi` (default 140).
 | `laser` | `--notch-hw` | `1.0` | Notch half-width (Hz) in the before/after demo. |
 | `transition` | `--bin-ms` | `150` | Ensemble time-bin width. **Don't go too fine** — at 25 ms the per-bin SEM (±1.7%) approaches the ~3% effect and a real transient reads as noise. |
 
-**Filtering is opt-in and never silent.** With no `--notch`/`--lowpass`, everything
-is **raw** (`analyze_sma.py` is *always* raw). When a filter is on: only the
-**displacement** channel is touched — force and resistance are never filtered —
-every figure is stamped `[displacement FILTERED: …]`, and outputs get a `_filt`
-suffix so the raw PNGs are never clobbered:
-
-```sh
-python sma_plots.py cycles --session <dir> --notch auto --lowpass 20
-# -> cycles_timeline_filt.png, cycles_overlay_filt.png,
-#    cycles_trend_filt.png, cycles_metrics_filt.csv   (raw versions untouched)
-```
+**Filtering is opt-in and never silent.** With no notch/low-pass, everything is
+**raw** (Parts 1–3 of the notebook are always raw). When a filter is applied
+(`lib_analysis.filter_channel` / `notch_fft`): only the **displacement** channel
+should be touched — force and resistance are never filtered — and any filtered
+figure must be clearly stamped so the raw view is never silently replaced.
 
 Note the filter cannot remove the **drive feedthrough** (artifact 3 below) — that
 is synchronous with the fire, not at a distinct frequency, so no frequency filter
@@ -328,9 +268,10 @@ reference sample below. Full write-up in the next section.
 **`data/console_20260713_122906/` is the reference diagnostic sample.** It is a
 ~19 s recording with **the laser aimed at a rigid, immovable block** — no
 actuation, stage held, nothing mechanically able to move. So anything that shows
-up in it is **instrumentation, not SMA physics**, by construction. Re-run
-`python sma_plots.py laser --session data/console_20260713_122906` after any change to
-the laser wiring / ADC config and compare against the committed PNGs.
+up in it is **instrumentation, not SMA physics**, by construction. Re-run the
+laser diagnostic (`lib_analysis.fit_tone` / `notch_fft` on this session — the
+laser-view port is a TODO) after any change to the laser wiring / ADC config and
+compare against the committed PNGs.
 
 **Three artifacts are known. Ranked by how much they actually threaten a result:**
 
@@ -412,7 +353,7 @@ corrupt any slow measurement. **Nuisance, not defect.**
 
 1. **Take the laser out of the loop.** Disconnect the IL-030 from AIN4/AIN5 and
    feed ADC1 a steady DC voltage (battery + divider, or just short the inputs).
-   Record 20 s, run `sma_plots.py laser`.
+   Record 20 s, run the laser diagnostic (`lib_analysis`, laser-view port TODO).
    - Tone **survives** → it is the **ADC front end / wiring / Portenta**; the
      laser is innocent.
    - Tone **vanishes** → the **IL-030 is generating it**; next question is its
@@ -477,22 +418,30 @@ panel when it triggers.
 
 ## Files
 
+Files carry a role prefix: **`operator_`** = a human launches it directly;
+**`lib_`** = imported internals, never run on their own.
+
 ```
 Experiment_SMAThermalCharacterization/
 ├── README.md / STATUS.md / requirements.txt
-├── config.yaml            every instrument + sensor parameter
-├── config.py              typed dataclasses (lcr/h7/stage/phases/calibration/run)
-├── workers.py             LcrWorker, H7Worker (multi-channel), ZaberWorker
-├── h7_commands.py         firmware command builders (single source of truth)
-├── recording_core.py      RecordingCore — UI-agnostic continuous recorder/control
-├── sma_console.py         PRIMARY entry — GUI console + --headless
-├── session.py             legacy OPEN→SHORT→RAW controller, sole CSV writer
-├── sma_recorder.py        legacy interactive OPEN→SHORT→RAW entry point
-├── run_experiment.py      RETIRED stub (use sma_console.py --headless)
-├── operator_io.py         terminal prompts / progress / banners (legacy recorder)
-├── analyze_sma.py         offline de-embed + raw→physical + dashboards (console + phase); RAW values, unchanged
-└── sma_plots.py           actuation-pattern analysis — `cycles` / `laser` / `transition` views
+├── config.yaml                 every instrument + sensor parameter
+│
+├── operator_console.py         PRIMARY entry — GUI console + --headless (record + control)
+├── operator_explore.ipynb      interactive Plotly analysis notebook (raw / converted / cross-plots)
+│
+├── lib_config.py               typed dataclasses (h7/stage/phases/calibration/run; no LCR)
+├── lib_workers.py              H7Worker (multi-channel), ZaberWorker, CameraWorker
+├── lib_h7_commands.py          firmware command builders (single source of truth)
+├── lib_recording_core.py       RecordingCore — UI-agnostic continuous recorder/control
+├── lib_camera.py               adaptive-FPS camera capture (threaded or spawn subprocess)
+└── lib_analysis.py             loaders, calibration, clock-alignment, segmentation,
+                                fitting/filtering — the shared core the notebook imports
 ```
+
+The former CLI plotters (`analyze_sma.py`, `sma_plots.py`) and the legacy
+OPEN→SHORT→RAW recorder (`sma_recorder.py` / `session.py` / `operator_io.py`)
+and the retired `run_experiment.py` were **removed** — superseded by the console
++ notebook; they remain in git history.
 
 Cross-module drivers are imported via `sys.path` shims (canonical sources:
 `Driver_KeysightLCR`, `Driver_ZaberStage`, `Calibrate_LaserHead`), not

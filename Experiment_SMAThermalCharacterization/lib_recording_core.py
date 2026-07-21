@@ -1,7 +1,7 @@
 """
-recording_core.py — UI-agnostic recording engine for the SMA console (V3).
+lib_recording_core.py — UI-agnostic recording engine for the SMA console.
 
-Extracted from session.py (WI-1 of PLAN_sma_console.md). RecordingCore owns
+Extracted from the former session.py (WI-1 of PLAN_sma_console.md). RecordingCore owns
 everything that is NOT a UI:
 
   * the single set of CONTINUOUS CSV writers (h7.csv / lcr.csv / stage.csv /
@@ -43,10 +43,10 @@ from typing import Any, Callable, Optional
 
 from collections import deque
 
-import h7_commands as h7
-from config import AppConfig
-from camera_process import make_camera
-from workers import (CameraWorker, H7Sample, H7Worker, LcrSample, LcrWorker,
+import lib_h7_commands as h7
+from lib_config import AppConfig
+from lib_camera import make_camera
+from lib_workers import (CameraWorker, H7Sample, H7Worker, LcrSample, LcrWorker,
                      StageSample, StatusSample, ZaberWorker)
 
 
