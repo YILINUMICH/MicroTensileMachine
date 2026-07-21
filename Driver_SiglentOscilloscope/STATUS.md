@@ -24,6 +24,8 @@ Fixes that landed during bring-up:
 
 - [ ] **Wire a `ScopeWorker` into `Experiment_SMACharacterizationV2/`** mirroring `LcrWorker` (one socket, phase-oblivious daemon thread). Respect the single-socket limit — the worker must be the sole holder of the scope socket.
 - [ ] **Investigate burst read rate** (~2.7 rd/s / ~370 ms per PAVA? read observed on 2026-06-15) — confirm whether it's scope measurement latency or a per-query round-trip cost, and whether it's adequate for the intended sweep cadence.
-- [ ] **Verify `CODES_PER_DIV`** (25.0 assumed) against the Programming Guide before trusting absolute volts from `capture_waveform()`.
+- [x] **`CODES_PER_DIV` MEASURED = 30.0, not 25.0** (2026-07-21, `Experiment_RNoise`). A 1M-point record gave `mean_code = 10.61` at 0.5 V/div while the scope's own `PAVA? MEAN` read 0.1769 V → `10.61 × 0.5 / 0.1769 = 29.99`. **The module default of 25.0 reads 20% high.** Callers that need absolute volts should pass `codes_per_div=30.0` to `codes_to_volts()`; the default is left at 25.0 pending a decision on whether to change it repo-wide (it would shift every existing consumer). Affects `Experiment_LDOCharacterization/` overshoot %.
+- [ ] **Decide whether to change the `CODES_PER_DIV` default to 30.0** now that it is measured — it changes results for every existing caller, so it is a deliberate migration, not a drive-by edit.
+- [ ] **Known SCPI quirks worth folding into the driver** (all bench-confirmed 2026-07-21, currently worked around in `Experiment_RNoise/capture_phase2.py`): back-to-back writes get dropped (space out + read back + retry); `MSIZ` is silently ignored while the acquisition is STOPPED and accepts only decade values (10K/100K/1M/10M/100M); bandwidth limit has asymmetric syntax — set with `BWL C1,OFF`, read with `C1:BWL?` (the per-channel `C1:BWL OFF` form is ignored); `SAST?` replies headered (`SAST Stop`, not `Stop`).
 
 See [../README.md](../README.md) for project overview.
