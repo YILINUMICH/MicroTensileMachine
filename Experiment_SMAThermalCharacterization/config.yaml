@@ -15,13 +15,19 @@ lcr:
   enabled: false
 
 # ── Portenta H7 (combined firmware: sensors + SMA on one USB-CDC port) ──
-# Streams src=1 laser, 2 load, 3 SMA V, 4 SMA I, 5 SMA R. The recorder logs
-# every enabled channel raw; demux + scaling happen offline in the analyzer.
+# Streams src=1 laser, 2 load, 3 SMA V, 4 SMA I, 5 SMA R, and — with the
+# constant-current fork (Firmware_SMAConstantCurrent_PIO) — 6 CC command u,
+# 7 CC R_est. The recorder logs every enabled channel raw; demux + scaling
+# happen offline in the analyzer. Channels the firmware never emits simply
+# stay absent from the CSV, so this list is safe with EITHER image.
+#
+# NOTE (2026-07-24): src=3 is the voltage at SMA_P (A0, after the shunt), i.e.
+# V_sma directly — NOT the LDO output. Older sessions recorded it as V_ldo.
 h7:
   enabled: true
   port: COM8
   baud: 115200
-  channels: [laser, load, sma_v, sma_i, sma_r] # which src streams to keep
+  channels: [laser, load, sma_v, sma_i, sma_r, cc_u, cc_r] # which src to keep
   startup_commands: [] # optional cmds sent to H7 at startup (e.g.
     #   ["gain 10", "shunt 0.1"]). EMPTY by default —
     #   the recorder stays a pure logger. Inert hook
@@ -31,9 +37,15 @@ h7:
   reader_priority: above_normal # normal | above_normal | highest ("normal" = off)
   reader_core: -1 # -1 = auto (last logical core); >=0 = pin to that core; <=-2 = off
   # Sample-stream transport. "usb" = serial (default). "udp" needs the
-  # portenta_m7_udp firmware: the src=1..5 stream arrives over Ethernet
+  # portenta_m7_udp firmware: the src=1..7 stream arrives over Ethernet
   # (fire-and-forget) so a busy host can't stall the M7 / distort SMA timing.
   # Commands + [STATUS] stay on `port`. See docs/UDP_stream_migration_plan.md.
+  #
+  # TRAP: this must MATCH THE FLASHED ENV. `transport: udp` with a plain
+  # `portenta_m7` image = the recorder sits there logging nothing (the samples
+  # go out the USB port it isn't reading). Both firmware projects carry a
+  # `portenta_m7_udp` env, including the CC fork:
+  #   pio run -e portenta_m7_udp -t upload   # then POWER-CYCLE USB + EVM
   transport: udp # usb | udp
   udp_port: 7777 # host bind port for the UDP stream
   pc_ip: 169.254.245.100 # host IP the H7 streams to (sent via netcfg)
@@ -93,6 +105,13 @@ camera:
 # SMA manually from the H7 console).
 sma:
   enabled: false
+  # Actuation mode. "voltage" = `cycle` (every session recorded to date).
+  # "current" = `cccycle`, and REQUIRES Firmware_SMAConstantCurrent_PIO — the
+  # sensor-hub image rejects cc* commands (you'll see the rejection as an
+  # [SMA] line; it does not silently mis-actuate).
+  # The current levels are SEPARATE fields from v_high/v_low on purpose: a
+  # mode flip must never reinterpret a number that meant volts as milliamps.
+  mode: voltage # voltage | current
   v_high: 3.0 # heating/actuation voltage (V)
   v_low:
     0.5 # idle / cooling level (V). 0.5 V ≈ 0.12 A — a
@@ -104,6 +123,21 @@ sma:
   wdt_ms:
     5000 # M7 heartbeat watchdog timeout (0 = off);
     #   recorder pings every 1 s when driving
+  # ── Constant-current levels + tuning (mode: current only) ────────────
+  # Firmware ceiling is 2000 mA; the loader rejects anything outside it at
+  # load time rather than letting the M7 reject it mid-session.
+  i_high_ma: 200.0 # heat current (mA)
+  i_low_ma:
+    0.0 # cool current (mA). 0 = open the loop and park at
+    #   the idle VOLTAGE v_low above (the firmware's own
+    #   convention), rather than regulating a low current.
+  tau_ms:
+    7.0 # closed-loop time constant. 7 ms is the firmware
+    #   default, inherited from the Uno validation — the
+    #   plant (TPS7A57 soft-start), not the MCU, sets the
+    #   floor. Tune on a LOAD-CHANGE test, never on a
+    #   step-from-zero. 0 = leave the firmware default.
+  ccgain: 0.0 # proportional term; 0 = pure integral (default)
 
 # ── Baseline / sensor-zero phase (cold R + laser/load tare) ───────────
 # A quiescent "go-to-defined-start" companion: ARMS at a LOW, non-heating
@@ -143,8 +177,12 @@ calibration:
     offset_V: -0.03418552305418667
   current_sense: # firmware INA296A defaults — recorded for
     gain_V_per_V: 10.0 # traceability (the analyzer trusts the
-    shunt_ohm: 0.1 # firmware-streamed src=4 I / src=5 R directly;
+    shunt_ohm: 0.2 # firmware-streamed src=4 I / src=5 R directly;
     ioffset_V: 0.0 # these only matter if recomputing from raw).
+    # shunt 0.1 -> 0.2 on 2026-07-24: 200 mOhm is the part actually fitted.
+    # Corrected in Firmware_SMAConstantCurrent_PIO; the sensor-hub image still
+    # ships 0.1 (see its STATUS.md TODO), so sessions recorded with THAT image
+    # have src=4 I 2x high and src=5 R 2x low regardless of this metadata.
 
 # ── Run metadata ──────────────────────────────────────────────────────
 run:

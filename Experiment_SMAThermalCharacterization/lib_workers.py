@@ -337,7 +337,10 @@ class H7Worker(threading.Thread):
     """
     Streams the combined-firmware output from the Portenta H7 over USB-CDC
     and pushes one H7Sample per src line. Keeps only the channels named in
-    cfg.channels (laser/load/sma_v/sma_i/sma_r).
+    cfg.channels (laser/load/sma_v/sma_i/sma_r, plus cc_u/cc_r from the
+    constant-current fork). Filtering is by NAME against the shared parser's
+    SRC_NAMES, so naming a channel the flashed image never emits is inert —
+    one config works with either firmware.
     """
 
     def __init__(self, cfg: H7Config,

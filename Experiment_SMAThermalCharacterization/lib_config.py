@@ -23,6 +23,13 @@ import yaml
 import lib_h7_commands as h7
 
 
+# Mirrors CC_I_MAX_A in Firmware_SMAConstantCurrent_PIO/src/main.cpp — the
+# firmware's hard ceiling on an accepted current target. Duplicated here only
+# so a bad config fails at load time with a clear message instead of being
+# rejected mid-session by the M7.
+CC_I_MAX_MA = 2000.0
+
+
 # ---------------------------------------------------------------------------
 # Instrument sub-configs
 # ---------------------------------------------------------------------------
@@ -160,11 +167,62 @@ class SmaConfig:
     n_cycles: int = 10           # 0 = continuous until RAW stop
     wdt_ms: int = 5000           # M7 heat-watchdog timeout (0 = watchdog off)
 
+    # ── Constant-current mode (Firmware_SMAConstantCurrent_PIO only) ──────
+    # mode="voltage" (default) = `cycle`, the behaviour every existing session
+    # was recorded with. mode="current" = `cccycle`, which the sensor-hub
+    # image does NOT understand — flashing the wrong firmware with
+    # mode="current" gets the command rejected, not silently mis-actuated.
+    # The current-mode levels are SEPARATE fields rather than a reinterpretation
+    # of v_high/v_low, so switching modes can't silently drive 3000 mA because
+    # a field meant volts yesterday.
+    mode: str = "voltage"        # "voltage" | "current"
+    i_high_ma: float = 200.0     # heat current (mA); firmware ceiling 2000 mA
+    i_low_ma: float = 0.0        # cool current (mA); 0 = open the loop, park
+                                 #   at the idle VOLTAGE (v_low)
+    tau_ms: float = 7.0          # closed-loop time constant; None/0 = leave the
+                                 #   firmware default (7 ms) untouched
+    ccgain: float = 0.0          # proportional term; 0 = pure integral
+
+    def __post_init__(self) -> None:
+        m = str(self.mode).strip().lower()
+        if m not in ("voltage", "current"):
+            raise ValueError(
+                f"sma.mode must be 'voltage' or 'current', got {self.mode!r}")
+        self.mode = m
+        if self.i_high_ma <= 0.0 or self.i_high_ma > CC_I_MAX_MA:
+            raise ValueError(
+                f"sma.i_high_ma must be in (0, {CC_I_MAX_MA:g}] mA, "
+                f"got {self.i_high_ma!r}")
+        if self.i_low_ma < 0.0 or self.i_low_ma > CC_I_MAX_MA:
+            raise ValueError(
+                f"sma.i_low_ma must be in [0, {CC_I_MAX_MA:g}] mA, "
+                f"got {self.i_low_ma!r}")
+
+    @property
+    def is_current_mode(self) -> bool:
+        return self.mode == "current"
+
     def cycle_command(self) -> str:
+        if self.is_current_mode:
+            # Firmware: cccycle <i_high_mA> <i_low_mA> <t_high_ms> <t_idle_ms> <n>
+            return h7.cccycle(self.i_high_ma, self.i_low_ma,
+                              self.fire_ms, self.cool_ms, self.n_cycles)
         # Firmware: cycle <v_high> <v_idle> <t_high_ms> <t_idle_ms> <n>.
         # v_low is the idle/cooling level (v_idle); the arg order is unchanged.
         return h7.cycle(self.v_high, self.v_low,
                         self.fire_ms, self.cool_ms, self.n_cycles)
+
+    def tuning_commands(self) -> "list[str]":
+        """CC tuning to send once, after arm, before the cycle. Empty in
+        voltage mode. `tau_ms` falsy = keep the firmware default."""
+        if not self.is_current_mode:
+            return []
+        cmds = []
+        if self.tau_ms:
+            cmds.append(h7.tau(self.tau_ms))
+        if self.ccgain:
+            cmds.append(h7.ccgain(self.ccgain))
+        return cmds
 
 
 @dataclass

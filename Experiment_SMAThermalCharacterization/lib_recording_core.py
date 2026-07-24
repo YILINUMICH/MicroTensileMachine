@@ -934,13 +934,53 @@ class RecordingCore:
             self.camera_mark_fast()
         return ok
 
+    def cycle_cc(self, i_high_ma: float, i_low_ma: float,
+                 t_high_ms: int, t_idle_ms: int, n: int) -> bool:
+        """Constant-current heat/cool cycle (`cccycle`). Arms first if needed.
+
+        Requires Firmware_SMAConstantCurrent_PIO — the sensor-hub image rejects
+        the command (visible as an `[SMA]` line, not as silent inaction).
+        """
+        if not self._ensure_armed():
+            return False
+        ok = self.sma_send(h7.cccycle(i_high_ma, i_low_ma,
+                                      t_high_ms, t_idle_ms, n))
+        if ok:
+            self.actuating = True
+            self._last_ping_mono = time.monotonic()
+            self.camera_mark_fast()
+        return ok
+
+    def ccfire(self, ma: float, t_high_ms: int = 500) -> bool:
+        """Single constant-current pulse (n=1). Arms first if needed."""
+        if not self._ensure_armed():
+            return False
+        ok = self.sma_send(h7.ccfire(ma, t_high_ms))
+        if ok:
+            self.actuating = True
+            self._last_ping_mono = time.monotonic()
+            self.camera_mark_fast()
+        return ok
+
     def start_cycle_from_config(self) -> bool:
-        """Headless convenience: arm + wdt + the cycle described by cfg.sma."""
+        """Headless convenience: arm + wdt + the cycle described by cfg.sma.
+
+        Honours cfg.sma.mode: "voltage" -> `cycle`, "current" -> `cccycle`
+        preceded by the CC tuning commands (tau / ccgain). Tuning is sent AFTER
+        arm and BEFORE the cycle so it is in effect for the first heat phase,
+        and it lands in events.csv so a run's gains are recoverable offline.
+        """
         sma = self.cfg.sma
         self.arm()
         self.set_wdt(sma.wdt_ms)
-        ok = self.cycle(sma.v_high, sma.v_low, sma.fire_ms,
-                        sma.cool_ms, sma.n_cycles)
+        for cmd in sma.tuning_commands():
+            self.sma_send(cmd)
+        if sma.is_current_mode:
+            ok = self.cycle_cc(sma.i_high_ma, sma.i_low_ma, sma.fire_ms,
+                               sma.cool_ms, sma.n_cycles)
+        else:
+            ok = self.cycle(sma.v_high, sma.v_low, sma.fire_ms,
+                            sma.cool_ms, sma.n_cycles)
         if not ok:
             self.errors.append("sma_cycle_start_failed: H7 reader unavailable")
         return ok
