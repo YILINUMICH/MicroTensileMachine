@@ -27,6 +27,7 @@ pio device monitor                        # 115200 baud; shows M4 output via M7
 
 The live firmware projects (**env names vary — check each `platformio.ini`**):
 - **`Firmware_SMASensorHub_PIO/`** — **production firmware.** M4 dual-ADC sensing **and** M7 SMA drive control on one H7 (the Phase-6 merge of the former `Firmware_SensorHub_PIO` + `Firmware_SMADriver_PIO`). Envs `portenta_m7` / `portenta_m4`; `portenta_m7_legacy100` is a rollback build.
+- **`Firmware_SMAConstantCurrent_PIO/`** — **To-Test** fork of the production firmware adding a **closed-loop constant-current** controller on M7 (`cc`/`ccfire`/`cccycle`, `tau`, `src=6/7` telemetry). Port of `GelBot/PIConstantCurrent/CONTROL_SKELETON.md`, validated on an Uno with the same driver board. Develop CC work **here, not in `Firmware_SMASensorHub_PIO/`**.
 - **`Firmware_SMARateTest_PIO/`** — **Diagnostic** fork used to raise the SMA stream rate (15 → 99 Hz, then a 1 kHz push). Carries a `portenta_m7_rate*` env ladder + `portenta_m7_cyc*` builds.
 - **`Firmware_stable/`** — a frozen known-good snapshot of the pre-merge dual-ADC firmware, kept for A/B diagnosis (envs `portenta_m7_bridge` + `portenta_m4`).
 
@@ -39,7 +40,7 @@ The live firmware projects (**env names vary — check each `platformio.ini`**):
 The production data path is a **lock-free SPSC ring buffer in SRAM4** (`Firmware_SMASensorHub_PIO/src/sample_ring.h`, shared by copy into the `Firmware_SMARateTest_PIO/` and `Calibrate_*` projects). M4 (producer, DRDY-driven) pushes `AdcSample`s without blocking; M7 (consumer) drains and formats for USB-CDC. This replaced a synchronous `RPC.print()` path that crashed under sustained dual-ADC throughput (~660 msg/s). RPC is retained for boot-time checkpoints only.
 
 - `AdcSample` is a **fixed 24-byte struct** (`static_assert`-enforced) at a **fixed SRAM4 address** (`RING_BASE = 0x38008000`, clear of the OpenAMP/RPC region). If you change the struct layout or ring header, the host-side serial parser must change in lockstep.
-- The **`src` ID column** identifies each stream and is a coordination point between firmware and host parser: `1`=laser displacement (ADC1), `2`=load cell force (ADC2), `3/4/5`=SMA voltage/current/resistance (now streamed by `Firmware_SMASensorHub_PIO/`), `0xF0+`=state-machine events. See the reservation table at the top of `sample_ring.h` before adding channels.
+- The **`src` ID column** identifies each stream and is a coordination point between firmware and host parser: `1`=laser displacement (ADC1), `2`=load cell force (ADC2), `3/4/5`=SMA voltage/current/resistance (now streamed by `Firmware_SMASensorHub_PIO/`), `6/7`=CC command `u` / `R_est` (**`Firmware_SMAConstantCurrent_PIO/` only** — these fill the last reserved slots, so `seq_per_src[8]` is now exactly full), `0xF0+`=state-machine events. See the reservation table at the top of `sample_ring.h` before adding channels.
 
 ### The ADS1263 driver is copied, not shared
 

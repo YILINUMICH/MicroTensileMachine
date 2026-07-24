@@ -56,14 +56,25 @@ except ImportError as e:
 #   emitted as untagged sensor-TSV lines during `drive`/`fire`. For these,
 #   the `voltage_V` column carries the channel's natural unit:
 #     src=3 → volts (V_ldo),  src=4 → amps (I),  src=5 → ohms (R = V/I).
+#   6,7 come from the M7 constant-current controller and exist ONLY in
+#   Firmware_SMAConstantCurrent_PIO (emitted while the current loop is closed).
+#   They are CONTROLLER STATE, not sensor readings:
+#     src=6 → volts (the loop's command u),  src=7 → ohms (its adaptive R_est).
+#   Naming them here is what makes them recordable: the recorder filters by
+#   channel NAME, so an unnamed src is dropped. Adding a name does not change
+#   any existing capture — a channel is only logged if a config asks for it.
 SRC_LASER = 1   # laser displacement  [V]   (ADS1263 ADC1, M4)
 SRC_LOAD  = 2   # load cell force     [V]   (ADS1263 ADC2, M4)
 SRC_SMA_V = 3   # SMA drive voltage   [V]   (M7 on-chip ADC; raw_code = DAC code)
 SRC_SMA_I = 4   # SMA current         [A]   (INA296A; value in voltage_V)
 SRC_SMA_R = 5   # SMA resistance      [ohm] (V/I;   value in voltage_V)
+SRC_CC_U  = 6   # CC command voltage  [V]   (CC firmware; raw_code = DAC code)
+SRC_CC_R  = 7   # CC plant estimate   [ohm] (CC firmware; command-domain u/I)
 
-SRC_NAMES = {1: "laser", 2: "load", 3: "sma_v", 4: "sma_i", 5: "sma_r"}
+SRC_NAMES = {1: "laser", 2: "load", 3: "sma_v", 4: "sma_i", 5: "sma_r",
+             6: "cc_u", 7: "cc_r"}
 SMA_SRCS  = (SRC_SMA_V, SRC_SMA_I, SRC_SMA_R)
+CC_SRCS   = (SRC_CC_U, SRC_CC_R)
 
 
 @dataclass
