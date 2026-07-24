@@ -146,7 +146,13 @@ _FLOAT_RE = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
 # Optional 2-column tail: "\t<hw_us>\t<seq>" added by Phase 5 firmware.
 _TAIL_RE  = r"(?:\s+(\d+)\s+(\d+))?"
 _TSV_3COL = re.compile(rf"^\s*(\d+)\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
-_TSV_4COL = re.compile(rf"^\s*(\d+)\s+([1-5])\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
+# src is [1-7], NOT [1-5]: 6/7 are the CC controller-state channels (command u,
+# R_est) from Firmware_SMAConstantCurrent_PIO. The named constants SRC_CC_U /
+# SRC_CC_R and the SRC_NAMES entries were added when that fork landed, but this
+# regex gate was missed — so cc_u/cc_r lines parsed as None and were silently
+# dropped by every consumer (the recorder logged nothing for them). Keep this
+# range in lockstep with SRC_NAMES and sample_ring.h's reservation table.
+_TSV_4COL = re.compile(rf"^\s*(\d+)\s+([1-7])\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE}\s*$")
 _CSV_PLAN = re.compile(rf"^\s*(\d+)\s*,\s*({_FLOAT_RE})\s*$")
 
 
