@@ -108,7 +108,22 @@ const int     ISENSE_PIN = A1;       // INA296A OUT (current sense) — ENABLED 
 const PinName TRIG_PIN   = PJ_11;    // scope trigger; rising edge = DAC-step t0
 
 // -- Analytical LDO transfer: V_LDO = V_OFFSET + (VDD_MCP/4095)*code ----
-static float       VDD_MCP   = 5.5f;          // DAC full-scale rail (slope)
+// VDD_MCP is the MCP4728's supply rail AND its full-scale output, because the
+// DAC is written with MCP4728_VREF_VDD (see setDACraw) — so this constant must
+// track the hardware, not the other way round.
+//
+// 5.5 -> 5.0 on 2026-07-24: the DAC rail was reconfigured to 5.0 V to raise the
+// I2C logic-level margin. The MCP4728's VIH is ratiometric (0.7 x VDD), so at
+// 5.5 V it demanded 3.85 V from a 3.3 V bus and at 5.0 V it demands 3.50 V —
+// less out of spec, but STILL out of spec. The bus remains marginal until a
+// level translator goes in; this only makes the intermittency rarer. Full-scale
+// at the LDO drops from ~5.81 V to ~5.31 V accordingly.
+//
+// Runtime-tunable via `vdd <V>` (not persisted). A wrong value here skews every
+// VOLTAGE-mode command by the ratio; constant-current mode is immune, since
+// R_est is measured in the command domain (u/I) and absorbs any DAC-map error
+// (skeleton pitfall 1).
+static float       VDD_MCP   = 5.0f;          // DAC full-scale rail (slope)
 static const float IREF_A    = 50e-6f;        // TPS7A57 ref current (nominal)
 static const float R_SERIES  = 6200.0f;       // DAC → REF pin series resistor
 static float       V_OFFSET  = IREF_A * R_SERIES;  // ~0.31 V intercept (tunable)
@@ -244,11 +259,45 @@ static SmaRead readSma(int nsamples = ADC_SAMPLES) {
 // was never protecting the write itself (Wire.endTransmission() has already
 // returned by then), only the LDO's much slower output slew, which the loop
 // observes through the ADC anyway.
+// ── DAC-link watchdog ─────────────────────────────────────────────────
+// sma_ok is latched ONCE at boot, and the I2C write's return code used to be
+// discarded. That combination is benign in voltage mode and dangerous in
+// current mode. If the link drops mid-run the DAC holds its last latched code,
+// so current keeps flowing at the last commanded level — while the loop, which
+// still reads current fine (that is the ADC, a different path), sees a growing
+// error and winds the integrator up against an output that is physically
+// frozen. Should the link return, the wound-up command lands as a STEP.
+//
+// The open-load watchdog cannot catch this: it triggers on "command railed with
+// no current" (broken load, working DAC), which is the opposite signature.
+//
+// So: check the write, and fault after DAC_FAIL_MAX consecutive failures. At
+// the 1 kHz control rate that is ~3 ms of frozen output — far too short for the
+// integrator to travel anywhere — which is why no separate anti-windup is
+// needed here. The recovery is disarm(), and disarm's real cutoff is a
+// digitalWrite on the MOSFET gate: a GPIO, NOT the I2C bus, so it still works
+// when the DAC is exactly what has failed.
+static const uint8_t DAC_FAIL_MAX  = 3;      // consecutive failed writes -> fault
+static uint8_t  dac_fail_run   = 0;          // current consecutive-failure run
+static uint32_t dac_fail_total = 0;          // cumulative, published in [STATUS]
+static bool     dac_lost       = false;      // latched; actioned by serviceSma
+
 static void setDACraw(uint16_t code, bool settle = true) {
     if (code > 4095) code = 4095;
     currentCode = code;
     if (sma_ok) {
-        mcp.setChannelValue(MCP4728_CHANNEL_A, code, MCP4728_VREF_VDD, MCP4728_GAIN_1X);
+        // Adafruit_MCP4728::setChannelValue returns false when the I2C
+        // transaction does not ACK — the only signal we get that the DAC has
+        // gone away.
+        bool ok = mcp.setChannelValue(MCP4728_CHANNEL_A, code,
+                                      MCP4728_VREF_VDD, MCP4728_GAIN_1X);
+        if (ok) {
+            dac_fail_run = 0;
+        } else {
+            dac_fail_total++;
+            if (dac_fail_run < 255) dac_fail_run++;
+            if (dac_fail_run >= DAC_FAIL_MAX) dac_lost = true;
+        }
         if (settle) delay(2);
     }
 }
@@ -1130,6 +1179,36 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
 
 // ── Per-pass service of the active op (one step, never blocks long) ────
 static void serviceSma() {
+    // DAC-link fault takes precedence over every op, in BOTH setpoint modes —
+    // a frozen output is not something any state can usefully continue into.
+    // Checked here rather than in the CC branch alone so a dropout during
+    // drive/fire/cycle/step/sweep is caught too.
+    if (dac_lost) {
+        bool was_armed = armed;
+        disarm();                 // MOSFET gate is a GPIO — works without I2C
+        // Clear AFTER disarm: disarm's own DAC write will also fail, and we do
+        // not want that failure to re-latch the fault we are already reporting.
+        dac_lost     = false;
+        dac_fail_run = 0;
+        smaTag();
+        Serial.print(F("[DAC] FAULT: MCP4728 stopped ACKing ("));
+        Serial.print(DAC_FAIL_MAX);
+        Serial.print(F(" consecutive failed writes, "));
+        Serial.print(dac_fail_total);
+        Serial.println(F(" total)."));
+        smaTag();
+        if (was_armed) {
+            Serial.println(F("      DISARMED — the DAC held its last code, so "
+                             "current was still flowing until now."));
+        } else {
+            Serial.println(F("      Output was already disarmed."));
+        }
+        smaTag();
+        Serial.println(F("      Check the I2C wiring/power (PB_6 SDA, PB_7 SCL) "
+                         "then `reset` to re-scan the bus."));
+        return;
+    }
+
     switch (smaState) {
         case SMA_IDLE:
             // Armed + resting at idle: stream V/I/R so the host sees the
@@ -1778,6 +1857,11 @@ static void pumpSensors() {
         if (rate_other) { Serial.print(" rate_other="); Serial.print(rate_other); }
         Serial.print(" prod1=");          Serial.print(prate1);
         Serial.print(" prod2=");          Serial.print(prate2);
+        // dac_err: cumulative failed MCP4728 writes. Nonzero means the I2C link
+        // to the DAC is marginal even if it has not yet tripped DAC_FAIL_MAX in
+        // a row — the early warning for an intermittent bus, visible before it
+        // becomes a fault mid-run.
+        Serial.print(" dac_err=");        Serial.print(dac_fail_total);
         Serial.print(" sma_state=");      Serial.print((int)smaState);   // 0=IDLE
         // Clock-alignment check: M7's own clock vs the freshest M4 sample clock
         // (lets the host derive the M4↔M7 offset for the src=3/4/5 lines) + LDO
@@ -1869,7 +1953,24 @@ void setup() {
     // the achievable control period: a 3-byte write is ~270 us at the 100 kHz
     // default and ~70 us here. At a 1 ms period that is the difference between
     // 27% and 7% of the budget spent talking to the DAC.
-    Wire.setClock(400000);
+    //
+    // THIS IS THE ONE I2C DIFFERENCE vs Firmware_SMASensorHub_PIO, which never
+    // calls setClock() and therefore runs the same bus at the 100 kHz default.
+    // If the DAC enumerates reliably under the sensor hub but intermittently
+    // here, speed is the variable — fast mode allows a 300 ns rise time where
+    // standard mode allows 1000 ns, so weak pull-ups or cable capacitance that
+    // pass at 100 kHz can fail at 400 kHz. Build with -D I2C_HZ=100000 to A/B
+    // it without editing code; a bus that only works at 100 kHz is marginal and
+    // should be FIXED (pull-ups / lead length / level translation), not merely
+    // slowed down — but slowing it is a legitimate way to prove the diagnosis,
+    // and an acceptable fallback on the cc200 build where a 270 us write is
+    // only 5% of the 5 ms tick.
+#ifndef I2C_HZ
+#define I2C_HZ 400000
+#endif
+    Wire.setClock(I2C_HZ);
+    smaTag(); Serial.print(F("I2C clock: ")); Serial.print(I2C_HZ / 1000);
+    Serial.println(F(" kHz"));
     smaTag(); Serial.println(F("I2C scan..."));
     byte cnt = 0;
     for (byte a = 1; a < 127; a++) {
