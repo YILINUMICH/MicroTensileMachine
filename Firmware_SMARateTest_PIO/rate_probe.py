@@ -42,7 +42,7 @@ DT_RE = re.compile(r"\bdt_us=(\d+)")     # achieved cadence, measured on-device
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Probe SMA readSma() timing on the rate-test firmware")
-    ap.add_argument("--port", default="COM8")
+    ap.add_argument("--port", default="COM13")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--vhigh", type=float, default=3.0)
     ap.add_argument("--vidle", type=float, default=0.5)

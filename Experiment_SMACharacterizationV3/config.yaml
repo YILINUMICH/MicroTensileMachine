@@ -23,7 +23,7 @@ lcr:
 # every enabled channel raw; demux + scaling happen offline in the analyzer.
 h7:
   enabled: true
-  port: COM8
+  port: COM13
   baud: 115200
   channels: [laser, load, sma_v, sma_i, sma_r]   # which src streams to keep
   startup_commands: []        # optional cmds sent to H7 at startup (e.g.

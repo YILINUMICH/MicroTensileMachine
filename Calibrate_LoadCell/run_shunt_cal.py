@@ -360,7 +360,7 @@ def build_argparser() -> argparse.ArgumentParser:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("--port", default="COM8",
+    p.add_argument("--port", default="COM13",
                    help="Portenta serial port (default: COM8 per current rig)")
     p.add_argument("--baud", type=int, default=115200)
     p.add_argument("--adc-source", type=int, default=2, choices=(1, 2),

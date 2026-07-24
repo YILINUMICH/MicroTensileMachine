@@ -52,7 +52,7 @@ drain_timeout_s: 2.0                 # max time spent draining the serial buffer
 # Portenta H7 (load cell ADC stream) — USB-CDC.
 # Signal chain: Load cell → LCA-9PC amp (0-5 V) → EVM AIN2(+)/AIN3(-)
 #   → ADC1 (32-bit) + ADC2 (24-bit) → M4 → ring buffer → M7 → USB.
-portenta_port: "COM8"
+portenta_port: "COM13"
 portenta_baud: 115200
 
 # Zaber stage.
