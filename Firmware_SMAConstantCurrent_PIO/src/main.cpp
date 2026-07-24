@@ -35,13 +35,16 @@
  *       an `abort` command can interrupt a live drive.
  *     - NEW: the actuation engine has two SETPOINT MODES. Voltage mode is
  *       the inherited behaviour (`drive`/`fire`/`cycle` command volts);
- *       current mode (`cc`/`ccdrive`/`ccfire`/`cccycle`) commands milliamps
- *       and closes the loop on the INA296A reading every control tick.
+ *       current mode (`cc`/`ccfire`/`cccycle`) commands milliamps and closes
+ *       the loop on the INA296A reading every control tick. There is no
+ *       `ccdrive`: `cc <mA> [ms]` IS the drive twin (and retargets in place
+ *       if a run is already up).
  *
  * ── Shared USB serial: three line classes ────────────────────────────
  *   <untagged TSV>   sample stream   : t_ms\tsrc\traw\tV\thw_us\tseq
  *                    src=1 laser, 2 load  (from M4 via the ring);
- *                    src=3 SMA V, 4 SMA I, 5 SMA R  (from M7 during
+ *                    src=3 SMA V (= V at SMA_P, A0), 4 SMA I, 5 SMA R
+ *                    (R = src3/src4, no shunt correction)  (from M7 during
  *                    drive/fire — emitted directly, NOT via the ring);
  *                    src=6 CC command u [V], 7 CC R_est [ohm]  (M7, emitted
  *                    only while the current loop is closed).
@@ -52,7 +55,7 @@
  *
  * ── Why the merge is safe (no pin overlap) ───────────────────────────
  *   M4 sensing : PA_8 (CS), PC_6 (DRDY), PC_7 (RESET) + SPI bus
- *   M7 SMA     : Wire/I2C (PB_6/PB_7), A0 (FB), A1 (INA296A I-sense),
+ *   M7 SMA     : Wire/I2C (PB_6/PB_7), A0 (SMA_P sense), A1 (INA296A I-sense),
  *                PG_7/D3 (MOSFET), PJ_11 (scope TRIG)
  *
  * Flash order (first time):
@@ -100,7 +103,7 @@ static bool sma_ok = false;          // false if MCP4728 absent → SMA cmds no-
 
 // -- Pins --------------------------------------------------------------
 const int     MOSFET_PIN = D3;       // PWM3 = D3 = PG_7 (Mid Carrier J15-31)
-const int     FB_PIN     = A0;       // LDO out via 10k/10k divider (BEFORE shunt)
+const int     FB_PIN     = A0;       // SMA_P via 10k/10k divider (AFTER the shunt)
 const int     ISENSE_PIN = A1;       // INA296A OUT (current sense) — ENABLED below
 const PinName TRIG_PIN   = PJ_11;    // scope trigger; rising edge = DAC-step t0
 
@@ -110,16 +113,23 @@ static const float IREF_A    = 50e-6f;        // TPS7A57 ref current (nominal)
 static const float R_SERIES  = 6200.0f;       // DAC → REF pin series resistor
 static float       V_OFFSET  = IREF_A * R_SERIES;  // ~0.31 V intercept (tunable)
 
-// -- Feedback readback divider (LDO out → 10k/10k → A0) ----------------
+// -- Feedback readback divider (SMA_P → 10k/10k → A0) ------------------
 const float  FB_DIV_RATIO = 0.5f;
 const float  ADC_FB_SCALE = 1.0f / FB_DIV_RATIO;   // 2.0
 
-// -- INA296A current sense (LDO out → 100 mOhm shunt → SMA) ------------
+// -- INA296A current sense (LDO out → 200 mOhm shunt → SMA_P → SMA) ----
 //   V_ina = I * R_SHUNT * INA_GAIN  →  I = (V_ina - offset)/(INA_GAIN*R_SHUNT)
-//   A1 variant = 10 V/V; 0.1 ohm → 1.0 V/A; unidirectional (REF=GND).
-//   V_sma = V_ldo - I*R_SHUNT (A0 is BEFORE the shunt); R_sma = V_sma/I.
+//   A1 variant = 10 V/V; 0.2 ohm → 2.0 V/A; unidirectional (REF=GND).
+//
+//   NODE ORDER (schematic-verified 2026-07-24): A0 taps SMA_P, which is the
+//   node AFTER the shunt — i.e. the SMA's own high side. So A0 measures V_sma
+//   DIRECTLY and R_sma = V_sma / I needs no shunt correction. The LDO output
+//   is the node the firmware no longer sees; it is reconstructed for display
+//   as V_ldo = V_sma + I*R_SHUNT. This is the reverse of the pre-2026-07-24
+//   code, which assumed A0 was before the shunt and SUBTRACTED the drop —
+//   that made V_sma (and hence R) low by 2*I*R_shunt.
 static float       INA_GAIN        = 10.0f;   // INA296A1 = 10 V/V
-static float       R_SHUNT_OHM     = 0.1f;    // 100 mOhm
+static float       R_SHUNT_OHM     = 0.2f;    // 200 mOhm
 static float       ISENSE_OFFSET_V = 0.0f;    // 0 A output (REF=GND)
 static const float I_FLOOR_A       = 1e-3f;   // below this, R is undefined
 
@@ -197,20 +207,27 @@ static float readADC(int pin, int nsamples = ADC_SAMPLES) {
     return (code / (float)ADC_RES_MAX) * ADC_VREF_V;
 }
 
-// LDO output voltage (un-divided).
-static float readLDO(int nsamples = ADC_SAMPLES) {
+// Voltage at SMA_P (un-divided) — the SMA's high side, AFTER the shunt.
+// NOTE: this used to be called readLDO(); the pin was always A0, but the node
+// it lands on is SMA_P, not the LDO output. Renamed so the code stops lying
+// about which node it reads. The DAC-characterisation commands (set/code/
+// step/sweep) still call it, so their "V_meas" is now SMA_P — it sits
+// I*R_SHUNT below the codeToVldo() prediction whenever current is flowing.
+static float readSmaP(int nsamples = ADC_SAMPLES) {
     return readADC(FB_PIN, nsamples) * ADC_FB_SCALE;
 }
 
 // One coherent electrical read of the SMA drive path (INA296A current sense).
+//   v_sma = MEASURED at A0 (SMA_P);  i = MEASURED at A1 (INA296A);
+//   v_ldo = DERIVED (v_sma + i*R_shunt);  r = v_sma / i.
 struct SmaRead { float v_ldo; float i; float v_sma; float r; };
 static SmaRead readSma(int nsamples = ADC_SAMPLES) {
     SmaRead s;
-    s.v_ldo = readLDO(nsamples);                          // A0, before the shunt
+    s.v_sma = readSmaP(nsamples);                         // A0, AFTER the shunt
     float v_ina = readADC(ISENSE_PIN, nsamples);          // A1, INA296A OUT
     float scale = INA_GAIN * R_SHUNT_OHM;                 // V/A
     s.i     = (scale > 0.0f) ? (v_ina - ISENSE_OFFSET_V) / scale : 0.0f;
-    s.v_sma = s.v_ldo - s.i * R_SHUNT_OHM;                // subtract shunt drop
+    s.v_ldo = s.v_sma + s.i * R_SHUNT_OHM;                // reconstruct (display only)
     s.r     = (fabs(s.i) >= I_FLOOR_A) ? s.v_sma / s.i : NAN;
     return s;
 }
@@ -478,7 +495,7 @@ static uint32_t wdt_last_ping  = 0;
 // Begin a settle measurement (mirrors settleWait timing: first compare at
 // +18 ms, 2 mV quiet band, 5 consecutive quiet reads, 2 s hard timeout).
 static void settleBegin() {
-    st_prev  = sma_ok ? readLDO() : 0.0f;
+    st_prev  = sma_ok ? readSmaP() : 0.0f;
     st_quiet = 0;
     st_t0    = millis();
     st_next  = st_t0 + 18;
@@ -491,7 +508,7 @@ static bool settleService() {
     uint32_t now = millis();
     if (now - st_t0 >= SETTLE_TIMEOUT_MS) return true;
     if ((int32_t)(now - st_next) >= 0) {
-        float v = readLDO();
+        float v = readSmaP();
         if (fabs(v - st_prev) < SETTLE_TOL_V) { if (++st_quiet >= SETTLE_QUIET_N) return true; }
         else st_quiet = 0;
         st_prev = v;
@@ -650,7 +667,11 @@ static void streamSma(const SmaRead& s, bool with_cc = false) {
     uint32_t hw = last_m4_hw_us;     // M4 clock — quantized to ~2 ms (legacy)
     uint32_t ms = last_m4_ms;
 #endif
-    smaAppend(SAMPLE_SRC_SMA_V, (int32_t)currentCode, s.v_ldo, hw, ms);
+    // src=3 carries the MEASURED SMA voltage (A0 = SMA_P). Before 2026-07-24
+    // it carried v_ldo; with A0 re-identified as SMA_P, v_ldo is a derived
+    // quantity and streaming it would make the host's V/I disagree with the
+    // firmware's own R on src=5.
+    smaAppend(SAMPLE_SRC_SMA_V, (int32_t)currentCode, s.v_sma, hw, ms);
     smaAppend(SAMPLE_SRC_SMA_I, 0,                    s.i,     hw, ms);
     if (!isnan(s.r)) smaAppend(SAMPLE_SRC_SMA_R, 0,   s.r,     hw, ms);
     if (with_cc) {
@@ -780,9 +801,9 @@ static SmaRead ccStep(uint32_t now_us) {
 static void cmdRead() {
     SmaRead s = readSma();
     smaTag();
-    Serial.print(F("V_LDO=")); Serial.print(s.v_ldo, 4);
+    Serial.print(F("V_sma=")); Serial.print(s.v_sma, 4);   // measured (A0=SMA_P)
     Serial.print(F("V  I="));  Serial.print(s.i * 1000.0f, 2);
-    Serial.print(F("mA  V_sma=")); Serial.print(s.v_sma, 4);
+    Serial.print(F("mA  V_ldo~")); Serial.print(s.v_ldo, 4);  // derived
     Serial.print(F("V  R="));
     if (isnan(s.r)) Serial.print(F("--")); else Serial.print(s.r, 3);
     Serial.print(F("ohm  code=")); Serial.println(currentCode);
@@ -913,8 +934,11 @@ static void startSweep(int codeStep, bool csv) {
     sw_step = codeStep;
     sw_csv  = csv;
     sw_c    = 0;
-    if (csv) { smaTag(); Serial.println(F("dac_code,v_pred,v_ldo_meas")); }
-    else     { smaTag(); Serial.println(F("Code  V_pred  V_meas")); }
+    // v_smap_meas: A0 = SMA_P, so this trails v_pred (an LDO-output model) by
+    // I*R_SHUNT whenever the wire is drawing current. Sweep with the return
+    // path open (disarmed) if you want a clean DAC->LDO fit.
+    if (csv) { smaTag(); Serial.println(F("dac_code,v_pred,v_smap_meas")); }
+    else     { smaTag(); Serial.println(F("Code  V_pred  V_smap")); }
     setDACraw((uint16_t)(sw_c > 4095 ? 4095 : sw_c));
     settleBegin();
     smaState = SMA_SWEEP_SETTLE;
@@ -1118,13 +1142,13 @@ static void serviceSma() {
 
         case SMA_SET_SETTLE:
             if (settleService()) {
-                float vmeas = readLDO();
+                float vmeas = readSmaP();
                 float err   = vmeas - op_vtarget;
                 smaTag();
                 Serial.print(F("Target=")); Serial.print(op_vtarget, 3);
                 Serial.print(F("V  Code=")); Serial.print(op_code);
                 Serial.print(F("  V_pred=")); Serial.print(codeToVldo(op_code), 3);
-                Serial.print(F("  V_LDO=")); Serial.print(vmeas, 3);
+                Serial.print(F("  V_smap=")); Serial.print(vmeas, 3);
                 Serial.print(F("V  err="));
                 if (err >= 0) Serial.print('+');
                 Serial.print(err * 1000.0f, 1); Serial.println(F("mV"));
@@ -1134,12 +1158,12 @@ static void serviceSma() {
 
         case SMA_CODE_SETTLE:
             if (settleService()) {
-                float vldo = readLDO();
+                float vsmap = readSmaP();
                 smaTag();
                 Serial.print(F("Code=")); Serial.print(op_code);
                 Serial.print(F("  V_dac~")); Serial.print(codeToVdac(op_code), 3);
                 Serial.print(F("  V_pred=")); Serial.print(codeToVldo(op_code), 3);
-                Serial.print(F("  V_LDO_meas=")); Serial.print(vldo, 3);
+                Serial.print(F("  V_smap_meas=")); Serial.print(vsmap, 3);
                 Serial.println('V');
                 smaState = SMA_IDLE;
             }
@@ -1148,12 +1172,12 @@ static void serviceSma() {
         case SMA_STEPPING: {
             uint32_t t_rel = millis() - op_t0;
             if (t_rel >= op_hold_ms) {
-                smaTag(); Serial.print(F("[STEP] done V_final=")); Serial.println(readLDO(), 4);
+                smaTag(); Serial.print(F("[STEP] done V_final=")); Serial.println(readSmaP(), 4);
                 smaState = SMA_IDLE;
                 return;
             }
             if (t_rel >= op_next_log) {
-                smaTag(); Serial.print(t_rel); Serial.print('\t'); Serial.println(readLDO(), 4);
+                smaTag(); Serial.print(t_rel); Serial.print('\t'); Serial.println(readSmaP(), 4);
                 op_next_log += 10;
             }
             return;
@@ -1162,7 +1186,7 @@ static void serviceSma() {
         case SMA_SWEEP_SETTLE:
             if (settleService()) {
                 uint16_t code  = (uint16_t)(sw_c > 4095 ? 4095 : sw_c);
-                float    vmeas = readLDO();
+                float    vmeas = readSmaP();
                 float    vpred = codeToVldo(code);
                 if (sw_csv) {
                     smaTag();

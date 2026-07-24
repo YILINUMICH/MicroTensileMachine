@@ -109,6 +109,29 @@ pure wins).
 
 ## Module TODOs
 
+- [ ] **Port the 2026-07-24 SMA sense-path correction from `Firmware_SMAConstantCurrent_PIO/`.**
+      **Not applied here** — this is the production image and was deliberately left
+      untouched. Schematic re-check found two errors that this code still carries,
+      both of which corrupt `src=3` (V) and `src=5` (R):
+  1. **A0 is on `SMA_P`, not the LDO output** — it is *after* the shunt, so it
+     measures `V_sma` directly and `R_sma = V_sma / I` needs **no** shunt
+     correction. `main.cpp:191-195` assumes A0 is before the shunt and *subtracts*
+     `I·R_shunt`, i.e. double-counts a drop that is already absent from the
+     reading. `V_ldo` should become the derived quantity (`V_sma + I·R_shunt`).
+  2. **`R_SHUNT_OHM = 0.1f` (`main.cpp:104`) but the fitted part is 200 mΩ** —
+     so `I` reads **2× high** and `R` **2× low**. Unlike the ADC-duty error
+     documented above, this one does **not** cancel in `R = V/I`; it is a gain
+     error on `I` alone.
+
+      Also in scope when porting: `src=3` should stream `V_sma` (`main.cpp:485`
+      streams `v_ldo`), `readLDO()` → `readSmaP()`, and the `set`/`code`/`step`/
+      `sweep` labels (`V_LDO*`, `v_ldo_meas`) — those commands compare A0 against
+      the `codeToVldo()` LDO model, so they must be run **disarmed** for a clean
+      DAC→LDO fit. See `Firmware_SMAConstantCurrent_PIO/STATUS.md` §"Sense-path
+      correction (2026-07-24)" for the applied diff, and bench-confirm against a
+      DMM with a known load **before** porting — the correction came from the
+      schematic, not a measurement. **Any `src=3`/`src=5` data taken with this
+      image is affected.**
 - [ ] **Bench-verify the 1 kHz SMA stream** (`portenta_m7`, flashed + power-cycled). Gates, in order — **stop at the first failure**:
   1. **Cadence** — `[STATUS] loop_hz` ≫ 1000, and src=3/4/5 arrive at ~1 kHz (~96 points inside a 100 ms fire, vs 8 before).
   2. **Stream health** — `dropped` and `crc_err` stay **0**, `hwm` < 50%. If the ring starts dropping, the SMA path is starving the sensor drain: you bought SMA rate with laser/load data, which is not a trade we want.

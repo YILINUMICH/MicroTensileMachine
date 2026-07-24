@@ -62,7 +62,7 @@
 //   -------+------------------------------------------+----------------
 //     1    | Laser displacement  (ADS1263 ADC1)       | Existing
 //     2    | Load cell force     (ADS1263 ADC2)       | Existing
-//     3    | SMA drive voltage   (on-chip ADC)        | Phase 6
+//     3    | SMA voltage @ SMA_P (on-chip ADC, A0)    | Phase 6
 //     4    | SMA shunt current   (on-chip ADC, V-fmt) | Phase 6
 //     5    | SMA resistance      (M4-computed = V/I)  | Phase 6
 //     6    | CC command voltage u (M7 control state)  | CC fork

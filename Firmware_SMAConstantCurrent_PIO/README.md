@@ -80,6 +80,13 @@ Targets are therefore **repeatable but not absolute** until the scale is fixed:
 check `read` against a DMM in series and set `aref` (and `gain` / `shunt` /
 `ioffset` for the INA path). Fix the scale, not the loop.
 
+**Sense topology (corrected 2026-07-24).** The drive path is
+`LDO out → 200 mΩ shunt → SMA_P → SMA → MOSFET → GND`. **A0 taps `SMA_P`**, so it
+measures `V_sma` directly and `R_sma = V_sma / I` with no shunt correction; `V_ldo`
+is derived for display only. A1 is the INA296A output at `10 V/V × 0.2 Ω = 2.0 V/A`.
+The inherited code had A0 *before* the shunt and `R_shunt = 0.1 Ω` — both wrong.
+See [STATUS.md](STATUS.md) for what that changed and what still needs bench proof.
+
 For the same reason, do **not** raise `ADC_SAMPLES_CYCLE` to "improve
 precision" — more conversions raise the duty, which makes V and I read *higher*.
 Average on the host instead.

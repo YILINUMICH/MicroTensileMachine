@@ -18,6 +18,29 @@
 - **Open-load fault** — command railed with no current ⇒ broken wire ⇒ auto-disarm.
   Voltage mode cannot detect this; a current loop actively ramps into it.
 
+## Sense-path correction (2026-07-24) — changes recorded R
+
+Schematic re-check found the A0 tap identified wrongly in the inherited code:
+
+- **A0 is on `SMA_P`** (the SMA's high side, **after** the shunt), not the LDO
+  output. So A0 measures `V_sma` directly and `R_sma = V_sma / I` — no shunt
+  correction. `V_ldo` is now the *derived* quantity (`V_sma + I·R_shunt`) and is
+  display-only. The old code subtracted the drop from an already-post-shunt
+  reading, i.e. it double-counted it.
+- **`R_SHUNT_OHM` 0.1 → 0.2** (200 mΩ, the part actually fitted). With
+  `INA_GAIN = 10 V/V` the current scale is now **2.0 V/A**, not 1.0.
+- **`src=3` now carries `V_sma`**, not `V_ldo`, so host-side `V/I` agrees with the
+  firmware's own `src=5`.
+- `readLDO()` → **`readSmaP()`**. The DAC-characterisation commands
+  (`set`/`code`/`step`/`sweep`) still read this pin, so their `V_meas` is SMA_P
+  and sits `I·R_shunt` under the `codeToVldo()` prediction while current flows —
+  sweep **disarmed** for a clean DAC→LDO fit. Labels renamed to `V_smap*` to say so.
+
+The CC loop itself is untouched: `R_est` is command-domain (`u/I`, skeleton
+pitfall 2), so it never depended on the A0 node. Only the *measured* V/R change.
+Any `src=3` / `src=5` data captured with an earlier build is wrong on both counts
+(2× current-scale error and a double-subtracted shunt drop) — re-take it.
+
 ## Bring-up ladder — stop at the first failure
 
 1. **Boot** — banner + `[SMA] MCP4728 OK`. `info` shows the CC block with
@@ -47,6 +70,10 @@
 ## Module TODOs
 
 - [ ] Walk the bring-up ladder above (nothing here has been on hardware).
+- [ ] **Confirm the 2026-07-24 sense-path correction on the bench** — with a known
+      resistor as the load, check `read`'s `V_sma`/`I`/`R` against a DMM. This is
+      the change most likely to be still wrong, since it came from the schematic
+      rather than a measurement.
 - [ ] **Fix the absolute current scale** (step 5). Until then CC targets are
       repeatable but not absolute — the loop faithfully holds a number that is
       itself ~5–7 % off.
