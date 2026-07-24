@@ -541,6 +541,23 @@ static uint32_t       idle_next_log = 0;
 static uint32_t wdt_timeout_ms = 5000;   // 0 = disabled
 static uint32_t wdt_last_ping  = 0;
 
+// ── Host-liveness heartbeat (PC health check) ─────────────────────────
+// DISTINCT from the heat wdt above: that guards a HEAT phase and drops to
+// idle-low (still armed); THIS guards the LINK and fully DISARMS. The PC sends
+// `ping` at ~1 Hz for the whole time it is connected; if none arrives within
+// hb_timeout_ms while ARMED — in ANY sub-state (armed-idle, a `cc` hold, a
+// cycle) — the PC is presumed gone (console closed, crashed, or USB stalled)
+// and the coil is de-energised. Every received command also counts as
+// liveness, so an actively-driven session never trips it.
+//
+// DEFAULT OFF (0): the safe-stop only makes sense when a host pings CONTINUOUSLY
+// (not just during actuation). Enabling it by default would disarm any recorder
+// that goes quiet at idle. Enable explicitly with `hb <ms>` from a host that
+// pings the whole time it is connected — then closing that host safe-stops the
+// coil. The mechanism is complete and tested; it is opt-in, not absent.
+static uint32_t hb_timeout_ms = 0;       // 0 = disabled (opt-in via `hb <ms>`)
+static uint32_t hb_last_ms    = 0;
+
 // Begin a settle measurement (mirrors settleWait timing: first compare at
 // +18 ms, 2 mV quiet band, 5 consecutive quiet reads, 2 s hard timeout).
 static void settleBegin() {
@@ -641,6 +658,10 @@ static bool         udp_on = false;                 // armed after a valid netcf
 // Emit one already-formatted chunk of sample lines: a UDP datagram if streaming
 // is armed, else USB-CDC (the original path). Callers keep len <= ~1400 (whole
 // lines, under the Ethernet MTU) so each datagram carries only complete lines.
+// Bytes dropped because the USB host stopped reading (TX buffer full). Published
+// in [STATUS] as tx_drop so a wedged/closed host is VISIBLE, not a silent freeze.
+static uint32_t tx_drop = 0;
+
 static inline void streamWrite(const uint8_t* buf, size_t len) {
     if (len == 0) return;
 #if H7_TRANSPORT_UDP
@@ -651,6 +672,16 @@ static inline void streamWrite(const uint8_t* buf, size_t len) {
         return;
     }
 #endif
+    // USB-CDC: NEVER block. When the host stops reading (console closed), the
+    // CDC TX buffer fills; a blocking Serial.write would stall the cooperative
+    // M7 loop and FREEZE the state machine — leaving the SMA energized at its
+    // last DAC code until a manual reset. Drop the chunk instead. The heartbeat
+    // watchdog then safe-stops the coil, and the host 'force pull' wake
+    // (operator_ccbringup.py --wake) drains whatever is buffered to revive the
+    // stream without the reset button. availableForWrite() is the free space in
+    // the CDC send buffer; if it can't hold the whole chunk we skip it, so the
+    // subsequent write() is guaranteed not to block.
+    if ((size_t)Serial.availableForWrite() < len) { tx_drop += len; return; }
     Serial.write(buf, len);
 }
 
@@ -915,6 +946,9 @@ static void cmdInfo() {
     smaTag(); Serial.print(F("watchdog          : "));
     if (wdt_timeout_ms) { Serial.print(wdt_timeout_ms); Serial.println(F(" ms (send 'ping')")); }
     else                  Serial.println(F("disabled"));
+    smaTag(); Serial.print(F("heartbeat (PC)    : "));
+    if (hb_timeout_ms) { Serial.print(hb_timeout_ms); Serial.println(F(" ms -> DISARM if PC silent")); }
+    else                 Serial.println(F("disabled (hb 0)"));
 }
 
 // ── State entry helpers (called from dispatch) ────────────────────────
@@ -1123,6 +1157,24 @@ static bool cycleWatchdogTripped() {
         return true;
     }
     return false;
+}
+
+// Host-liveness heartbeat: DISARM if the PC has gone silent while anything is
+// energised. Runs every loop pass, independent of the SMA state machine, so it
+// covers armed-idle and manual `cc`/`drive` holds that the cycle watchdog above
+// never sees. Disarmed = nothing to guard, so the window is held open (reset)
+// until the next arm — arming with a dead PC then trips one timeout later,
+// which is the intended fail-safe, not a nuisance.
+static void serviceHeartbeat() {
+    if (hb_timeout_ms == 0 || !armed) { hb_last_ms = millis(); return; }
+    if ((uint32_t)(millis() - hb_last_ms) > hb_timeout_ms) {
+        disarm();                        // full safe-stop: MOSFET open, DAC parked
+        smaTag();
+        Serial.print(F("[HB] FAULT: PC silent > "));
+        Serial.print(hb_timeout_ms);
+        Serial.println(F(" ms — DISARMED (safe-stop). Re-arm to resume."));
+        hb_last_ms = millis();           // one report per timeout, not a spam loop
+    }
 }
 
 // ── One pass of an actuation phase (HEAT or COOL) ──────────────────────
@@ -1357,6 +1409,10 @@ static bool rejectIfNoDac() {
 static void dispatch(String in) {
     in.trim();
     if (in.length() == 0) return;
+    // ANY received command proves the PC is alive, so it refreshes the
+    // host-liveness heartbeat — not just an explicit `ping`. An actively driven
+    // session therefore never trips the safe-stop.
+    hb_last_ms = millis();
     String low = in;
     low.toLowerCase();
 
@@ -1364,7 +1420,16 @@ static void dispatch(String in) {
     if (low == "info")  { cmdInfo(); return; }
     if (low == "read")  { cmdRead(); return; }
     if (low == "abort") { abortSma(); return; }
-    if (low == "ping")  { wdt_last_ping = millis(); return; }   // heartbeat (silent)
+    if (low == "ping")  { wdt_last_ping = millis(); hb_last_ms = millis(); return; }  // heartbeat (silent)
+    if (low.startsWith("hb ")) {                     // host-liveness timeout (ms)
+        long ms = in.substring(3).toInt();
+        if (ms < 0) { smaTag(); Serial.println(F("[HB] usage: hb <ms> (0=off)")); return; }
+        hb_timeout_ms = (uint32_t)ms;
+        hb_last_ms = millis();
+        smaTag(); Serial.print(F("[HB] hb_timeout_ms=")); Serial.print(hb_timeout_ms);
+        Serial.println(hb_timeout_ms ? F("") : F(" (heartbeat DISABLED)"));
+        return;
+    }
 #if H7_TRANSPORT_UDP
     if (low.startsWith("netcfg ")) {                // netcfg <a.b.c.d> <port>
         String rest = in.substring(7); rest.trim();
@@ -1845,6 +1910,13 @@ static void pumpSensors() {
         pop_count_src2 = 0;
         pop_count_other = 0;
 
+        // Non-blocking guard: [STATUS] is ~350 chars of individual prints. If
+        // the host has stopped reading, skip the whole frame rather than block
+        // partway through (which would freeze the loop). One check up front, so
+        // the prints below are guaranteed room. UDP mode still emits [STATUS] on
+        // serial, so this guard applies there too. Counters keep accumulating
+        // when skipped — no data window is silently zeroed.
+        if ((size_t)Serial.availableForWrite() < 384) { tx_drop++; } else {
         Serial.print("[STATUS] t_ms=");   Serial.print(now);
         Serial.print(" hwm=");            Serial.print(hwm);
         Serial.print(" cap=");            Serial.print(RING_CAPACITY);
@@ -1862,6 +1934,8 @@ static void pumpSensors() {
         // a row — the early warning for an intermittent bus, visible before it
         // becomes a fault mid-run.
         Serial.print(" dac_err=");        Serial.print(dac_fail_total);
+        Serial.print(" tx_drop=");        Serial.print(tx_drop);
+        Serial.print(" hb_ms=");          Serial.print(hb_timeout_ms);
         Serial.print(" sma_state=");      Serial.print((int)smaState);   // 0=IDLE
         // Clock-alignment check: M7's own clock vs the freshest M4 sample clock
         // (lets the host derive the M4↔M7 offset for the src=3/4/5 lines) + LDO
@@ -1905,6 +1979,7 @@ static void pumpSensors() {
             Serial.print(" cc_tau_ms="); Serial.print(cc_tau_s * 1000.0f, 2);
         }
         Serial.println();
+        }   // end availableForWrite guard
     }
 }
 
@@ -2001,7 +2076,7 @@ void setup() {
     smaTag(); Serial.println(F("      CURRENT: cc <mA> [ms] (retargets live) | ccfire <mA> [ms] |"));
     smaTag(); Serial.println(F("               cccycle <i_high_mA> <i_low_mA> <t_high_ms> <t_idle_ms> <n> |"));
     smaTag(); Serial.println(F("               cc (status) | tau <ms> | ccgain <Kp> |"));
-    smaTag(); Serial.println(F("      ping (heartbeat) | stop | wdt <ms> (0=off) | abort |"));
+    smaTag(); Serial.println(F("      ping (heartbeat) | stop | wdt <ms> (0=off) | hb <ms> (PC-silent disarm) | abort |"));
     smaTag(); Serial.println(F("      step <code>[ms] | sweep|csv [step] | read | info |"));
     smaTag(); Serial.println(F("      gain|shunt|ioffset|vdd|offset|aref <x> | reset"));
     smaTag(); Serial.print(F("CC loop: ")); Serial.print(1000000UL / CC_PERIOD_US);
@@ -2043,6 +2118,7 @@ void loop() {
     String line;
     if (pollCommand(line)) dispatch(line);
     serviceSma();                   // advance the active SMA op by one step
+    serviceHeartbeat();             // safe-stop if the PC has gone silent
 }
 
 
