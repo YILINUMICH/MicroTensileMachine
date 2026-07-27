@@ -124,9 +124,21 @@ const PinName TRIG_PIN   = PJ_11;    // scope trigger; rising edge = DAC-step t0
 // R_est is measured in the command domain (u/I) and absorbs any DAC-map error
 // (skeleton pitfall 1).
 static float       VDD_MCP   = 5.0f;          // DAC full-scale rail (slope)
-static const float IREF_A    = 50e-6f;        // TPS7A57 ref current (nominal)
-static const float R_SERIES  = 6200.0f;       // DAC → REF pin series resistor
-static float       V_OFFSET  = IREF_A * R_SERIES;  // ~0.31 V intercept (tunable)
+
+// Intercept = the LDO output at DAC code 0. FIXED AT 0.5 V BY THE BOARD RESPIN
+// (2026-07-27): the components were reselected so that DAC 0..4.7 V maps to
+// V_LDO 0.5..5.2 V, i.e. the full DAC span is usable. This replaces the old
+// derived value V_OFFSET = IREF_A * R_SERIES = 50 uA * 6.2 kOhm = 0.31 V, which
+// described the PREVIOUS TPS7A57 ref-current / series-resistor selection and is
+// no longer what the hardware does.
+//
+// Bench-confirmed on the rig 2026-07-27: `code 0` measures 0.5016 / 0.5132 V
+// open-circuit (V_pred 0.500 vs V_smap_meas 0.506 after this change).
+//
+// This also sets the CC command clamp, since ccUMin() == vldoMin() ==
+// codeToVldo(0) == V_OFFSET — the clamp is derived, not separately configured.
+// Runtime-tunable via `offset <V>` (not persisted).
+static float       V_OFFSET  = 0.5f;          // LDO out at code 0 [V]
 
 // -- Feedback readback divider (SMA_P → 10k/10k → A0) ------------------
 const float  FB_DIV_RATIO = 0.5f;
