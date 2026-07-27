@@ -40,7 +40,7 @@ sample_rate_sps: 400               # 400 or 1000
 firmware_path:  "Firmware_SensorHub_PIO/src/main.cpp"
 
 # --- Serial I/O -------------------------------------------------------------
-portenta_port: "COM13"
+portenta_port: "COM8"
 portenta_baud:  115200
 zaber_config_path: ../Driver_ZaberStage/safety_config.json
 zaber_port:     "COM5"

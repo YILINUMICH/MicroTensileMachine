@@ -25,7 +25,7 @@ lcr:
 # V_sma directly — NOT the LDO output. Older sessions recorded it as V_ldo.
 h7:
   enabled: true
-  port: COM13
+  port: COM8
   baud: 115200
   channels: [laser, load, sma_v, sma_i, sma_r, cc_u, cc_r] # which src to keep
   startup_commands: [] # optional cmds sent to H7 at startup (e.g.

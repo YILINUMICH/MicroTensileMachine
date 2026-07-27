@@ -61,7 +61,7 @@ VLDO_CH, VSENSE_CH = "C1", "C2"
 R_LOAD_DEFAULT = 4.9      # Ohm, the bench resistor
 R_SHUNT = 0.1             # Ohm, INA296A sense shunt
 
-H7_PORT_DEFAULT = "COM13"  # COM8 = Portenta H7, COM5 = Zaber (see CLAUDE.md)
+H7_PORT_DEFAULT = "COM8"  # COM8 = Portenta H7, COM5 = Zaber (see CLAUDE.md)
 H7_BAUD = 115200
 
 # Moving the sample stream to UDP is what makes the command channel reliable.

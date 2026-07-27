@@ -33,7 +33,7 @@ The live firmware projects (**env names vary — check each `platformio.ini`**):
 
 **Two hardware gotchas baked into the rig:**
 - **Power-cycle the rig (USB + EVM supply) after every upload.** The DFU reset does not cleanly re-power the EVM's analog rails; skip the cycle and the ADS1263 comes up with `ID=0x00`.
-- **COM13 = Portenta H7, COM5 = Zaber stage.** `upload_port`/`monitor_port` are pinned to COM13 in every `platformio.ini` because PIO would otherwise auto-pick the Zaber and wedge the stage. On a different host, run `pio device list` and either edit the `.ini` or override on the CLI (`--upload-port COMx`), which wins over the file. **The H7 was on COM8 until 2026-07-24** (board replaced); older logs, STATUS entries, and session data referring to COM8 mean this same port on the previous board.
+- **COM8 = Portenta H7, COM5 = Zaber stage.** `upload_port`/`monitor_port` are pinned to COM8 in every `platformio.ini` because PIO would otherwise auto-pick the Zaber and wedge the stage. On a different host, run `pio device list` and either edit the `.ini` or override on the CLI (`--upload-port COMx`), which wins over the file. **Port history — both numbers mean the same H7 role:** COM8 until 2026-07-24; COM13 from 2026-07-24 while the replacement board was in service; COM8 again from 2026-07-27, when the rig switched back to the original board. Logs, STATUS entries, and session data naming either port are consistent with this.
 
 ### M4 → M7 sample transport (`sample_ring.h`)
 

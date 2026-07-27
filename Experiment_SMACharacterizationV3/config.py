@@ -47,7 +47,7 @@ class H7Config:
     `startup_commands` is an inert hook for future scripted actuation.
     """
     enabled: bool = True
-    port: str = "COM13"
+    port: str = "COM8"
     baud: int = 115200
     channels: List[str] = field(
         default_factory=lambda: ["laser", "load", "sma_v", "sma_i", "sma_r"])

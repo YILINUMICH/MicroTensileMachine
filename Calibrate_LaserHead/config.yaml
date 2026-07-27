@@ -61,7 +61,7 @@ drain_timeout_s: 2.0               # max time spent draining the serial buffer
 # in xcompare mode) → M4 → RPC → M7 → USB. No HAT front-end; the bare TI EVM
 # sees the IL-030 voltage directly, so the calibration k should land near
 # the 0.5 mV/µm datasheet nominal (the old HAT ~4× attenuation is gone).
-portenta_port: "COM13"
+portenta_port: "COM8"
 portenta_baud: 115200
 
 # Zaber stage. The JSON config holds position limits + device metadata; we
