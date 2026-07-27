@@ -674,6 +674,53 @@ static bool         udp_on = false;                 // armed after a valid netcf
 // in [STATUS] as tx_drop so a wedged/closed host is VISIBLE, not a silent freeze.
 static uint32_t tx_drop = 0;
 
+#ifndef DBG_LOOP_PROFILE
+#define DBG_LOOP_PROFILE 0
+#endif
+#if DBG_LOOP_PROFILE
+static uint32_t prof_conn_us = 0, prof_conn_n = 0;
+static uint32_t prof_write_us = 0, prof_write_n = 0;
+#endif
+
+// ── Host-presence cache — DO NOT call Serial.connected() per write ────────
+// MEASURED ON THE RIG 2026-07-27: operator bool() -> connected() costs
+// ~850 us PER CALL on this core. Serial.write() costs 11 us. fd1478b called
+// connected() once per streamWrite, and pumpSensors() writes about once per
+// loop pass, so it consumed 82-96% of ALL CPU TIME (conn_tot 818-960 ms of
+// every second) and pinned the M7 loop at ~1 kHz — ~500 Hz when a second call
+// per pass was added by the emit path. It also made the loop rate literally
+// 1/connected(), which is what made the SMA stream look transport-bound.
+//
+// Hoisting it "once per loop pass" does NOT help: at ~1000 passes/s that is
+// still ~1000 calls/s. It has to be sampled on a TIME basis.
+//
+// The guard's purpose is only to notice that the host went away so the
+// cooperative loop never blocks on a dead CDC endpoint. That needs no
+// per-write granularity — the heartbeat watchdog that safe-stops the coil
+// works in seconds. At 250 ms this is 4 calls/s ~= 3.4 ms/s, i.e. 0.34%
+// instead of ~90%.
+#ifndef HOST_CHECK_MS
+#define HOST_CHECK_MS 250
+#endif
+static bool     host_link_up = true;    // assume present until proven otherwise
+static uint32_t host_chk_ms  = 0;
+
+static inline bool hostUp() {
+    const uint32_t now = millis();
+    if (now - host_chk_ms >= HOST_CHECK_MS) {
+        host_chk_ms = now;
+#if DBG_LOOP_PROFILE
+        const uint32_t tc = micros();
+        host_link_up = (bool)Serial;
+        prof_conn_us += micros() - tc;
+        prof_conn_n++;
+#else
+        host_link_up = (bool)Serial;
+#endif
+    }
+    return host_link_up;
+}
+
 static inline void streamWrite(const uint8_t* buf, size_t len) {
     if (len == 0) return;
 #if H7_TRANSPORT_UDP
@@ -699,13 +746,21 @@ static inline void streamWrite(const uint8_t* buf, size_t len) {
     // command replies (info/read) still worked, which made it look like the
     // ADCs were muted. Bench-diagnosed 2026-07-27.
     //
-    // operator bool() -> connected() is the real host-presence signal.
+    // connected() is the real host-presence signal, but it is FAR too expensive
+    // to call per write (~850 us) — go through the hostUp() time-sampled cache.
     // NOTE: connected() tracks the DTR / terminal state, so this depends on the
     // host asserting DTR. Every reader in this repo does (pyserial defaults
     // _dtr_state = True and none of them override it) — but a host that opens
     // with dtr=False will see a silent stream, so change that at your peril.
-    if (!Serial) { tx_drop += len; return; }
+    if (!hostUp()) { tx_drop += len; return; }
+#if DBG_LOOP_PROFILE
+    const uint32_t t_wr = micros();
     Serial.write(buf, len);
+    prof_write_us += micros() - t_wr;
+    prof_write_n++;
+#else
+    Serial.write(buf, len);
+#endif
 }
 
 static char sma_batch[512];
@@ -1205,8 +1260,38 @@ static void serviceHeartbeat() {
 // elapsed, so the caller can advance the cycle. Returns false after a fault
 // (the machine has already been parked and disarmed) — the caller must not
 // advance a phase on a disarmed machine.
+// ── DIAGNOSTIC (2026-07-27): where does the per-pass time go? ─────────────
+// Firmware_SMARateTest_PIO measured, at ADC_SAMPLES_CYCLE=4: readSma 220 us,
+// DAC write 365 us, emit 60 us — and sustained 957 Hz with all three. CC's
+// HEAT phases match that (loop_hz 961-1501). Its COOL phases do not: 479 Hz,
+// i.e. 3x SLOWER while doing strictly LESS work (cc_enabled false -> no DAC
+// write, 3 rows instead of 5). That is backwards, so it is a scheduling
+// problem, not a cost.
+//
+// Prime suspect: the voltage-mode branch below advances cyc_next_log WITHOUT
+// the snap-forward guard the cc branch has. Once behind, `t_rel >=
+// cyc_next_log` stays true forever and it samples EVERY pass instead of on
+// schedule. `log_fires` vs `phase_passes` measures exactly that: on schedule
+// they differ by ~CYCLE_LOG_MS; in runaway they are equal.
+//
+// Build with -D DBG_LOOP_PROFILE=1. Zero cost and zero behaviour change when 0.
+#ifndef DBG_LOOP_PROFILE
+#define DBG_LOOP_PROFILE 0
+#endif
+#if DBG_LOOP_PROFILE
+static uint32_t prof_pump_us = 0, prof_cmd_us = 0, prof_sma_us = 0, prof_hb_us = 0;
+static uint32_t prof_passes = 0, prof_phase_passes = 0, prof_log_fires = 0;
+static uint32_t prof_read_us = 0, prof_emit_us = 0, prof_step_us = 0;
+static uint32_t prof_t0 = 0;
+static uint8_t  prof_branch = 0;          // 1 = cc (heat), 2 = voltage (cool)
+#endif
+
 static bool serviceActuationPhase(uint32_t phase_ms) {
     const uint32_t t_rel = millis() - cyc_phase_t0;
+#if DBG_LOOP_PROFILE
+    prof_phase_passes++;
+    prof_branch = cc_enabled ? 1 : 2;
+#endif
 
     if (cc_enabled) {
         const uint32_t now_us = micros();
@@ -1214,7 +1299,13 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
         // straddle that.
         if ((int32_t)(now_us - cc_next_us) < 0) return t_rel >= phase_ms;
 
+#if DBG_LOOP_PROFILE
+        const uint32_t ps = micros();
+#endif
         const SmaRead s = ccStep(now_us);
+#if DBG_LOOP_PROFILE
+        prof_step_us += micros() - ps;      // readSma + control math + DAC write
+#endif
 
         cc_next_us += CC_PERIOD_US;
         // If a pass ran long (a blocking USB write, a slow sensor drain) the
@@ -1234,7 +1325,14 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
         }
 
         if (t_rel >= cyc_next_log) {        // stream the read ccStep already took
+#if DBG_LOOP_PROFILE
+            prof_log_fires++;
+            const uint32_t pe = micros();
+#endif
             streamSma(s, true);             // ...with the controller state
+#if DBG_LOOP_PROFILE
+            prof_emit_us += micros() - pe;
+#endif
             cyc_next_log += CYCLE_LOG_MS;
             // A control period longer than the log period (e.g. the cc200
             // build: 5 ms control, 1 ms log) would leave the schedule
@@ -1245,8 +1343,28 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
         }
     } else {
         if (t_rel >= cyc_next_log) {        // voltage mode: sample + stream only
+#if DBG_LOOP_PROFILE
+            prof_log_fires++;
+            const uint32_t pr = micros();
+            const SmaRead vs = readSma(ADC_SAMPLES_CYCLE);
+            prof_read_us += micros() - pr;
+            const uint32_t pe2 = micros();
+            streamSma(vs);
+            prof_emit_us += micros() - pe2;
+#else
             streamSma(readSma(ADC_SAMPLES_CYCLE));   // ~1 kHz — average in post
+#endif
             cyc_next_log += CYCLE_LOG_MS;
+            // SAME snap-forward the cc branch above has. Without it, any pass
+            // that overruns CYCLE_LOG_MS leaves this schedule permanently
+            // behind: `t_rel >= cyc_next_log` then stays true FOREVER and the
+            // cool phase samples on EVERY pass instead of on schedule — which
+            // is both a runaway (measured: log_fires == phase_passes, 498/498)
+            // and an irregular time base for the cooling-phase resistance data.
+            // Missing here only because the guard was added to the cc branch
+            // when the CC loop landed and never backported. Bench-confirmed
+            // 2026-07-27.
+            if (cyc_next_log < t_rel) cyc_next_log = t_rel + CYCLE_LOG_MS;
         }
     }
     return t_rel >= phase_ms;
@@ -1943,8 +2061,9 @@ static void pumpSensors() {
         // See streamWrite() for why this is NOT availableForWrite(): it returns
         // 0 always on mbed, so `< 384` was always true and suppressed every
         // [STATUS] frame — including the tx_drop counter that would have made
-        // the drop visible. Self-concealing bug; use connected() instead.
-        if (!Serial) { tx_drop++; } else {
+        // the drop visible. Self-concealing bug. And NOT a bare connected()
+        // either: that costs ~850 us a call. hostUp() is the cached form.
+        if (!hostUp()) { tx_drop++; } else {
         Serial.print("[STATUS] t_ms=");   Serial.print(now);
         Serial.print(" hwm=");            Serial.print(hwm);
         Serial.print(" cap=");            Serial.print(RING_CAPACITY);
@@ -2142,11 +2261,63 @@ void loop() {
     }
     last_loop_us = now_us;
 
+#if DBG_LOOP_PROFILE
+    // Partition the WHOLE pass so nothing can hide: pump + cmd + sma + hb
+    // should sum to loop_us_avg. Whatever is missing is somewhere else.
+    uint32_t pa = micros();
+    pumpSensors();
+    uint32_t pb = micros(); prof_pump_us += pb - pa;
+    String line;
+    if (pollCommand(line)) dispatch(line);
+    uint32_t pc = micros(); prof_cmd_us += pc - pb;
+    serviceSma();
+    uint32_t pd = micros(); prof_sma_us += pd - pc;
+    serviceHeartbeat();
+    prof_hb_us += micros() - pd;
+    prof_passes++;
+
+    if (millis() - prof_t0 >= 1000) {
+        prof_t0 = millis();
+        const uint32_t n = prof_passes ? prof_passes : 1;
+        const uint32_t f = prof_log_fires ? prof_log_fires : 1;
+        Serial.print(F("[PROF] passes=")); Serial.print(prof_passes);
+        Serial.print(F(" branch="));       Serial.print(prof_branch == 1 ? "cc" : (prof_branch == 2 ? "volt" : "-"));
+        Serial.print(F(" phase_passes="));  Serial.print(prof_phase_passes);
+        Serial.print(F(" log_fires="));     Serial.print(prof_log_fires);
+        // per-PASS averages (us)
+        Serial.print(F(" | pump="));        Serial.print(prof_pump_us / n);
+        Serial.print(F(" cmd="));           Serial.print(prof_cmd_us / n);
+        Serial.print(F(" sma="));           Serial.print(prof_sma_us / n);
+        Serial.print(F(" hb="));            Serial.print(prof_hb_us / n);
+        Serial.print(F(" sum="));           Serial.print((prof_pump_us + prof_cmd_us + prof_sma_us + prof_hb_us) / n);
+        // per-LOG-FIRE averages (us)
+        Serial.print(F(" | step="));        Serial.print(prof_step_us / f);
+        Serial.print(F(" read="));          Serial.print(prof_read_us / f);
+        Serial.print(F(" emit="));          Serial.print(prof_emit_us / f);
+        // THE SUSPECT: per-CALL cost of the connected() guard vs Serial.write
+        {
+            const uint32_t cn = prof_conn_n  ? prof_conn_n  : 1;
+            const uint32_t wn = prof_write_n ? prof_write_n : 1;
+            Serial.print(F(" | conn_n="));   Serial.print(prof_conn_n);
+            Serial.print(F(" conn_us="));    Serial.print(prof_conn_us / cn);
+            Serial.print(F(" write_n="));    Serial.print(prof_write_n);
+            Serial.print(F(" write_us="));   Serial.print(prof_write_us / wn);
+            Serial.print(F(" conn_tot_ms=")); Serial.print(prof_conn_us / 1000);
+            Serial.print(F(" write_tot_ms=")); Serial.print(prof_write_us / 1000);
+        }
+        Serial.println();
+        prof_pump_us = prof_cmd_us = prof_sma_us = prof_hb_us = 0;
+        prof_step_us = prof_read_us = prof_emit_us = 0;
+        prof_passes = prof_phase_passes = prof_log_fires = 0;
+        prof_conn_us = prof_conn_n = prof_write_us = prof_write_n = 0;
+    }
+#else
     pumpSensors();                  // keep the sensor stream flowing (every pass)
     String line;
     if (pollCommand(line)) dispatch(line);
     serviceSma();                   // advance the active SMA op by one step
     serviceHeartbeat();             // safe-stop if the PC has gone silent
+#endif
 }
 
 

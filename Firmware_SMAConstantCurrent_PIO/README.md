@@ -182,3 +182,122 @@ wrong" from "the rate is wrong") · `portenta_m7_legacy100` · `portenta_m7_udp`
 
 Whether CC eventually graduates into the production image or stays a separate
 build is an open decision — see STATUS.
+
+---
+
+## Bring-up log — 2026-07-27 (first time on hardware)
+
+This project had never been flashed. It was, in one session, flashed, found
+completely mute, debugged, and brought to a working closed-loop hold. Two of the
+three bugs were **self-inflicted and self-concealing**, so the sequence is worth
+recording: the wrong diagnosis was reached twice by reasoning from mechanism
+instead of measuring, and each time the measurement contradicted it.
+
+### Symptom 1 — the entire sample stream was dead
+
+`info` and `read` replied normally; **no** `src=1..7` rows and **no** `[STATUS]`
+frames ever appeared. It looked exactly like "the ADCs are muted."
+
+**Suspected, in order:** M4 crashed; the ADS1263 not powered (the documented
+`ID=0x00`-after-upload trap); the SRAM4 ring layout diverging from the parent.
+
+**All wrong.** M4 was alive and converting on *both* ADCs the whole time — the
+proof was the periodic `[ADC1] STATUS` line arriving via `DRV_LOG`→RPC→M7, and
+STATUS bit 7 (ADC2-data-ready) toggling in the `0x49`/`0xC9` values. A
+comments-only diff of `sample_ring.h` against the parent ruled out the ring.
+
+**Actual cause:** commit d574b34 guarded `streamWrite()` and the `[STATUS]` frame
+with `Serial.availableForWrite()`. mbed's `USBSerial` never overrides that
+method, so it falls through to `cores/arduino/api/Print.h` — `virtual int
+availableForWrite() { return 0; }` — and returns **0 unconditionally**. Both
+guards were therefore always true and dropped 100% of both paths, while the
+unguarded `Serial.print` command replies kept working. The bug also hid its own
+evidence: `tx_drop` is published *inside* the `[STATUS]` frame it suppressed.
+
+**Diagnostic that cracked it:** `Firmware_SMASensorHub_PIO` has zero occurrences
+of `availableForWrite` / `tx_drop`. Diffing the fork against the parent localized
+it in one grep. *When a fork misbehaves and the parent does not, diff them first.*
+
+Fixed in **fd1478b** by gating on `connected()` instead.
+
+### Symptom 2 — the M7 loop ran at ~479 Hz (the fix above caused it)
+
+With the stream alive, `cccycle` showed `loop_us_avg = 2085 µs`. Suspicious
+because CC uses `ADC_SAMPLES_CYCLE=4` — *less* averaging than
+`Firmware_SMARateTest_PIO`, which sustains 957 Hz at n=16.
+
+**Suspected, in order:** USB write latency (~1 ms per CDC write, from the Round-1
+batching era); the per-tick MCP4728 I²C write; `setDACraw`'s `delay(2)`.
+
+**All three refuted by measurement**, in the rate-test project so this one stayed
+untouched (rungs 8a/8b, `dac_us` instrumentation):
+
+| suspect | measured | verdict |
+|---|---|---|
+| `emit` (batched USB write) | 59 µs | not it — 3.5% of budget |
+| per-tick DAC write @400 kHz | 365 µs | not it — still hit 1 kHz with it |
+| per-tick DAC write @100 kHz | 364 µs | **identical** — not bus-bound either |
+| `setDACraw` settle delay | n/a | CC's control path already passes `settle=false` |
+
+**Actual cause:** `Serial.connected()` costs **~850 µs per call** on this core.
+`fd1478b` called it once per `streamWrite`, and `pumpSensors()` writes roughly
+once per pass, so it consumed **82–96% of all CPU time** (`conn_tot` 818–960 ms
+of every second). The loop rate was literally `1 / connected()`.
+
+Note the trap: hoisting the check to "once per loop pass" does **not** help — at
+~1000 passes/s that is still ~1000 calls/s. It must be sampled on a **time**
+basis. `hostUp()` caches it on a 250 ms timer: 4 calls/s ≈ 0.34% overhead,
+with the same dead-host protection `fd1478b` was written for.
+
+### Symptom 3 — cooling ran 3× slower than heating while doing less work
+
+Cool phases sat at 479 Hz where heat phases reached 961–1501 Hz, despite cool
+doing strictly less (no control math, no DAC write, 3 stream rows instead of 5).
+Doing less work *and* taking longer is a scheduling bug, not a cost.
+
+**Cause:** the voltage-mode branch of `serviceActuationPhase()` advanced
+`cyc_next_log += CYCLE_LOG_MS` **without** the snap-forward guard the CC branch
+has. Once a pass overran the 1 ms log period (which Symptom 2 guaranteed),
+`cyc_next_log` fell permanently behind, `t_rel >= cyc_next_log` stayed true
+forever, and the cool phase sampled on *every* pass. Confirmed by instrumenting
+`log_fires` against `phase_passes`: **498 / 498** in cool, 38 / 942 in heat.
+
+The guard's own comment on the CC branch describes this exact failure mode — it
+was simply never backported to the `else` branch. The two bugs compounded:
+Symptom 2 made passes exceed 1 ms, which triggered Symptom 3, which added a
+second `connected()` call per pass, which halved the rate again.
+
+### Measured before / after
+
+| | before | after |
+|---|---|---|
+| loop, idle | 1,037 passes/s (990 µs) | **35,155 passes/s (20 µs)** |
+| loop, in-cycle | 498 passes/s (2,068 µs) | **13,759–14,505 passes/s (63 µs)** |
+| `connected()` time per second | 948 ms | **2 ms** |
+| cool-phase `log_fires`/`phase_passes` | 498 / 498 (runaway) | **643 / 13,759 (scheduled)** |
+| `src=3/4/5` capture rate | 317 Hz | **431 Hz** |
+
+`src=7` (`cc_R_est`) went from never appearing to streaming — the runaway had
+been starving the bootstrap.
+
+### The CC loop itself was never the problem
+
+Once the transport was fixed, `cc 200` converged to **200.8 / 201.2 mA** against
+a 200 mA target (0.6%) by the third pulse, with `R_est` adapting 2.92 → 3.86 Ω
+across cycles and persisting between them exactly as designed. `ccStep` measured
+**593 µs**, against 585 µs predicted from the rate-test project's independent
+`readSma` (220 µs) + `dac` (365 µs) — an 8 µs agreement.
+
+### Still open after this session
+
+- **`Serial.write()` now costs ~300 µs in-cycle** (11 µs idle) — real USB-CDC
+  back-pressure at ~160 KB/s. This is the current limit on the SMA sample rate
+  (~650 Hz against a 1000 Hz nominal), and the first time the transport has
+  genuinely been the bottleneck. See STATUS for the UDP decision.
+- **ADC2 checksum failures** — appeared while the LDO was powered, cleared on a
+  reflash. Cause unknown; it silently zeroes the load-cell channel.
+- **The LDO slope** — an open-circuit sweep measured
+  `V_ldo = 5.187·(code/4095) + 0.5048` against the 4.7 V design span. The
+  intercept matches the respin to 5 mV; the slope does not. Needs a DMM to say
+  whether the error is in the LDO or the A0 sense chain, since both were measured
+  through A0 and would agree with each other either way.

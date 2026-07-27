@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| **Status** | **To-Test** — all five envs build clean under `-Wall -Wextra` with no warnings from `src/`; **never flashed**. The control law is a transcription of a design validated on an Arduino Uno driving *this same driver board*, so the algorithm is not speculative — but nothing here has run on the H7. Flips to **WIP/Stable** after the bring-up ladder below. |
+| **Status** | **WIP** — **first flashed and run on hardware 2026-07-27.** The closed-loop hold works: `cc 200` converged to 200.8/201.2 mA (0.6% of target) by the third pulse, with `R_est` adapting across cycles as designed. Getting there took three transport/scheduling fixes, two of them self-inflicted — see the **Bring-up log** in [README.md](README.md). Not yet Stable: the absolute current scale is still uncalibrated and steps 5–8 of the ladder below are unrun. |
 | **Role** | Development fork of `Firmware_SMASensorHub_PIO` adding a **closed-loop constant-current** controller to the M7 SMA drive path. Everything else is carried over unchanged, so this image is a strict superset of the parent's behaviour. |
 | **Supersedes** | Nothing. `Firmware_SMASensorHub_PIO/` remains the production / rollback image and must not be modified for CC work. |
 | **Owner** | Yilin |
@@ -69,7 +69,24 @@ Any `src=3` / `src=5` data captured with an earlier build is wrong on both count
 
 ## Module TODOs
 
-- [ ] Walk the bring-up ladder above (nothing here has been on hardware).
+- [x] ~~Steps 1–3 of the bring-up ladder~~ — done 2026-07-27. Boot, MCP4728,
+      bootstrap and hold all pass; `cc 200` holds within 0.6%.
+- [ ] **Decide on UDP.** `Serial.write()` now measures ~300 µs in-cycle (11 µs
+      idle) — genuine USB-CDC back-pressure at ~160 KB/s, and the current cap on
+      the SMA rate (~650 Hz vs the 1000 Hz nominal). This is the FIRST time the
+      transport has actually been the bottleneck; earlier suspicions of it were
+      wrong (see README bring-up log). Cheaper things to try first: merge the
+      `pumpSensors` and `streamSma` writes into one per pass (halves the write
+      count), and confirm 650 Hz is actually insufficient for the science. The
+      `portenta_m7_udp` env exists and has never been flashed.
+- [ ] **Chase the ADC2 checksum failures** — 100% of ADC2 reads failed while the
+      LDO was powered, `rate2=0`, ~512 crc_err/s; cleared after a reflash. Cause
+      unknown. Highest-risk open item: it silently zeroes the force channel.
+- [ ] Steps 4–8 of the bring-up ladder (`cc_hz`, accuracy vs DMM, step response,
+      disturbance test, no-regression).
+- [ ] Decide whether to keep the `DBG_LOOP_PROFILE` / `portenta_m7_prof`
+      instrumentation. It found two bugs in one session; it is off by default and
+      the normal build is behaviourally identical.
 - [ ] **Confirm the 2026-07-24 sense-path correction on the bench** — with a known
       resistor as the load, check `read`'s `V_sma`/`I`/`R` against a DMM. This is
       the change most likely to be still wrong, since it came from the schematic
