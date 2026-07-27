@@ -675,13 +675,24 @@ static inline void streamWrite(const uint8_t* buf, size_t len) {
     // USB-CDC: NEVER block. When the host stops reading (console closed), the
     // CDC TX buffer fills; a blocking Serial.write would stall the cooperative
     // M7 loop and FREEZE the state machine — leaving the SMA energized at its
-    // last DAC code until a manual reset. Drop the chunk instead. The heartbeat
-    // watchdog then safe-stops the coil, and the host 'force pull' wake
-    // (operator_ccbringup.py --wake) drains whatever is buffered to revive the
-    // stream without the reset button. availableForWrite() is the free space in
-    // the CDC send buffer; if it can't hold the whole chunk we skip it, so the
-    // subsequent write() is guaranteed not to block.
-    if ((size_t)Serial.availableForWrite() < len) { tx_drop += len; return; }
+    // last DAC code until a manual reset. Drop the chunk instead; the heartbeat
+    // watchdog then safe-stops the coil.
+    //
+    // DO NOT use Serial.availableForWrite() here. mbed's USBSerial does NOT
+    // override it, so it falls through to the base virtual in
+    // cores/arduino/api/Print.h ("default to zero, meaning a single write may
+    // block") and returns 0 UNCONDITIONALLY on this core. The original guard
+    // `availableForWrite() < len` was therefore always true and silently
+    // discarded 100% of the sample stream — while unguarded Serial.print
+    // command replies (info/read) still worked, which made it look like the
+    // ADCs were muted. Bench-diagnosed 2026-07-27.
+    //
+    // operator bool() -> connected() is the real host-presence signal.
+    // NOTE: connected() tracks the DTR / terminal state, so this depends on the
+    // host asserting DTR. Every reader in this repo does (pyserial defaults
+    // _dtr_state = True and none of them override it) — but a host that opens
+    // with dtr=False will see a silent stream, so change that at your peril.
+    if (!Serial) { tx_drop += len; return; }
     Serial.write(buf, len);
 }
 
@@ -1916,7 +1927,12 @@ static void pumpSensors() {
         // the prints below are guaranteed room. UDP mode still emits [STATUS] on
         // serial, so this guard applies there too. Counters keep accumulating
         // when skipped — no data window is silently zeroed.
-        if ((size_t)Serial.availableForWrite() < 384) { tx_drop++; } else {
+        //
+        // See streamWrite() for why this is NOT availableForWrite(): it returns
+        // 0 always on mbed, so `< 384` was always true and suppressed every
+        // [STATUS] frame — including the tx_drop counter that would have made
+        // the drop visible. Self-concealing bug; use connected() instead.
+        if (!Serial) { tx_drop++; } else {
         Serial.print("[STATUS] t_ms=");   Serial.print(now);
         Serial.print(" hwm=");            Serial.print(hwm);
         Serial.print(" cap=");            Serial.print(RING_CAPACITY);
