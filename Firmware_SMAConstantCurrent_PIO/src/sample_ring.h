@@ -84,7 +84,9 @@
 #define SAMPLE_SRC_LOAD      2
 #define SAMPLE_SRC_SMA_V     3
 #define SAMPLE_SRC_SMA_I     4
-#define SAMPLE_SRC_SMA_R     5
+#define SAMPLE_SRC_SMA_R     5   // RETIRED from the stream 2026-07-27 (derived
+                                 //   = src3/src4); ID stays reserved, host
+                                 //   recomputes it. Do NOT reuse this value.
 #define SAMPLE_SRC_CC_U      6   // CC fork: command voltage u [V]; raw = DAC code
 #define SAMPLE_SRC_CC_R      7   // CC fork: adaptive plant-R estimate [ohm]
 #define SAMPLE_SRC_MAX       7   // largest src index that fits seq_per_src[]

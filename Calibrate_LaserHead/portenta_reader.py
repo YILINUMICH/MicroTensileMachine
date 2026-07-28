@@ -156,6 +156,54 @@ _TSV_4COL = re.compile(rf"^\s*(\d+)\s+([1-7])\s+(-?\d+)\s+({_FLOAT_RE}){_TAIL_RE
 _CSV_PLAN = re.compile(rf"^\s*(\d+)\s*,\s*({_FLOAT_RE})\s*$")
 
 
+# ---------------------------------------------------------------------------
+# src=5 (sma_r) — retired from the wire 2026-07-27, rebuilt here
+# ---------------------------------------------------------------------------
+import dataclasses as _dc
+
+
+class SmaRDeriver:
+    """Rebuild the retired src=5 (`sma_r`) channel from src=3 / src=4.
+
+    The firmware stopped streaming `sma_r` because it was *exactly*
+    `sma_v / sma_i` on the SAME timestamp — zero information for ~22% of the
+    payload — and the USB-CDC link is bandwidth-bound at the rates we now run
+    (batching writes 4x changed total write time not at all). Re-deriving it
+    here keeps every existing consumer working unchanged.
+
+    Pairing is EXACT, not a heuristic: `streamSma()` emits src=3 and src=4
+    back-to-back stamped with one `micros()` read, so their `timestamp_us`
+    are identical by construction.
+
+    Guarded on a current floor because V/I is ill-conditioned as I -> 0 — the
+    firmware's old `I_FLOOR_A = 1e-3` was far too permissive and produced
+    nonsense like R = 75-94 ohm from pure sense-offset current with the MOSFET
+    open. Prefer computing R as a ratio of window MEANS for analysis; this
+    per-sample channel exists for continuity and live display.
+    """
+
+    def __init__(self, i_floor_A: float = 5e-3, cache: int = 64):
+        self.i_floor_A = i_floor_A
+        self._cache    = cache
+        self._v: "dict[int, float]" = {}
+
+    def feed(self, s: "Sample") -> "Optional[Sample]":
+        """Feed each parsed sample; returns a synthetic src=5 Sample or None."""
+        if s.adc_source == SRC_SMA_V:
+            self._v[s.timestamp_us] = s.voltage_V
+            if len(self._v) > self._cache:          # bound it; drop oldest
+                for k in sorted(self._v)[: len(self._v) - self._cache // 2]:
+                    del self._v[k]
+            return None
+        if s.adc_source == SRC_SMA_I:
+            v = self._v.pop(s.timestamp_us, None)
+            if v is None or abs(s.voltage_V) < self.i_floor_A:
+                return None
+            return _dc.replace(s, adc_source=SRC_SMA_R,
+                               voltage_V=v / s.voltage_V, raw_code=0)
+        return None
+
+
 def parse_line(line: str,
                adc_source: Optional[int] = 2) -> Optional[Sample]:
     """
@@ -278,6 +326,9 @@ class UdpReader:
         self.rx_buffer_bytes = rx_buffer_bytes
         self.recv_timeout_s = recv_timeout_s
         self._sock: Optional[socket.socket] = None
+        # src=5 is no longer on the wire — rebuild it from src=3/4. See SmaRDeriver.
+        self._smar    = SmaRDeriver()
+        self._pending: "list[Sample]" = []
         self._lines: List[bytes] = []       # parsed-but-not-yet-returned lines
         self._buf = b""                     # partial trailing line across dgrams
         self._next_seq: dict = {}           # per-src expected next seq
@@ -318,6 +369,8 @@ class UdpReader:
         """Return ('sample', Sample) or None. One event per call (matching
         PortentaReader.poll_event); recvs a fresh datagram only when the parsed-
         line buffer is empty. None on recv timeout."""
+        if self._pending:                       # rebuilt src=5 from last call
+            return ("sample", self._pending.pop(0))
         while True:
             if self._lines:
                 raw = self._lines.pop(0)
@@ -330,6 +383,9 @@ class UdpReader:
                 if s is not None:
                     self._track_loss(s)
                     self.n_samples += 1
+                    derived = self._smar.feed(s)
+                    if derived is not None:
+                        self._pending.append(derived)   # emitted next call
                     return ("sample", s)
                 continue
             if self._sock is None:
@@ -398,6 +454,9 @@ class PortentaReader:
         self._ser: Optional[serial.Serial] = None
         self._write_lock = threading.Lock()
         self._rx_buf = b""              # for poll_status_nb() line reassembly
+        # src=5 is no longer on the wire — rebuild it from src=3/4. See SmaRDeriver.
+        self._smar    = SmaRDeriver()
+        self._pending: "list[Sample]" = []
         self.logger = logging.getLogger("PortentaReader")
 
     def poll_status_nb(self) -> "list[tuple[str, dict]]":
@@ -582,6 +641,8 @@ class PortentaReader:
         caller interleave its own work (e.g. transmitting queued commands on the
         same thread) between reads instead of being trapped in iter_events()'s
         internal loop — the key to keeping all port I/O single-threaded."""
+        if self._pending:                       # rebuilt src=5 from last call
+            return ("sample", self._pending.pop(0))
         line = self._readline()
         if not line:
             return None
@@ -590,6 +651,9 @@ class PortentaReader:
             return ("status", st)
         s = parse_line(line, adc_source=self.adc_source)
         if s is not None:
+            derived = self._smar.feed(s)
+            if derived is not None:
+                self._pending.append(derived)       # emitted next call
             return ("sample", s)
         return None
 

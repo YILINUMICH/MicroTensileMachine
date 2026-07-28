@@ -721,7 +721,25 @@ static inline bool hostUp() {
     return host_link_up;
 }
 
-static inline void streamWrite(const uint8_t* buf, size_t len) {
+// ── ONE USB write per loop pass ───────────────────────────────────────────
+// USB-CDC penalises the NUMBER of writes far more than the bytes in them. The
+// loop used to emit two per pass — one from pumpSensors() for the src=1/2 batch
+// and one from smaFlush() for src=3..7 — plus one per byte for the RPC
+// passthrough. Measured 2026-07-27: Serial.write costs 11 us idle but ~300 us
+// in-cycle (real back-pressure at ~160 KB/s), and write_n ran ~1300/s for only
+// ~650 samples/s, which capped the SMA stream at ~650 Hz against a 1 kHz
+// nominal. At a 100 ms heat window that is 65 points instead of 100.
+//
+// So streamWrite() now ACCUMULATES and loop() flushes ONCE per pass. Callers
+// are unchanged — they still "write" whole lines; only the emission is
+// deferred. Flush thresholds keep every chunk under the Ethernet MTU so the
+// UDP transport still gets whole lines in one datagram.
+//
+// txEmit() is the real emitter; nothing else should call it.
+static char   tx_buf[8192];
+static size_t tx_off = 0;
+
+static inline void txEmit(const uint8_t* buf, size_t len) {
     if (len == 0) return;
 #if H7_TRANSPORT_UDP
     if (udp_on) {
@@ -761,6 +779,44 @@ static inline void streamWrite(const uint8_t* buf, size_t len) {
 #else
     Serial.write(buf, len);
 #endif
+}
+
+// Emit whatever has accumulated. Forced before the [STATUS] frame (which prints
+// straight to Serial, so it would otherwise jump ahead of rows generated before
+// it); otherwise reached through txService() below.
+static uint32_t tx_last_us = 0;
+
+static inline void txFlush() {
+    if (tx_off == 0) return;
+    txEmit((const uint8_t*)tx_buf, tx_off);
+    tx_off     = 0;
+    tx_last_us = micros();
+}
+
+// TRIED AND REVERTED (2026-07-27): flushing on a size/age threshold instead of
+// once per pass. It worked mechanically — write_n fell 1,255/s -> ~330/s — but
+// each write then took 4x longer (314 us -> ~1,150 us) and write_tot was
+// UNCHANGED at ~390 ms/s. That is the discriminating result: at this data rate
+// USB-CDC is BANDWIDTH-bound, not per-call bound, so batching buys nothing and
+// the longer blocking write is strictly worse for control-loop jitter (1.2 ms
+// vs 0.3 ms worst-case stall on a 1 kHz tick). Do not reintroduce it without
+// first re-checking whether the link is still bytes-bound.
+//
+// The lesson generalises: batching fixed 15 -> 99 Hz and cut emit 350 -> 51 us
+// because those were CALL-count problems. This one is not.
+
+// Append whole lines. Flushes early only when the buffer would overflow or the
+// chunk would exceed the MTU-safe size, so a normal pass emits exactly once.
+static inline void streamWrite(const uint8_t* buf, size_t len) {
+    if (len == 0) return;
+    if (len >= sizeof(tx_buf)) {          // pathological: emit directly
+        txFlush();
+        txEmit(buf, len);
+        return;
+    }
+    if (tx_off + len > 1400 || tx_off + len > sizeof(tx_buf)) txFlush();
+    memcpy(tx_buf + tx_off, buf, len);
+    tx_off += len;
 }
 
 static char sma_batch[512];
@@ -831,7 +887,17 @@ static void streamSma(const SmaRead& s, bool with_cc = false) {
     // firmware's own R on src=5.
     smaAppend(SAMPLE_SRC_SMA_V, (int32_t)currentCode, s.v_sma, hw, ms);
     smaAppend(SAMPLE_SRC_SMA_I, 0,                    s.i,     hw, ms);
-    if (!isnan(s.r)) smaAppend(SAMPLE_SRC_SMA_R, 0,   s.r,     hw, ms);
+    // src=5 (sma_r) RETIRED 2026-07-27 — it was exactly s.v_sma / s.i on the
+    // SAME timestamp, i.e. zero information, but ~22% of the payload. USB-CDC
+    // measured bandwidth-bound at this rate (batching writes changed nothing),
+    // so bytes are the budget and a fully derived channel cannot justify them.
+    //
+    // The host recomputes it in Calibrate_LaserHead/portenta_reader.py, and
+    // recomputes it BETTER: as a ratio of window means rather than the mean of
+    // per-sample ratios, which is the correct estimator when I fluctuates.
+    //
+    // NOTE this is a stream change, not a semantic one: src=5 remains reserved
+    // in sample_ring.h and SAMPLE_SRC_SMA_R still exists. Do not reuse the ID.
     if (with_cc) {
         smaAppend(SAMPLE_SRC_CC_U, (int32_t)currentCode, cc_u_cmd, hw, ms);
         // R_est is meaningless before bootstrap latches it; omit rather than
@@ -1959,9 +2025,23 @@ static void pumpSensors() {
     //    the periodic [ADC1] PGA alarm, delivered in chunks across passes) would
     //    otherwise concatenate with the first sensor line and the host parser
     //    would drop that line.
+    // Batched: this used to Serial.write() ONE BYTE AT A TIME, which is the same
+    // many-small-writes bug as everywhere else in this path. Goes through
+    // streamWrite so it shares the single per-pass flush and keeps its ordering
+    // relative to the sensor rows below.
     int rpc_last = -1;
-    while (RPC.available()) { int c = RPC.read(); Serial.write((uint8_t)c); rpc_last = c; }
-    if (rpc_last >= 0 && rpc_last != '\n') Serial.write('\n');
+    {
+        char   rbuf[128];
+        size_t rn = 0;
+        while (RPC.available()) {
+            const int c = RPC.read();
+            rbuf[rn++] = (char)c;
+            rpc_last   = c;
+            if (rn == sizeof(rbuf)) { streamWrite((const uint8_t*)rbuf, rn); rn = 0; }
+        }
+        if (rpc_last >= 0 && rpc_last != '\n' && rn < sizeof(rbuf)) rbuf[rn++] = '\n';
+        if (rn) streamWrite((const uint8_t*)rbuf, rn);
+    }
 
     // 2. ADC samples from the shared ring buffer (untagged sensor TSV).
     //    BATCHED WRITE — each small USB-CDC Serial.print() blocks ~1 ms on the
@@ -2017,6 +2097,9 @@ static void pumpSensors() {
     // 3. Periodic [STATUS] telemetry frame (every 1 s).
     uint32_t now = millis();
     if (now - last_status_ms >= STATUS_PERIOD_MS) {
+        // [STATUS] prints straight to Serial, so drain the accumulated sample
+        // rows first — otherwise it jumps ahead of rows generated before it.
+        txFlush();
         uint32_t dt_ms = now - last_status_ms;
         last_status_ms = now;
 
@@ -2273,6 +2356,7 @@ void loop() {
     serviceSma();
     uint32_t pd = micros(); prof_sma_us += pd - pc;
     serviceHeartbeat();
+    txFlush();                      // ONE USB write per pass, for everything
     prof_hb_us += micros() - pd;
     prof_passes++;
 
@@ -2317,6 +2401,7 @@ void loop() {
     if (pollCommand(line)) dispatch(line);
     serviceSma();                   // advance the active SMA op by one step
     serviceHeartbeat();             // safe-stop if the PC has gone silent
+    txFlush();                      // ONE USB write per pass, for everything
 #endif
 }
 

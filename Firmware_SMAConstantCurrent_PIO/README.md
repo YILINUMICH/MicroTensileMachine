@@ -290,10 +290,33 @@ across cycles and persisting between them exactly as designed. `ccStep` measured
 
 ### Still open after this session
 
-- **`Serial.write()` now costs ~300 µs in-cycle** (11 µs idle) — real USB-CDC
-  back-pressure at ~160 KB/s. This is the current limit on the SMA sample rate
-  (~650 Hz against a 1000 Hz nominal), and the first time the transport has
-  genuinely been the bottleneck. See STATUS for the UDP decision.
+- **The link is bandwidth-bound, and the fix was bytes, not batching.** After
+  the loop was freed, `Serial.write()` cost ~300 µs in-cycle (11 µs idle) and
+  capped the SMA stream at ~650 Hz. Two things were tried:
+
+  | change | `write_n` | `write_us` | `write_tot` | rate |
+  |---|---|---|---|---|
+  | one write per pass (merge) | 1,255/s | 314 µs | 394 ms/s | 650 Hz |
+  | + flush on size/age (2 ms) | **330/s** | **1,150 µs** | **394 ms/s** | 650 Hz |
+  | + drop src=5 (−22% rows) | 1,670/s | **95 µs** | **177 ms/s** | **850 Hz** |
+
+  The middle row is the discriminating result: batching 4× fewer writes made
+  each 4× longer for **exactly zero** net change. The cost tracks BYTES, not
+  calls — so the threshold was reverted (it only worsened worst-case jitter,
+  1.2 ms vs 0.3 ms, on a 1 kHz control tick). Dropping a channel cut write time
+  55% for a 22% row reduction: non-linear, because the link was on its
+  saturation knee.
+
+  Note this inverts the lesson that fixed 15→99 Hz and `emit` 350→51 µs. Those
+  were *call-count* problems. **Check which regime you are in before batching.**
+
+- **~850 Hz is near the millisecond scheduler's ceiling**, not the link's. The
+  loop now has ~13% headroom, so the missing 150 Hz is `CYCLE_LOG_MS` being a
+  whole-millisecond schedule on a cooperative loop — occasional long passes skip
+  a tick and the snap-forward drops it. `Firmware_SMARateTest_PIO` already
+  documents this: *"a true 1 kHz is exactly at the limit of the ms scheduler and
+  nothing finer is reachable without moving the schedule to micros()."* That is
+  the change needed for a full 100 points per 100 ms heat window; we are at 85.
 - **ADC2 checksum failures** — appeared while the LDO was powered, cleared on a
   reflash. Cause unknown; it silently zeroes the load-cell channel.
 - **The LDO slope** — an open-circuit sweep measured
