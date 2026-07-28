@@ -46,7 +46,18 @@ h7:
   # go out the USB port it isn't reading). Both firmware projects carry a
   # `portenta_m7_udp` env, including the CC fork:
   #   pio run -e portenta_m7_udp -t upload   # then POWER-CYCLE USB + EVM
-  transport: udp # usb | udp
+  # 2026-07-28: set back to `usb` — the board is running the plain `portenta_m7`
+  # image, so it streams over USB and `udp` hit the trap above (recv=0, h7.csv
+  # empty; session console_20260728_112825). Verified by reading COM8 directly:
+  # 987 lines/s of src=1/2. Worse than logging nothing: in `udp` the console
+  # holds COM8 open but never DRAINS it, so the M7 blocks in Serial.write and
+  # wedges — no boot banner, then every command write fails ERROR_BAD_COMMAND
+  # ("The device does not recognize the command"), which needs a power cycle.
+  # Before switching back to `udp`, BOTH must be true: (1) `portenta_m7_udp` is
+  # actually flashed, and (2) this host really has the `pc_ip` below on a NIC
+  # linked to the H7 — on 2026-07-28 it did not (Ethernet was campus DHCP
+  # 141.212.82.60; nothing held 169.254.245.100).
+  transport: usb # usb | udp
   udp_port: 7777 # host bind port for the UDP stream
   pc_ip: 169.254.245.100 # host IP the H7 streams to (sent via netcfg)
 

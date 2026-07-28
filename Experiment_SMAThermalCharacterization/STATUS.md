@@ -40,6 +40,28 @@
   `frames.csv` (`frame_idx,host_ts,monotonic,cycle,mode,rel_path,laser_mm`) is
   the alignment key against `h7.csv`/`stage.csv`. Config: `camera:` block;
   requires `opencv-python` (import is guarded — absent → camera disabled).
+- **"Can't reach H7" was a TRANSPORT MISMATCH, not a dead board (2026-07-28).**
+  `console_20260728_112825`: `health H7 FAIL (0)`, empty `h7.csv`, `UDP reader:
+  recv=0 samples=0 lost=0`, then **425** consecutive
+  `H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device
+  does not recognize the command.', 22))`. The H7 was streaming the whole time —
+  reading COM8 directly gave **987 lines/s** of src=1 (laser, 2.502 V) / src=2
+  (load). `config.yaml` had `transport: udp` while the board runs the plain
+  **`portenta_m7`** image, which streams over USB — the trap already documented
+  in the config. Set back to **`transport: usb`**.
+  **Two things this taught us beyond the trap comment:**
+  (1) The failure is *worse than logging nothing*. In `udp` the console holds
+  COM8 open but never **drains** it, so the M7 blocks in `Serial.write` and
+  **wedges**: no boot banner, then every command write fails
+  `ERROR_BAD_COMMAND`. Reproduced deliberately (hold the port open unread ~30 s)
+  — the board then emits zero bytes and answers nothing; DTR toggle, RTS+DTR,
+  and a serial break all fail to recover it. **Only a power cycle (USB + EVM)
+  brings it back.**
+  (2) UDP could not have worked even with the right firmware: `pc_ip:
+  169.254.245.100` matched **no interface on this host** (Ethernet was campus
+  DHCP `141.212.82.60`; the only 169.254.x addresses were on disconnected
+  Wi-Fi/Bluetooth adapters). Before going back to `udp`, verify BOTH the flashed
+  env AND that a linked NIC actually holds `pc_ip`.
 - **Camera wouldn't start — a STRANDED subprocess owned it (2026-07-28, FIXED).**
   Symptom: `open failed: no capturable camera found (probed indices [0,1,2,3])`
   on every launch; one session (`console_20260728_110133`) silently recorded
