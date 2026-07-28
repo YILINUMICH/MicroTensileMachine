@@ -4,7 +4,7 @@
 answer one question: why does the SMA V/I/R stream capture only ~2 points during
 a 100 ms fire, and how do we fix it?
 
-**Round 1 bottom line (2026-07-09): SOLVED (15 → 99 Hz).** Round 2 (2026-07-13, below) pushes toward 1 kHz — built, not yet bench-run.
+**Round 1 bottom line (2026-07-09): SOLVED (15 → 99 Hz).** Round 2 (2026-07-13) pushed toward 1 kHz. **Round 3 (2026-07-27) re-ran the whole ladder and settled it: `portenta_m7_rate1k_n4` gives 957 Hz at 12 % ADC duty** — fast *and* below the accuracy knee. Rung 8 additionally measured a per-tick DAC write at 365 µs (and found it does not scale with I²C clock).
 
 **Original round-1 finding:** The bottleneck was NOT the ADC — it was the
 M7 bridge loop doing many tiny USB-CDC writes. A batched `Serial.write()` took
@@ -78,7 +78,14 @@ validated). Both cores build clean.
 
 ---
 
-# ROUND 2 (2026-07-13) — push toward 1 kHz. **BUILT, NOT YET BENCH-RUN.**
+# ROUND 2 (2026-07-13) — push toward 1 kHz.
+
+> **STALE HEADER, CORRECTED 2026-07-27.** This section long said *"BUILT, NOT YET
+> BENCH-RUN — every number below is a prediction."* That was already untrue:
+> `platformio.ini`'s rungs 6-7 block documents runs 0-5 as **done**, hitting
+> 962 Hz and failing the accuracy gate with duty correlating +1.000 against V
+> error. Read the `.ini` alongside this file; where they disagree, the `.ini` is
+> newer. Round 3 below re-ran the ladder and adds rung 8.
 
 Round 1 raised the SMA stream to 99 Hz and left `CYCLE_LOG_MS` as the ceiling.
 Round 2 attacks the three costs that gate it above that. **All six envs compile
@@ -173,3 +180,55 @@ python rate_probe.py --port COM8         # drive + capture + summarize
 ```
 Rig gotchas inherited from SensorHub: power-cycle USB+EVM after every upload
 (else ADS1263 boots `ID=0x00`); COM8 = H7, COM5 = Zaber.
+
+---
+
+# ROUND 3 (2026-07-27) — ladder re-run, plus rung 8 (per-tick DAC write)
+
+Run with `rate_probe.py --vhigh 1.0 --thigh 100 --tidle 400 --cycles 8`
+(gentler drive than the 3.0 V default: the respun LDO now outputs ~3.3 V for a
+commanded 3.0 V, i.e. ~845 mA, and rate measurement does not need it).
+
+| env | ADC_SAMPLES_CYCLE | readSma | dac_us | emit | cadence | rate | ADC duty |
+|---|---|---|---|---|---|---|---|
+| `portenta_m7_rate1k`     | 64 | 1.590 ms | -- | 0.059 ms | 1.723 ms | 580 Hz | 86% |
+| `portenta_m7_rate1k_n16` | 16 | 0.494 ms | -- | 0.059 ms | 1.037 ms | **964 Hz** | 38% |
+| `portenta_m7_rate1k_n4`  | 4  | 0.223 ms | -- | 0.059 ms | 1.045 ms | **957 Hz** | **12%** |
+| `portenta_m7_rate1k_n4_dac`    | 4 | 0.223 ms | **365 us** | 0.060 ms | 1.040 ms | ~960 Hz | 12% |
+| `portenta_m7_rate1k_n4_dac100` | 4 | 0.222 ms | **364 us** | 0.060 ms | 1.040 ms | ~960 Hz | 12% |
+
+`readSma ~= 0.13 ms + n x 0.0228 ms` — the fixed part is two 50 us settles plus
+the primes; 11.4 us/conversion matches round 2's measured 11.7 us.
+
+**Rung 7 (n=4) is the config to ship.** 957 Hz AND 12% duty, below the 14% clean
+reference point, so round 2's accuracy prediction holds: speed and accuracy align
+here rather than trading off. `dropped=0`, `crc_err=0` throughout.
+
+## Rung 8 — the per-tick DAC write is NOT expensive enough to matter
+
+Added because `Firmware_SMAConstantCurrent_PIO` ran its loop at ~479 Hz with
+ADC_SAMPLES_CYCLE=4 — *less* averaging than rung 7 — and the one thing CC does
+every tick that this project never does is write the MCP4728.
+
+It costs **365 us**, and the cadence stayed at 1.04 ms: still ~1 kHz with ~35%
+headroom. So the DAC write did not explain CC's slowness. (It was
+`Serial.connected()` at ~850 us a call — see that project's README.)
+
+**`dac_us` did not change between 400 kHz and 100 kHz** (365 vs 364 us). So the
+cost is fixed overhead in the Adafruit/Wire stack, not bus time — *or*
+`Wire.setClock()` is a no-op on this core. Not separated. Worth knowing before
+investing in a custom I2C driver, and it means CC's `portenta_m7_i2c100`
+diagnostic env may be testing a knob that does nothing.
+
+Uses `setDACrawNoSettle()`: this project's `setDACraw()` always blocks
+`delay(2)`, so calling it per tick would have "reproduced" 479 Hz via the delay
+and proved nothing. CC's control loop passes `settle=false`.
+
+## Correction to round 1's conclusion
+
+Round 1 said *"per-call overhead, not bandwidth (so a transport swap like UDP
+would NOT help)"*. True for the bottleneck it faced (~384 tiny writes/pass) and
+the batching fix was right. But it is not a general law: once batched, `emit`
+is 59 us, and in `Firmware_SMAConstantCurrent_PIO` at ~160 KB/s the cost was
+later measured to track BYTES, not calls (batching 4x fewer writes there left
+total write time unchanged). **Check which regime you are in before batching.**

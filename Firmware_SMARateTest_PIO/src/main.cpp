@@ -191,6 +191,31 @@ static void setDACraw(uint16_t code) {
     }
 }
 
+// ── RATE EXPERIMENT (2026-07-27): what does a PER-TICK DAC write cost? ────
+// Firmware_SMAConstantCurrent_PIO runs its control loop at ~479 Hz even though
+// it uses ADC_SAMPLES_CYCLE=4 — LESS averaging than this project's n=16, which
+// hits 964 Hz. So CC has ~1.8 ms/pass that is neither readSma nor emit (both
+// measured here: 0.494 ms and 0.059 ms). The one thing CC does every tick and
+// this project never does is WRITE THE DAC. This isolates that cost.
+//
+// NOTE the delay(2) above: setDACraw() ALWAYS blocks 2 ms in this project (it
+// has no `settle` parameter — CC added one and its control loop passes false).
+// Using setDACraw() here would reproduce ~479 Hz trivially via the delay and
+// prove nothing. This variant is the honest comparison: the bare I2C write,
+// exactly what CC's setDACraw(code, false) does.
+#ifndef DAC_PER_TICK
+#define DAC_PER_TICK 0
+#endif
+#if DAC_PER_TICK
+static void setDACrawNoSettle(uint16_t code) {
+    if (code > 4095) code = 4095;
+    currentCode = code;
+    if (sma_ok) {
+        mcp.setChannelValue(MCP4728_CHANNEL_A, code, MCP4728_VREF_VDD, MCP4728_GAIN_1X);
+    }
+}
+#endif
+
 static inline float codeToVdac(uint16_t code) { return ((float)code / 4095.0f) * VDD_MCP; }
 static inline float codeToVldo(uint16_t code) { return V_OFFSET + ((float)code / 4095.0f) * VDD_MCP; }
 static uint16_t vldoToCode(float vtarget) {
@@ -460,6 +485,18 @@ static void streamSmaTimed(int nsamples) {
     SmaRead s = readSma(nsamples);
     uint32_t read_us = micros() - t0;
 
+    // Per-tick DAC write, timed separately — rewrites the SAME code, so the
+    // output voltage does not move and the actuation is unchanged; only the
+    // I2C traffic is added. This is what CC does every control tick.
+    uint32_t dac_us = 0;
+#if DAC_PER_TICK
+    {
+        uint32_t td = micros();
+        setDACrawNoSettle(currentCode);
+        dac_us = micros() - td;
+    }
+#endif
+
     uint32_t t1 = micros();
     uint32_t dt_us = last_sma_us ? (t1 - last_sma_us) : 0;   // achieved cadence
     last_sma_us = t1;
@@ -471,9 +508,10 @@ static void streamSmaTimed(int nsamples) {
         // Appended into the batch buffer, then flushed with it — not 6 prints.
         if (sizeof(sma_batch) - sma_off < 96) smaFlush();
         int w = snprintf(sma_batch + sma_off, sizeof(sma_batch) - sma_off,
-                         "[RATE] n=%d readSma_us=%lu emit_us=%lu dt_us=%lu\r\n",
+                         "[RATE] n=%d readSma_us=%lu emit_us=%lu dt_us=%lu dac_us=%lu\r\n",
                          nsamples, (unsigned long)read_us,
-                         (unsigned long)emit_us, (unsigned long)dt_us);
+                         (unsigned long)emit_us, (unsigned long)dt_us,
+                         (unsigned long)dac_us);
         if (w > 0) sma_off += (size_t)w;
         smaFlush();
     }
@@ -1222,6 +1260,14 @@ void setup() {
     for (int i = 0; i < 10; i++) analogRead(ISENSE_PIN);   // prime INA296A input (A1)
 
     Wire.begin();
+    // This project historically never called setClock(), so the DAC bus runs at
+    // the 100 kHz Arduino default. Firmware_SMAConstantCurrent_PIO raises it to
+    // 400 kHz. For the per-tick-DAC comparison to say anything about CC, the bus
+    // speed has to match — override with -D I2C_HZ=400000.
+#ifdef I2C_HZ
+    Wire.setClock(I2C_HZ);
+    smaTag(); Serial.print(F("I2C clock set to ")); Serial.print(I2C_HZ); Serial.println(F(" Hz"));
+#endif
     smaTag(); Serial.println(F("I2C scan..."));
     byte cnt = 0;
     for (byte a = 1; a < 127; a++) {
