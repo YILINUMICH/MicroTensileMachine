@@ -71,6 +71,19 @@ Any `src=3` / `src=5` data captured with an earlier build is wrong on both count
 
 - [x] ~~Steps 1–3 of the bring-up ladder~~ — done 2026-07-27. Boot, MCP4728,
       bootstrap and hold all pass; `cc 200` holds within 0.6%.
+- [x] ~~Step 2, the open-load fault~~ — done 2026-07-27, and it **FAILED first
+      time**: the guard could not fire because the in-cycle current sense has
+      sd 12.6 mA against a 20 mA floor, so 16.8 % of samples read above the
+      floor with the DUT disconnected and the reset-on-excursion accumulator
+      never reached 250 ms. Fixed with a leaky accumulator; re-tested and it now
+      disarms ~380 ms after railing. **This is why the ladder says verify it
+      before connecting a wire — assuming it worked would have left current mode
+      with no open-load protection at all.**
+- [ ] **`ioffset` measured but NOT persisted.** 8.33 mA at true zero →
+      `ioffset 0.0167`, which brings it to ~2 mA. Runtime only; it reverts on
+      reset. Fold it into the source defaults together with whatever the
+      code→LDO DMM session says about `gain`/`shunt`/`aref`, so one consistent
+      set of constants lands at once rather than two.
 - [ ] **Decide on UDP.** `Serial.write()` now measures ~300 µs in-cycle (11 µs
       idle) — genuine USB-CDC back-pressure at ~160 KB/s, and the current cap on
       the SMA rate (~650 Hz vs the 1000 Hz nominal). This is the FIRST time the

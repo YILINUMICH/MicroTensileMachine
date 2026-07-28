@@ -1020,11 +1020,35 @@ static SmaRead ccStep(uint32_t now_us) {
     // Open-load watchdog. Railed at the ceiling with no current means the
     // return path is broken, and unlike voltage mode the loop got there by
     // actively ramping up to force current through it. Park the output.
+    // LEAKY, not reset-to-zero. Bench-verified 2026-07-27 that the original
+    // `cc_rail_s = 0.0f` made this guard UNABLE TO FIRE:
+    //
+    //   With the DUT physically disconnected — zero current possible — the
+    //   in-cycle current sense (ADC_SAMPLES_CYCLE=4) measured mean 0.80 mA but
+    //   sd 12.63 mA, range -8.35 .. +44.14 mA. CC_I_FLOOR_A (20 mA) is only
+    //   ~1.6 sigma above zero, so 16.8% of samples read AT OR ABOVE the floor
+    //   with nothing connected. A reset-on-excursion accumulator then needs 250
+    //   consecutive clean ticks at 1 kHz: ~0.83^250, i.e. never. The command sat
+    //   railed at 5.000 V for the full 5 s run and never disarmed.
+    //
+    // Decaying instead of resetting tolerates the noise: at ~83% accumulating
+    // and ~17% decaying the net rate is ~0.66*dt, so the fault fires in ~380 ms
+    // rather than 250 — still far inside the 5 s heat watchdog.
+    //
+    // CC_I_FLOOR_A is deliberately NOT raised to fix this: it also gates the
+    // R_est update (see ccStep's bootstrap and running branches), so moving it
+    // would change controller behaviour to fix a fault-detection problem.
+    //
+    // False positives are structurally impossible: this needs the command
+    // RAILED while current stays mostly below 20 mA, but the LDO's own floor
+    // (V_OFFSET 0.5 V) forces >=128 mA into a ~3.9 ohm coil, so every
+    // commandable target on a healthy load is far above the floor.
     if (u >= u_max - 1e-3f && s.i < CC_I_FLOOR_A) {
         cc_rail_s += dt;
         if (cc_rail_s >= CC_OPEN_LOAD_S) cc_fault = true;
     } else {
-        cc_rail_s = 0.0f;
+        cc_rail_s -= dt;
+        if (cc_rail_s < 0.0f) cc_rail_s = 0.0f;
     }
 
     return s;
