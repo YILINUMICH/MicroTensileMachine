@@ -310,13 +310,34 @@ across cycles and persisting between them exactly as designed. `ccStep` measured
   Note this inverts the lesson that fixed 15→99 Hz and `emit` 350→51 µs. Those
   were *call-count* problems. **Check which regime you are in before batching.**
 
-- **~850 Hz is near the millisecond scheduler's ceiling**, not the link's. The
-  loop now has ~13% headroom, so the missing 150 Hz is `CYCLE_LOG_MS` being a
-  whole-millisecond schedule on a cooperative loop — occasional long passes skip
-  a tick and the snap-forward drops it. `Firmware_SMARateTest_PIO` already
-  documents this: *"a true 1 kHz is exactly at the limit of the ms scheduler and
-  nothing finer is reachable without moving the schedule to micros()."* That is
-  the change needed for a full 100 points per 100 ms heat window; we are at 85.
+- **~850 Hz was the millisecond scheduler, and moving it to `micros()` fixed it.**
+  With ~13% loop headroom still free, the wall was `CYCLE_LOG_MS` being a
+  whole-millisecond schedule on a cooperative loop: a pass that overran a
+  boundary lost that tick outright. `Firmware_SMARateTest_PIO` had already
+  predicted this — *"a true 1 kHz is exactly at the limit of the ms scheduler and
+  nothing finer is reachable without moving the schedule to micros()."*
+  **Measured after the change: `log_fires` 1018–1031/s — 1 kHz sustained.**
+
+  Two things were needed together. The host also has to keep up: `run_cccycle.py`
+  with a default (~4 KB) OS receive buffer back-pressured the CDC endpoint and
+  held the rate at 866–875 Hz; with `portenta_reader.py`'s 4 MB buffer the same
+  firmware reached ~1000 Hz. **A rate measured through a slow reader measures the
+  reader.**
+
+- **Also tried and reverted: streaming once per control tick** (dropping the
+  `cyc_next_log_us` gate in the CC branch), on the theory that it and
+  `cc_next_us` were two 1 ms schedules beating against each other. They are not —
+  it measured 399 `src=6` samples per 5 heat pulses against 428 with the gate,
+  i.e. no gain. The heat-phase ceiling is the control tick's own cost:
+  `ccStep` = `readSma` 205 µs + DAC write 365 µs ≈ 570 µs against a 1000 µs
+  period, so jitter alone loses ticks.
+
+  **That makes the MCP4728 write the largest single item in the control tick**,
+  and a lean I²C driver the next real lever if the heat phase needs to hold a
+  hard 1 kHz. Rung 8 in `Firmware_SMARateTest_PIO` measured that write at 365 µs
+  and found it does **not** scale with `Wire.setClock()` — so it is stack
+  overhead, or `setClock()` is a no-op on this core. Settle which before
+  investing.
 - **ADC2 checksum failures** — appeared while the LDO was powered, cleared on a
   reflash. Cause unknown; it silently zeroes the load-cell channel.
 - **The LDO slope** — an open-circuit sweep measured

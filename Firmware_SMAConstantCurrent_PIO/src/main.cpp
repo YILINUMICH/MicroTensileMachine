@@ -526,7 +526,15 @@ static uint32_t cyc_cool_ms  = 0;      // cool duration (t_idle)
 static uint32_t cyc_n_target = 0;      // 0 = continuous until stop/disarm
 static uint32_t cyc_n_done   = 0;      // completed cycles so far
 static uint32_t cyc_phase_t0 = 0;      // current phase start (millis)
-static uint32_t cyc_next_log = 0;      // next src=3/4/5 stream time (rel ms)
+// The LOG schedule runs on micros(), not millis(). At CYCLE_LOG_MS=1 a
+// whole-millisecond schedule cannot express the period it is asking for: a pass
+// that overruns a millisecond boundary loses that tick outright, and the
+// snap-forward (correctly) refuses to replay it. Measured 2026-07-27 — with
+// ~13% loop headroom still free, the stream sat at ~850 Hz instead of 1000,
+// i.e. the SCHEDULER was the wall, not the CPU or the link. Phase DURATION
+// stays in millis (cyc_phase_t0 / phase_ms); only the sample cadence moved.
+static uint32_t cyc_phase_t0_us = 0;   // current phase start (micros)
+static uint32_t cyc_next_log_us = 0;   // next src=3/4 stream time (rel us)
 static bool     cyc_fire     = false;  // fire preset: scope trigger + clean edge
 // Period of the src=3/4/5 V/I/R stream during a cycle. Once the batched write
 // and the settle fix landed, the stream sat exactly ON this ceiling, so it is
@@ -538,6 +546,7 @@ static bool     cyc_fire     = false;  // fire preset: scope trigger + clean edg
 #define CYCLE_LOG_MS_CFG 1
 #endif
 static const uint32_t CYCLE_LOG_MS = CYCLE_LOG_MS_CFG;
+static const uint32_t CYCLE_LOG_US = CYCLE_LOG_MS_CFG * 1000UL;
 static const uint32_t CYCLE_MS_MAX = 600000;   // 10 min per phase ceiling
 
 // While ARMED and resting at idle (SMA_IDLE), stream V/I/R at this period so
@@ -1203,8 +1212,9 @@ static void cycleEnterHigh() {
     if (cyc_fire) delayMicroseconds(5);     // clean pre-step edge for the scope
     if (cyc_mode == SP_CURRENT) ccEngage(cyc_i_high);
     else                        setLevel(cyc_v_high);
-    cyc_phase_t0 = millis();
-    cyc_next_log = 0;
+    cyc_phase_t0    = millis();
+    cyc_phase_t0_us = micros();
+    cyc_next_log_us = 0;
     smaState = SMA_ACT_HEAT;
     smaTag(); Serial.print(F("[ACT] heat n=")); Serial.print(cyc_n_done + 1);
     if (cyc_n_target) { Serial.print('/'); Serial.print(cyc_n_target); }
@@ -1225,8 +1235,9 @@ static void cycleEnterLow() {
     } else {
         setLevel(cyc_v_low);
     }
-    cyc_phase_t0 = millis();
-    cyc_next_log = 0;
+    cyc_phase_t0    = millis();
+    cyc_phase_t0_us = micros();
+    cyc_next_log_us = 0;
     smaState = SMA_ACT_COOL;
     smaTag(); Serial.print(F("[ACT] cool n=")); Serial.print(cyc_n_done + 1);
     if (cyc_n_target) { Serial.print('/'); Serial.print(cyc_n_target); }
@@ -1353,7 +1364,8 @@ static uint8_t  prof_branch = 0;          // 1 = cc (heat), 2 = voltage (cool)
 #endif
 
 static bool serviceActuationPhase(uint32_t phase_ms) {
-    const uint32_t t_rel = millis() - cyc_phase_t0;
+    const uint32_t t_rel    = millis() - cyc_phase_t0;      // phase duration
+    const uint32_t t_rel_us = micros() - cyc_phase_t0_us;   // sample cadence
 #if DBG_LOOP_PROFILE
     prof_phase_passes++;
     prof_branch = cc_enabled ? 1 : 2;
@@ -1390,7 +1402,15 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
             return false;
         }
 
-        if (t_rel >= cyc_next_log) {        // stream the read ccStep already took
+        // TRIED AND REVERTED (2026-07-27): dropping this gate to stream once per
+        // control tick, on the theory that two independent 1 ms schedules
+        // (cc_next_us and cyc_next_log_us) were beating against each other and
+        // costing ticks. They are not — removing the gate measured 399 src=6
+        // samples per 5 heat pulses against 428 with it, i.e. no gain and within
+        // run-to-run scatter. The heat-phase ceiling is the CONTROL TICK's own
+        // cost, not the schedule: ccStep is readSma 205 us + DAC write 365 us
+        // ~= 570 us against a 1000 us period, so jitter alone loses ticks.
+        if ((int32_t)(t_rel_us - cyc_next_log_us) >= 0) {   // wrap-safe due check
 #if DBG_LOOP_PROFILE
             prof_log_fires++;
             const uint32_t pe = micros();
@@ -1399,16 +1419,17 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
 #if DBG_LOOP_PROFILE
             prof_emit_us += micros() - pe;
 #endif
-            cyc_next_log += CYCLE_LOG_MS;
+            cyc_next_log_us += CYCLE_LOG_US;
             // A control period longer than the log period (e.g. the cc200
             // build: 5 ms control, 1 ms log) would leave the schedule
             // permanently behind and drifting further every tick. The stream
             // can never beat the control rate anyway — one sample per tick is
             // the real ceiling — so snap forward instead of accumulating lag.
-            if (cyc_next_log < t_rel) cyc_next_log = t_rel + CYCLE_LOG_MS;
+            if ((int32_t)(cyc_next_log_us - t_rel_us) < 0)
+                cyc_next_log_us = t_rel_us + CYCLE_LOG_US;
         }
     } else {
-        if (t_rel >= cyc_next_log) {        // voltage mode: sample + stream only
+        if ((int32_t)(t_rel_us - cyc_next_log_us) >= 0) {   // voltage mode
 #if DBG_LOOP_PROFILE
             prof_log_fires++;
             const uint32_t pr = micros();
@@ -1420,7 +1441,7 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
 #else
             streamSma(readSma(ADC_SAMPLES_CYCLE));   // ~1 kHz — average in post
 #endif
-            cyc_next_log += CYCLE_LOG_MS;
+            cyc_next_log_us += CYCLE_LOG_US;
             // SAME snap-forward the cc branch above has. Without it, any pass
             // that overruns CYCLE_LOG_MS leaves this schedule permanently
             // behind: `t_rel >= cyc_next_log` then stays true FOREVER and the
@@ -1430,7 +1451,8 @@ static bool serviceActuationPhase(uint32_t phase_ms) {
             // Missing here only because the guard was added to the cc branch
             // when the CC loop landed and never backported. Bench-confirmed
             // 2026-07-27.
-            if (cyc_next_log < t_rel) cyc_next_log = t_rel + CYCLE_LOG_MS;
+            if ((int32_t)(cyc_next_log_us - t_rel_us) < 0)
+                cyc_next_log_us = t_rel_us + CYCLE_LOG_US;
         }
     }
     return t_rel >= phase_ms;
