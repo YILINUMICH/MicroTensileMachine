@@ -609,11 +609,17 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             # DATA recording auto-starts on launch — h7/stage/status stream to
             # disk from the moment the session opens. The REC button is now for
             # the CAMERA video only. Skip only on a critical health failure.
-            if critical_ok and self.core.start_recording():
+            # A critical failure no longer gives up permanently: the core
+            # DEFERS and starts recording by itself once the H7 delivers. It
+            # also logs every outcome to session.log + events.csv, so an empty
+            # CSV can always be explained after the fact.
+            if self.core.start_recording_or_defer(critical_ok):
                 self.append_log("Data recording STARTED automatically.")
             else:
-                self.append_log("Data recording NOT started (critical health "
-                                "failure) — fix the H7 and restart.")
+                self.append_log(
+                    "Data recording DEFERRED — the H7 failed the startup "
+                    "check. It will start AUTOMATICALLY once the H7 streams; "
+                    "watch the DATA indicator. Nothing is written until then.")
             self.append_log(f"Output: {paths.session_dir}")
             self.append_log("REC button records CAMERA video only.")
 
@@ -656,6 +662,12 @@ def run_gui(cfg: AppConfig, paths, stop_event: threading.Event,
             if self.core.recording:
                 self.lbl_rec.setText("DATA ●")
                 self.lbl_rec.setStyleSheet(_dot(True))
+            elif getattr(self.core, "_recording_deferred", False):
+                # RED, not grey. "Waiting for the H7" must not look like the
+                # ordinary idle state — that ambiguity is exactly how a session
+                # ran for 2.5 minutes writing nothing without anyone noticing.
+                self.lbl_rec.setText("DATA ✗ WAITING")
+                self.lbl_rec.setStyleSheet(_dot(False))
             else:
                 self.lbl_rec.setText("DATA ○")
                 self.lbl_rec.setStyleSheet(_dot(None))

@@ -202,6 +202,20 @@ class RecordingCore:
         self.recording_started_at: Optional[float] = None
         self.camera_recording = False    # camera VIDEO — the REC button only
 
+        # DEFERRED auto-start. If the launch health check fails on a CRITICAL
+        # stream we must not start recording (there is nothing to record), but
+        # the old behaviour then gave up FOREVER: the session on 2026-07-28
+        # found the H7 wedged at boot, the worker crashed and auto-reconnected
+        # 50 s later, streamed 26 562 samples cleanly for 2.5 minutes — and
+        # wrote NONE of them, because `recording` was decided once at launch.
+        # The operator watched live plots the whole time (they are fed by the
+        # drain regardless of this gate) with no indication nothing was saved.
+        #
+        # So: remember the deferral and start recording the moment the critical
+        # stream actually delivers samples. See _service_deferred_recording().
+        self._recording_deferred = False
+        self._deferred_h7_seen = 0
+
         # Sample tallies (for meta + readouts). Count only RECORDED rows.
         self.n_lcr = self.n_h7 = self.n_stage = self.n_status = 0
         self.n_events = 0
@@ -557,6 +571,12 @@ class RecordingCore:
         batch.h7 = self._drain_h7()
         batch.stage = self._drain_stage()
         batch.status = self._drain_status()
+        # If the launch check deferred recording, start it once the H7 is
+        # actually delivering. Checked BEFORE the flush below so the first
+        # recovered batch is not the one that gets dropped: _drain_h7() has
+        # already discarded this tick's samples (recording was still False),
+        # which costs at most HEALTH_MIN_H7 samples — a few tens of ms.
+        self._service_deferred_recording(len(batch.h7))
         self._flush_counter += 1
         if self._flush_counter % 20 == 0:
             for f in (self._lcr_f, self._h7_f, self._stage_f, self._status_f):
@@ -578,9 +598,54 @@ class RecordingCore:
             return False
         self.recording = True
         self.recording_started_at = time.time()
+        self._recording_deferred = False
         self.log_event("session", "recording start")
         self._log("info", "Recording STARTED")
         return True
+
+    def start_recording_or_defer(self, critical_ok: bool) -> bool:
+        """Start recording, or DEFER it until the critical stream recovers.
+
+        Use this at launch instead of `if critical_ok: start_recording()`. On a
+        critical health failure the old form gave up permanently — see the
+        _recording_deferred comment in __init__ for the session that lost 2.5
+        minutes of good data that way.
+
+        Every outcome goes to the LOGGER and the event CSV, not just the GUI
+        panel: the 2026-07-28 session's "recording NOT started" notice existed
+        only in the on-screen log, so after the fact there was no record of why
+        the CSVs were empty.
+        """
+        if critical_ok:
+            return self.start_recording()
+        self._recording_deferred = True
+        self._deferred_h7_seen = 0
+        msg = ("data recording DEFERRED — critical stream failed the startup "
+               "check. Recording will start automatically as soon as the H7 "
+               "delivers samples; nothing is being written until then.")
+        self._log("warning", msg.upper())
+        self.log_event("warn", msg)
+        return False
+
+    def _service_deferred_recording(self, n_h7_drained: int) -> None:
+        """Start a deferred recording once the H7 is genuinely delivering.
+
+        Gated on HEALTH_MIN_H7 real samples rather than the first one, so a
+        single straggler left in the queue from before the failure cannot arm
+        it. Called every drain_tick().
+        """
+        if not self._recording_deferred or self.recording:
+            return
+        if n_h7_drained <= 0:
+            return
+        self._deferred_h7_seen += n_h7_drained
+        if self._deferred_h7_seen < HEALTH_MIN_H7:
+            return
+        msg = (f"H7 recovered ({self._deferred_h7_seen} samples) — starting "
+               f"the deferred data recording now")
+        self._log("info", msg)
+        self.log_event("session", msg)
+        self.start_recording()
 
     def start_camera_recording(self) -> bool:
         """Start writing camera VIDEO (frames.csv + per-cycle JPEGs). Independent
