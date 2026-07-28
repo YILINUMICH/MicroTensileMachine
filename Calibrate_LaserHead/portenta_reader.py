@@ -486,7 +486,8 @@ class PortentaReader:
         return events
 
     # -- lifecycle ----------------------------------------------------------
-    def open(self, boot_wait_s: float = 4.0) -> None:
+    def open(self, boot_wait_s: float = 4.0,
+             force_pull_s: float = 1.0) -> None:
         """
         Open the serial port and wait for the Portenta firmware to finish
         booting. Opening USB-CDC on Windows can toggle DTR and trigger an
@@ -497,6 +498,23 @@ class PortentaReader:
         ([M7]/[M4 cp N]/[M4] lines) and log it, so "silent port" vs
         "booting" can be distinguished. After this call, the port is
         ready for drain() + read_samples().
+
+        FORCE PULL (``force_pull_s``). Before the boot window we drain the port
+        with big raw ``read()`` calls rather than ``readline()``. A previous
+        session that exited without draining can leave the M7's USB-CDC TX
+        buffer full; the firmware then finds no room, drops chunks into
+        ``tx_drop`` and the port LOOKS dead — you open it, see nothing, and
+        conclude the hardware is wedged. Emptying the buffer gives the firmware
+        room and the stream resumes, no reset and no power cycle needed.
+
+        This is worth doing unconditionally: it costs ~1 s on a healthy port and
+        recovers a port that would otherwise fail the startup health check.
+        Verified 2026-07-28 on a port that had been "dead" through a whole
+        session — a hard pull brought back ~496 Hz on both channels immediately.
+
+        ``readline()`` is the wrong tool for it: it stops at each newline and
+        will not shift a large backlog quickly, which is why the old boot window
+        alone did not clear this.
         """
         if self._ser is not None and self._ser.is_open:
             return
@@ -516,9 +534,27 @@ class PortentaReader:
                                  self.rx_buffer_bytes / (1024 * 1024))
             except Exception as e:  # noqa: BLE001
                 self.logger.warning("set_buffer_size failed: %s", e)
+        # --- FORCE PULL: empty a backed-up CDC TX buffer before listening ----
+        if force_pull_s and force_pull_s > 0:
+            self._ser.timeout = 0.05
+            pulled = 0
+            t_end = time.monotonic() + force_pull_s
+            while time.monotonic() < t_end:
+                chunk = self._ser.read(65536)
+                if chunk:
+                    pulled += len(chunk)
+            if pulled:
+                self.logger.info(
+                    "force pull: drained %.1f kB of backlog in %.1fs "
+                    "(a full CDC TX buffer makes the port look dead)",
+                    pulled / 1024.0, force_pull_s)
+            else:
+                self.logger.info("force pull: nothing buffered (port was idle)")
+
         self.logger.info("Opened %s @ %d baud, waiting %.1fs for firmware boot...",
                          self.port, self.baud, boot_wait_s)
 
+        self._ser.timeout = 0.1          # back to the short boot-window timeout
         deadline = time.monotonic() + boot_wait_s
         banner = []
         last_sample_seen = False
@@ -544,8 +580,9 @@ class PortentaReader:
                 self.logger.info("  %s", b)
         if not last_sample_seen:
             self.logger.warning(
-                "Opened %s but no sample lines seen in %.1fs boot window. "
-                "If this persists: power-cycle Hat Carrier, re-seat HAT.",
+                "Opened %s but no sample lines seen in %.1fs boot window "
+                "(a force pull already ran, so this is NOT a stuck TX buffer). "
+                "If this persists: power-cycle USB + EVM supply, re-seat HAT.",
                 self.port, boot_wait_s)
 
     def close(self) -> None:
