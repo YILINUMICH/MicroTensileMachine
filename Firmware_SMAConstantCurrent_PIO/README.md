@@ -5,8 +5,12 @@
 closed-loop current controller to the M7 drive path. The parent project stays
 the production image; this is where the current loop is developed.
 
-Status: **To-Test** — builds clean, never flashed. See [STATUS.md](STATUS.md)
-for the bring-up ladder.
+Status: **WIP** — first flashed and run on hardware 2026-07-27. The closed loop
+holds 200 mA within 0.6 %, the stream runs at 1 kHz, and the code→LDO map is
+DMM-verified to 1 mV. The **absolute current scale is still unverified**. See
+[STATUS.md](STATUS.md) for the bring-up ladder, and the **Bring-up log** and
+**Calibration log** at the end of this file for what was tried, what worked, and
+what turned out to be wrong.
 
 ---
 
@@ -69,6 +73,15 @@ reports the achieved rate so this assumption is checkable, not just asserted.
 
 ### The accuracy caveat — read this before trusting a number
 
+> **⚠️ PARTLY CONTRADICTED BY MEASUREMENT (2026-07-27) — see the Calibration log
+> at the end of this file.** Against a Fluke 17B+ at three DAC codes, A0 reads
+> only **+1.3 % high**, not ~5 %. If `aref` really were 5 % high, A0 would read
+> 5 % high, and it does not. Either the 2.99 V figure below is wrong, or the
+> divider ratio offsets it. **The current scale has still never been checked
+> against a meter**, so the paragraph's conclusion — targets repeatable but not
+> absolute — stands; only the *size* of the error is in question. Do not quote
+> the 5 % number until someone re-derives it.
+
 `ADC_VREF_V` (3.145 V) is **~5 % above the true ~2.99 V**, and ADC conversion
 duty sags the reference further. Voltage-mode drive never cared, and `R = V/I`
 cancels the error *exactly* — which is why it went unnoticed for so long. **A
@@ -129,14 +142,29 @@ same timestamp and in the same single write as the existing ones:
 |---|---|---|---|
 | 3 | SMA drive voltage (measured) | V | DAC code |
 | 4 | SMA current (measured) | A | 0 |
-| 5 | SMA resistance, `V_sma/I` (measured) | Ω | 0 |
+| ~~5~~ | ~~SMA resistance~~ — **RETIRED from the wire 2026-07-27** | Ω | — |
 | **6** | **CC command `u`** (controller output) | **V** | **DAC code** |
 | **7** | **CC `R_est`** (adaptive state, command-domain `u/I`) | **Ω** | **0** |
 
+**`src=5` is no longer transmitted.** It was exactly `src3/src4` on the same
+timestamp — zero information for ~22 % of the payload, and the link is
+bandwidth-bound. `Calibrate_LaserHead/portenta_reader.py` rebuilds it
+(`SmaRDeriver`) so every consumer sees it unchanged; the ID stays reserved in
+`sample_ring.h`, so **do not reuse it**.
+
 `src=5` and `src=7` are *not* duplicates: 5 is the measured `V_sma/I`, 7 is the
-controller's filtered command-domain estimate. Divergence between them is a
-diagnostic in itself. Skeleton §7 is emphatic about logging `R_est` — it is the
-only way to tell a controller problem from a load problem after the fact.
+controller's filtered command-domain estimate, which is **not** derivable
+offline (it is gated and low-passed with internal state). Divergence between
+them is a diagnostic in itself. Skeleton §7 is emphatic about logging `R_est` —
+it is the only way to tell a controller problem from a load problem after the
+fact.
+
+Measured 2026-07-27 with the two in the same capture: `R` from
+`mean(V)/mean(I)` was **4.644 Ω** while `cc_R_est` read **3.820 Ω** (−17.7 %).
+That gap is expected and structural, not an error — `R_est` is command-domain
+(`u_cmd/I`), so with a correct DAC map it should sit **above** the physical
+resistance by exactly the shunt: `R_phys + R_shunt`. Do not treat `cc_R_est` as
+the coil's resistance.
 
 `[STATUS]` gains `cc`, `cc_hz` (**achieved** control rate), `cc_i_tgt`, `cc_u`,
 `cc_r`, `cc_tau_ms`.
@@ -340,8 +368,122 @@ across cycles and persisting between them exactly as designed. `ccStep` measured
   investing.
 - **ADC2 checksum failures** — appeared while the LDO was powered, cleared on a
   reflash. Cause unknown; it silently zeroes the load-cell channel.
-- **The LDO slope** — an open-circuit sweep measured
-  `V_ldo = 5.187·(code/4095) + 0.5048` against the 4.7 V design span. The
-  intercept matches the respin to 5 mV; the slope does not. Needs a DMM to say
-  whether the error is in the LDO or the A0 sense chain, since both were measured
-  through A0 and would agree with each other either way.
+- ~~**The LDO slope**~~ — **RESOLVED the same day with a DMM. See the calibration
+  log below.** Short version: the hardware slope is **5.067**, the *design figure
+  of 4.7 was wrong*, and A0 is accurate to ~1.3%. `R_sma` is **not** 10% high and
+  no recorded data needs rescaling.
+
+---
+
+## Calibration log — 2026-07-27 (Fluke 17B+, 4.8 ohm 1/4 W dummy load)
+
+Bring-up ladder steps 2 and 5. **Read this before re-deriving any constant** —
+several plausible-sounding approaches were tried and are wrong, and one number
+that had been treated as ground truth turned out to be the thing that was off.
+
+### RESULT — the code -> LDO transfer, DMM-verified
+
+`V_ldo = 5.0673 * (code/4095) + 0.4975`
+
+Three disarmed points, DMM red on **SMA_P**, black on **real ground**:
+
+| code | DMM | 3-pt fit | residual | firmware A0 (`V_sma`) | A0 error |
+|---|---|---|---|---|---|
+| 0    | 0.499 V | 0.4975 | +1.5 mV | 0.503 V | +0.8 % |
+| 1750 | 2.660 V | 2.6630 | -3.0 mV | 2.706 V | +1.7 % |
+| 3500 | 4.830 V | 4.8285 | +1.5 mV | 4.892 V | +1.3 % |
+
+Max residual **3 mV (0.06 %)** against the Fluke's ~±28 mV, so the LDO is
+**linear** — a straight-line model is adequate, no calibration table needed.
+
+Applied `vdd 5.067`; `V_pred` then matched the DMM to **1 mV** at both ends.
+`offset` stays 0.5 (the fit says 0.4975; the 2.5 mV difference is noise).
+
+### THE BIG ONE — the design figure was wrong, not the hardware
+
+The stated intent was *DAC 0-4.7 V -> LDO 0.5-5.2 V*. **The board does not do
+that.** Measured span is **5.067 V**, and code 4095 reaches ~5.57 V, ~370 mV
+above the intended 5.2 V ceiling. The clamp holds output at 5.0 V so nothing is
+at risk, but **the spec and the board disagree** — worth chasing on the hardware
+side.
+
+Consequences, because this misled the whole earlier analysis:
+
+* An earlier open-circuit sweep read through **A0** fitted slope **5.187** and,
+  compared against the *design* 4.7, suggested a **+10.4 % error somewhere in
+  the A0 chain**. That inference was wrong — it was measuring the gap between
+  the hardware and a bad spec, not an instrument error.
+* **A0 is accurate to ~1.3 %**, consistently across all three points, and the
+  A0 read-to-read scatter is ~1.4 % sd — so the bias is within its own noise.
+* **`R_sma` is NOT ~10 % high. No recorded resistance data needs rescaling.**
+* **Setting `vdd 4.7` would have made things WORSE**, not better. It was
+  proposed on the strength of the design figure and is exactly what the DMM
+  session prevented.
+
+### What was tried and did NOT work
+
+| attempt | outcome |
+|---|---|
+| Infer the LDO slope from A0 alone | Circular — the fit and `V_sma` share the A0 chain, so they agree with each other whatever the truth is. Needs an external meter. |
+| Compare the A0 fit against the 4.7 V design figure | Produced a phantom +10.4 % instrument error. The design figure was the wrong reference. |
+| `ioffset` calibrated at one operating point | Correct, but see the common-mode note below — a single constant was assumed to hold across the range without checking. |
+| Hypothesis: current-sense offset is common-mode dependent | **REFUTED.** Swept disarmed across the full DAC range, DUT open: offset is flat — 0.93 mA at `V_sma` 0.51 V, 0.05 mA at 5.62 V, slope **-0.17 mA/V**. The open-load failure was noise, not offset. |
+| Diagnosing a per-tick guard from the sample STREAM | Misleading. The stream is decimated (~100 Hz) while the control loop runs ~1 kHz, so a "342 ms clean stretch" in the stream hid ~10x more excursions the loop actually saw. |
+| DMM across the resistor while disarmed | Reads 0 V, correctly — the MOSFET is open so the resistor's low leg floats and carries no current. **Black lead must go to real ground**, not the resistor's far leg. |
+
+### Method notes that matter
+
+* **Sweep DISARMED.** Zero current means zero risk to the dummy load, and no
+  shunt or MOSFET drop to confuse the comparison — `SMA_P` sits at the LDO
+  output exactly. Full code range is safe.
+* **Two points give the slope, a third proves linearity.** Do not skip the third.
+* **Do NOT sweep armed at high codes with a small dummy load.** At 4.8 ohm the
+  full-scale current is ~1.04 A = **5.2 W**, which destroys a 1/4 W part. Armed
+  work is capped at ~200 mA (0.19 W, 77 % of a 1/4 W rating), short holds.
+* **Drive calibration points in VOLTAGE mode (explicit `code`), not `cc`.**
+  A CC run ramps under loop control and searches for the setpoint; an explicit
+  code is deterministic, which is what you want with a fragile load.
+
+### `ioffset` — INA296A zero-current offset
+
+Measured **disarmed** (MOSFET open, so no current can flow whatever is
+connected), 25 reads each already a 64-sample average:
+
+* zero-current reading **8.328 mA**, sd 2.251 mA, range 3.09 - 11.70 mA
+* => `ioffset 0.0167` (= 8.328 mA x 2.0 V/A), after which zero reads ~2 mA
+
+The **sd of 2.25 mA is the A1 noise floor at n=64** — ~1 % of a 200 mA target,
+and it sets the floor on how well `R = V/I` resolves at low current. That
+matters for cool-phase data, where current is only ~128 mA.
+
+**This offset is coupled to a SAFETY guard**: `CC_I_FLOOR_A` is 20 mA and the
+open-load fault needs the zero-current reading to stay below it. At 8.3 mA there
+was margin; at ~25 mA the guard would silently never fire. **If the shunt, the
+INA gain, or the offset ever changes, re-check that `CC_I_FLOOR_A` still sits
+above the zero reading.**
+
+### STILL OPEN — the current scale
+
+**Not yet measured.** `gain x shunt = 2.0 V/A` is assumed from the part
+numbers, never verified against a meter, and ladder step 5 predicts the current
+may read **5-7 % high**. The planned measurement is a DMM in series (Fluke 10 A
+jack) during explicit-code holds at ~150 and ~200 mA into the 4.8 ohm load.
+
+That measurement also separates the last ambiguity in the +1.3 % A0 bias:
+
+* DMM current **agrees** with firmware `I` -> the 1.3 % is the **10k/10k
+  divider** (A0 only) -> `R_sma` is ~1.3 % high
+* DMM current is **~1.3 % lower** -> it is **`aref`** (shared by A0 and A1)
+  -> V and I are both 1.3 % high, and **`R_sma` is correct** because the error
+  cancels in the ratio
+
+Note `aref` errors cancel in `R` but **square in POWER** (`P = V*I`), so a
+1.3 % `aref` error is ~2.6 % on power.
+
+### Constants are RUNTIME ONLY — none of this is persisted
+
+`vdd 5.067` and `ioffset 0.0167` revert on every reset. They are deliberately
+NOT yet baked into the source: fold them in together with whatever the current
+scale turns out to be, so one consistent set lands at once rather than three
+partial edits. Until then, **a session that forgets to send them is running on
+the old constants.**
