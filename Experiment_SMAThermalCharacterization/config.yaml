@@ -96,6 +96,11 @@ camera:
   #   Lower = cheaper live view, no effect on recording fps. ~16 ms/decode at
   #   1080p, so 10 Hz ≈ 16% of one core; 5 Hz ≈ 8%. Recording still gets fps_fast.
   preview_width: 400 # downscaled display width (px); smaller = lighter to draw
+  reconnect_timeout_s: 6.0 # watchdog: no good frame this long -> reopen. Keep it
+  # WELL above the camera's own open+first-frame latency (measured ~4.5 s on the
+  # 12MP). At the old 2.0 s the watchdog fired before the stream had started, and
+  # every reopen cost another 4.5 s — a reopen loop that never delivers a frame
+  # and holds the device against the next run (see STATUS.md 2026-07-28).
 
 # ── SMA cyclic actuation (the ON-M7 experiment state machine) ─────────
 # The firmware runs the heat/cool cycle deterministically off M7's own

@@ -137,9 +137,16 @@ class CameraConfig:
     # view (the real CPU lever); preview_width is the downscaled display size.
     preview_hz: float = 10.0             # live-view refresh (was 15)
     preview_width: int = 400             # live-view downscale width px (was 480)
-    reconnect_timeout_s: float = 2.0     # no good frame this long -> reopen the
+    reconnect_timeout_s: float = 6.0     # no good frame this long -> reopen the
                                          #   camera (watchdog; other streams have
                                          #   one, the camera used to just freeze).
+                                         #   MUST stay well above the device's own
+                                         #   open+first-frame latency (~4.5 s on
+                                         #   the 12MP): a shorter window makes the
+                                         #   watchdog fire before the stream ever
+                                         #   starts, and each reopen costs another
+                                         #   4.5 s -> a self-sustaining reopen loop
+                                         #   that never yields a single frame.
 
     def res_tuple(self) -> tuple:
         w, h = self.resolution

@@ -21,8 +21,10 @@ Author: Yilin Ma — HDR Lab, University of Michigan
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import multiprocessing as mp
+import os
 import queue
 import threading
 import time
@@ -97,10 +99,45 @@ def _camera_proc_main(cfg: CameraConfig, cmd_q, out_q, stop_evt) -> None:
     pt = threading.Thread(target=push_out, name="CamOut", daemon=True)
     dt.start(); pt.start()
 
-    stop_evt.wait()
+    # Wait for a 'stop' — but ALSO watch the parent. If the console dies without
+    # a clean join() (crash, force-close, kill), nothing ever sets stop_evt and
+    # this process would sit here forever while CameraWorker keeps retrying its
+    # open, holding the camera against the NEXT run. That is exactly how a
+    # stranded child blocked the 12MP on 2026-07-28. mp.parent_process() is the
+    # reliable handle here — on Windows os.getppid() keeps returning the dead
+    # pid, so it can't detect this.
+    parent = mp.parent_process()
+    orphaned = False
+    while not stop_evt.wait(timeout=1.0):
+        if parent is not None and not parent.is_alive():
+            orphaned = True
+            stop_evt.set()
+            with contextlib.suppress(Exception):   # stderr died with the parent
+                log.warning("parent process gone -> camera process self-exiting")
+            break
+
     worker_stop.set()
-    worker.join(timeout=5.0)
-    log.info("camera process exiting (written=%d)", worker.n_written)
+    worker.join(timeout=5.0)                       # lets it close frames.csv
+    with contextlib.suppress(Exception):
+        log.info("camera process exiting (written=%d)", worker.n_written)
+
+    # Drop the IPC queues before returning. An mp.Queue's feeder thread is
+    # joined by an exit finalizer, and with the parent gone nobody drains
+    # out_q — so the feeder blocks on a full pipe, that join never returns, and
+    # the process hangs in interpreter shutdown STILL HOLDING THE CAMERA (0%
+    # CPU, invisible). CameraProcessProxy.join() already does this on the parent
+    # side for the mirror-image hang; the child needs it too.
+    for q in (cmd_q, out_q):
+        with contextlib.suppress(Exception):
+            q.cancel_join_thread()
+            q.close()
+
+    if orphaned:
+        # The worker has joined and closed its files, and there is no parent
+        # left to report to. Guarantee termination rather than risk blocking in
+        # shutdown on some other stray handle — a stranded child locks the
+        # camera against every later run, which is strictly worse.
+        os._exit(0)
 
 
 def _safe_put(q, item) -> None:

@@ -4,6 +4,11 @@
 pyserial>=3.5         # H7 USB-CDC + Zaber serial fallback
 zaber-motion>=7.0     # Zaber X-LSQ300A-E01 linear stage
 opencv-python>=4.8    # 12MP camera capture + live preview (camera worker)
+pygrabber>=0.2        # DSHOW device NAMES, so the camera is pinned by name
+                      #   ("12MP U3 Camera") instead of by positional index.
+                      #   Was imported by lib_workers._dshow_device_names() but
+                      #   never declared — without it that path silently no-ops
+                      #   and resolution falls back to the capability probe.
 pyyaml>=6.0           # config.yaml
 numpy>=1.24
 matplotlib>=3.7       # analyze_sma.py dashboards (Agg, headless)

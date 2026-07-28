@@ -40,6 +40,40 @@
   `frames.csv` (`frame_idx,host_ts,monotonic,cycle,mode,rel_path,laser_mm`) is
   the alignment key against `h7.csv`/`stage.csv`. Config: `camera:` block;
   requires `opencv-python` (import is guarded — absent → camera disabled).
+- **Camera wouldn't start — a STRANDED subprocess owned it (2026-07-28, FIXED).**
+  Symptom: `open failed: no capturable camera found (probed indices [0,1,2,3])`
+  on every launch; one session (`console_20260728_110133`) silently recorded
+  `cam[1] 640x480` — the **built-in webcam**, not the 12MP. Cause was a chain of
+  three defects, all now fixed:
+  1. **`reconnect_timeout_s` was 2.0 s, shorter than the camera's own
+     open+first-frame latency (~4.5–5.4 s measured).** The watchdog fired before
+     the stream ever started, and each reopen cost another 4.5 s — a
+     self-sustaining reopen loop that never yields a frame. Now **6.0 s**
+     (`lib_config.CameraConfig`, explicit in `config.yaml`).
+  2. **The orphaned child could never exit.** `_camera_proc_main` waited on an
+     `mp.Event` only the (dead) parent could set, so a console crash / force-close
+     left it looping forever, holding the camera against every later run —
+     Windows' consent store showed `python.exe … LastUsedTimeStop = 0` for 20 min.
+     Now a **parent-liveness watchdog** (`mp.parent_process().is_alive()`, polled
+     1 Hz) self-exits. **Note `os.getppid()` is useless here** — on Windows it
+     keeps returning the dead pid. Second half of the same bug: the child then
+     **hung in interpreter shutdown**, because an `mp.Queue`'s feeder thread is
+     joined by an exit finalizer and nobody drains `out_q` once the parent dies
+     (0% CPU, invisible, still holding the camera). Fixed with
+     `cancel_join_thread()` + `close()` on the child side — the mirror of what
+     `CameraProcessProxy.join()` already did on the parent side — plus an
+     `os._exit(0)` backstop on the orphan path only.
+  3. **`pygrabber` was imported but never declared**, so name-pinning to
+     `"12MP U3 Camera"` silently no-opped and resolution always fell back to the
+     capability probe — which would happily return a webcam. Added to
+     `requirements.txt` (installed), and `_resolve_camera` now **raises** when the
+     widest camera found is under `_BIG_SENSOR_MIN_WIDTH` instead of accepting it.
+     Bypass with `camera.auto_detect: false`.
+  Verified on the rig: name-pinned to index 0 in 0.08 s (was a 4.5 s probe),
+  `cam[0] 1920x1080 MJPG`, clean `join()` in 0.5 s (exit 0), and a **force-killed**
+  parent now leaves the child dead in **1.1 s** with the camera released.
+  **Operator note:** DSHOW also enumerates an **OBS Virtual Camera** on this host,
+  which shifts positional indices — one more reason index alone is not trustworthy.
 - **No LCR (2026-07-06).** LCR is fully removed from this thermal module — no
   worker/connection, no `lcr.csv`, no LCR UI (status dot, `Ls/Rs` readout, plot
   row, and `ref open`/`ref short` are gone). `build_core` never constructs an

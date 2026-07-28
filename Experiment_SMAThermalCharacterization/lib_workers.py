@@ -138,7 +138,11 @@ def _resolve_camera(cfg, logger, prefer=None, max_probe=4):
       1. pygrabber name match against cfg.name_hint (if pygrabber is present).
       2. capability probe: the configured/last-used index wins immediately if it
          is the big sensor; otherwise scan indices and take the widest one.
-    Raises RuntimeError if nothing capturable is found."""
+    Raises RuntimeError if nothing capturable is found, or if the widest camera
+    found is NOT the big sensor — a built-in webcam is never an acceptable
+    substitute for the 12MP, and silently accepting one produced a whole session
+    recorded at 640x480. Set cfg.auto_detect=False to bypass and force
+    cfg.index."""
     names = _dshow_device_names()
     if names:
         logger.info("DSHOW cameras: %s", names)
@@ -178,6 +182,16 @@ def _resolve_camera(cfg, logger, prefer=None, max_probe=4):
     if best_idx is None:
         raise RuntimeError(
             f"no capturable camera found (probed indices {order})")
+    if best_w < _BIG_SENSOR_MIN_WIDTH:
+        # Something opened, but it is a small sensor — i.e. the built-in webcam.
+        # Refuse it: the 12MP is either unplugged or still held by another
+        # process (a stranded CameraProcess from a crashed console is the usual
+        # cause — check for a stray python.exe).
+        raise RuntimeError(
+            f"12MP camera not available — widest camera found was index "
+            f"{best_idx} at {best_w}px, need >={_BIG_SENSOR_MIN_WIDTH}px "
+            f"(probed {order}). It is unplugged, or another process still holds "
+            f"it. Set camera.auto_detect=false to force index {cfg.index}.")
     logger.info("camera auto-detected at index %d (max width %d)",
                 best_idx, best_w)
     return best_idx, None
