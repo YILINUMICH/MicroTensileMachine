@@ -544,3 +544,76 @@ NOT yet baked into the source: fold them in together with whatever the current
 scale turns out to be, so one consistent set lands at once rather than three
 partial edits. Until then, **a session that forgets to send them is running on
 the old constants.**
+
+---
+
+## ADC2 "intermittent failure" — 2026-07-27. It was the skipped EVM power cycle.
+
+Hours were spent treating this as a mystery hardware fault. It was not one.
+**If `crc_err` is climbing or `rate2` is 0 after a flash, power-cycle the EVM.
+Do not debug the driver.**
+
+### The symptom, and how it progressed
+
+| stage | `crc_err` | `rate1` / `rate2` | STATUS byte |
+|---|---|---|---|
+| early session | 512/s | 512 / **0** | `0x1` |
+| later, after more uploads | 512/s | 512 / **0** | `0x1` |
+| late session | **1024/s** | **0 / 0** | **`0x00`** |
+| after power-cycling USB + EVM | **0** | **512 / 512** | valid |
+
+It **degraded progressively across uploads** — ADC2 first, then both channels.
+That progression is the tell. A real intermittent fault does not monotonically
+worsen with the number of DFU resets.
+
+`status=0x00` is the decisive signature: an all-zeros STATUS byte means the
+ADS1263 is not responding on SPI at all. It is the same family as the documented
+`ID=0x00`, just observed mid-run through the checksum path rather than at boot.
+
+### Why it happened
+
+`CLAUDE.md` has said this all along:
+
+> **Power-cycle the rig (USB + EVM supply) after every upload.** The DFU reset
+> does not cleanly re-power the EVM's analog rails; skip the cycle and the
+> ADS1263 comes up with `ID=0x00`.
+
+This session did roughly **fifteen uploads and zero EVM power cycles** — rate
+ladder, profiler builds, open-load fix, production image. The damage accumulated.
+
+It also explains the two things that made it look random:
+
+* **"It cleared after a reflash."** That reflash happened to leave the analog
+  rails in a recoverable state. It was luck, not a fix.
+* **"It appeared when the LDO was powered."** Coincidence of timing — the LDO
+  supply had nothing to do with it.
+
+### What the failure costs you
+
+**Nothing on screen tells you.** The stream simply has no `src=2` rows. The
+console does not warn, the SMA path keeps working, and the CC loop is unaffected
+because it reads the on-chip ADC, not the ADS1263. **You can run a whole session
+and record zero force data without noticing.**
+
+Check `rate2` in `[STATUS]` at the start of every session.
+
+### Load-cell verification after recovery
+
+With both channels live, the load cell was pressed by hand while streaming:
+
+* **rest 0.0553 V**, steady — and a Fluke 17B+ independently measured **0.05 V**
+  at neutral, so the whole chain is confirmed end to end (sensor → LCA-9PC →
+  ADC2 → SRAM4 ring → M7 → USB → host parser).
+* press peak **2.909 V** binned, **5.000 V** raw.
+
+Two observations from that test:
+
+1. **A hard press RAILS the channel at 5.000 V** against the REF7050 reference.
+   Irrelevant for SMA-scale forces, but it shows the window: rest sits at
+   0.055 V, so there is essentially the full 0–5 V above and almost nothing
+   below. If compression ever matters, re-centre that offset.
+2. **The laser (`src=1`) moved ~600 mV during the touching and settled back to a
+   steady 2.5075 V.** That is almost certainly *real mechanical coupling* —
+   touching the rig deflects the fixture and the displacement sensor sees it —
+   not electrical crosstalk, which would not settle so cleanly. Worth
+   remembering: **the laser responds to anything that touches the frame.**

@@ -102,9 +102,11 @@ Any `src=3` / `src=5` data captured with an earlier build is wrong on both count
       `pumpSensors` and `streamSma` writes into one per pass (halves the write
       count), and confirm 650 Hz is actually insufficient for the science. The
       `portenta_m7_udp` env exists and has never been flashed.
-- [ ] **Chase the ADC2 checksum failures** — 100% of ADC2 reads failed while the
-      LDO was powered, `rate2=0`, ~512 crc_err/s; cleared after a reflash. Cause
-      unknown. Highest-risk open item: it silently zeroes the force channel.
+- [x] ~~Chase the ADC2 checksum failures~~ — **SOLVED 2026-07-27, and it was not
+      a fault.** It was the documented EVM power-cycle requirement, skipped
+      across ~15 uploads in one session. See the ADC2 section in
+      [README.md](README.md). **Rule: `crc_err` climbing or `rate2=0` after a
+      flash means power-cycle the EVM, not debug the driver.**
 - [ ] Steps 4–8 of the bring-up ladder (`cc_hz`, accuracy vs DMM, step response,
       disturbance test, no-regression).
 - [ ] Decide whether to keep the `DBG_LOOP_PROFILE` / `portenta_m7_prof`
