@@ -6,8 +6,9 @@ closed-loop current controller to the M7 drive path. The parent project stays
 the production image; this is where the current loop is developed.
 
 Status: **WIP** — first flashed and run on hardware 2026-07-27. The closed loop
-holds 200 mA within 0.6 %, the stream runs at 1 kHz, and the code→LDO map is
-DMM-verified to 1 mV. The **absolute current scale is still unverified**. See
+holds 200 mA within 0.6 %, the stream runs at 1 kHz, the code→LDO map is
+DMM-verified to 1 mV, and the **current scale measures correct to ~1 %** (the
+long-suspected 5–7 % error is not there). See
 [STATUS.md](STATUS.md) for the bring-up ladder, and the **Bring-up log** and
 **Calibration log** at the end of this file for what was tried, what worked, and
 what turned out to be wrong.
@@ -73,14 +74,20 @@ reports the achieved rate so this assumption is checkable, not just asserted.
 
 ### The accuracy caveat — read this before trusting a number
 
-> **⚠️ PARTLY CONTRADICTED BY MEASUREMENT (2026-07-27) — see the Calibration log
-> at the end of this file.** Against a Fluke 17B+ at three DAC codes, A0 reads
-> only **+1.3 % high**, not ~5 %. If `aref` really were 5 % high, A0 would read
-> 5 % high, and it does not. Either the 2.99 V figure below is wrong, or the
-> divider ratio offsets it. **The current scale has still never been checked
-> against a meter**, so the paragraph's conclusion — targets repeatable but not
-> absolute — stands; only the *size* of the error is in question. Do not quote
-> the 5 % number until someone re-derives it.
+> **⚠️ SUPERSEDED BY MEASUREMENT (2026-07-27) — see the Calibration log at the
+> end of this file. The paragraph below is kept for history; do not act on it.**
+>
+> Against a Fluke 17B+ at three DAC codes, A0 reads only **+1.3 % high**, not
+> ~5 %. And driving a known load, the **current scale measures correct to ~1 %**.
+> So the concrete claim below — that `cc 500` regulates to roughly 470 mA — is
+> **wrong by about an order of magnitude in error size**; expect ~495–505 mA.
+>
+> The 2.99 V figure was never re-derived and does not survive contact with the
+> meter: if `aref` were 5 % high, A0 would read 5 % high, and it does not.
+> **Do not quote the 5 % number.** What remains genuinely open is only a ~1.3 %
+> ambiguity over whether that bias sits in `aref` (cancels in `R`) or the 10k/10k
+> divider (does not) — see the Calibration log for why a nominal resistor cannot
+> settle it.
 
 `ADC_VREF_V` (3.145 V) is **~5 % above the true ~2.99 V**, and ADC conversion
 duty sags the reference further. Voltage-mode drive never cared, and `R = V/I`
@@ -462,23 +469,73 @@ was margin; at ~25 mA the guard would silently never fire. **If the shunt, the
 INA gain, or the offset ever changes, re-check that `CC_I_FLOOR_A` still sits
 above the zero reading.**
 
-### STILL OPEN — the current scale
+### The current scale — MEASURED, and it is good
 
-**Not yet measured.** `gain x shunt = 2.0 V/A` is assumed from the part
-numbers, never verified against a meter, and ladder step 5 predicts the current
-may read **5-7 % high**. The planned measurement is a DMM in series (Fluke 10 A
-jack) during explicit-code holds at ~150 and ~200 mA into the 4.8 ohm load.
+`gain × shunt = 2.0 V/A` had been assumed from part numbers and never metered.
+Ladder step 5 predicted current might read **5–7 % high**. It does not.
 
-That measurement also separates the last ambiguity in the +1.3 % A0 bias:
+Driven in voltage mode at `code 404` into the 4.8 Ω load, armed:
 
-* DMM current **agrees** with firmware `I` -> the 1.3 % is the **10k/10k
-  divider** (A0 only) -> `R_sma` is ~1.3 % high
-* DMM current is **~1.3 % lower** -> it is **`aref`** (shared by A0 and A1)
-  -> V and I are both 1.3 % high, and **`R_sma` is correct** because the error
-  cancels in the ratio
+| quantity | value |
+|---|---|
+| predicted I (from the DMM-calibrated LDO) | 1.000 V / (0.2 + 4.8 + ~0.03) ≈ **198.8 mA** |
+| measured I (firmware) | **200.8 mA** mean (198.6–206.6) |
+| error | **+1.0 %** |
+| `V_ldo − V_sma` | ≈40 mV = 0.2 A × 0.2 Ω — the shunt drop appears correctly |
+| `R` computed | 4.863 Ω (nominal load 4.8 Ω) |
 
-Note `aref` errors cancel in `R` but **square in POWER** (`P = V*I`), so a
-1.3 % `aref` error is ~2.6 % on power.
+**So the current scale is correct to ~1 %, and ladder step 5's 5–7 % concern is
+not supported.** That was the larger of the two open calibration questions.
+
+### The +1.3 % A0 bias — still NOT resolved, and why the obvious argument fails
+
+The tempting inference: `R` reads 4.863 Ω against a nominal 4.8, i.e. +1.3 %,
+matching A0's bias exactly — divide it out and you get 4.800, so the bias must
+be **divider-only** (A0), making `R_sma` 1.3 % high.
+
+**Do not rely on that.** Two effects the same size as the one being measured:
+
+1. `R` here is not the resistor alone — it is `resistor + MOSFET R_ds(on) +
+   wiring`, plausibly ~4.85 Ω rather than 4.80.
+2. The load is a **nominal** 4.8 Ω of unknown tolerance. At a common 5 % that
+   is 4.56–5.04 Ω, and the whole inference sits inside the tolerance band.
+
+Settling divider-vs-`aref` needs a tolerance-known reference or a working series
+ammeter. Practical impact of leaving it open: **~1.3 % on `R_sma`, and ~2.6 % on
+power if it turns out to be `aref`** (the error cancels in `R = V/I` but squares
+in `P = V·I`). Both are inside the other error sources.
+
+### The series-ammeter attempt FAILED — read this before repeating it
+
+The plan was a DMM in series. It read **0 mA** while the firmware showed only
+sensor offset, and `V_sma` sat at the full commanded voltage with **no shunt
+drop** — two independent signals both saying no current flowed at all.
+
+* The **fuse was good.** The cause was almost certainly **dial/jack pairing**:
+  on the 17B+ the red lead in the **mA/µA jack** requires the dial on **mA**,
+  not **A**, and AC/DC is a separate button. A meter in the wrong pairing is an
+  **open circuit**, not a low-reading one.
+* What produced the result was the **bypass test**: remove the meter, restore
+  the direct connection, and read the firmware against the DMM-calibrated LDO.
+  That works because the voltage map is already trusted — which is why the
+  voltage calibration must come first.
+* Diagnostic worth reusing: if current is commanded and `V_sma` shows **no
+  shunt drop**, the loop is open. That is independent of the current sense and
+  catches the case where you would otherwise blame the sensor.
+
+### Sequencing gotcha — `arm` overrides the DAC code
+
+`arm` calls `setLevel(V_IDLE)`, so `code N` issued *before* `arm` is silently
+discarded and you end up at code 0. **Always `arm` first, then set the code.**
+Cost an entire measurement point before it was noticed.
+
+### Runtime constants are LOST ON EVERY FLASH — demonstrated, not theoretical
+
+`ioffset 0.0167` was measured, applied, verified … and then silently reverted by
+the reflash for the open-load fix an hour later. It was only caught because the
+zero-current reading went back to ~8 mA. **After any upload, re-send `vdd` and
+`ioffset` before taking data**, or you are recording against the old constants
+with nothing on screen to tell you.
 
 ### Constants are RUNTIME ONLY — none of this is persisted
 

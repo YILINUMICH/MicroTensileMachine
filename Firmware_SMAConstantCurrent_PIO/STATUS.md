@@ -79,11 +79,21 @@ Any `src=3` / `src=5` data captured with an earlier build is wrong on both count
       disarms ~380 ms after railing. **This is why the ladder says verify it
       before connecting a wire — assuming it worked would have left current mode
       with no open-load protection at all.**
-- [ ] **`ioffset` measured but NOT persisted.** 8.33 mA at true zero →
-      `ioffset 0.0167`, which brings it to ~2 mA. Runtime only; it reverts on
-      reset. Fold it into the source defaults together with whatever the
-      code→LDO DMM session says about `gain`/`shunt`/`aref`, so one consistent
-      set of constants lands at once rather than two.
+- [x] ~~Step 5, the accuracy check~~ — done 2026-07-27 with a Fluke 17B+ and a
+      4.8 Ω dummy load. **The predicted 5–7 % current error is NOT there**: the
+      scale measures correct to ~1 %. The code→LDO map is DMM-verified to 1 mV
+      (`vdd 5.067`); the *design* figure of 4.7 V turned out to be the wrong
+      number, not the hardware. See the Calibration log in
+      [README.md](README.md), including the series-ammeter attempt that failed
+      and why.
+- [ ] **PERSIST the measured constants.** `vdd 5.067` and `ioffset 0.0167` are
+      runtime only and were *demonstrably* lost to a reflash mid-session. Bake
+      both into the source defaults. Re-send them after every upload until then —
+      nothing on screen tells you they are missing.
+- [ ] **Resolve the +1.3 % A0 bias** — `aref` (cancels in `R`, squares in power)
+      vs the 10k/10k divider (biases `R` by 1.3 %). A nominal-value resistor
+      cannot settle it; needs a tolerance-known reference or a working series
+      ammeter. Low priority: ~1.3 % on `R`, ~2.6 % on power.
 - [ ] **Decide on UDP.** `Serial.write()` now measures ~300 µs in-cycle (11 µs
       idle) — genuine USB-CDC back-pressure at ~160 KB/s, and the current cap on
       the SMA rate (~650 Hz vs the 1000 Hz nominal). This is the FIRST time the
