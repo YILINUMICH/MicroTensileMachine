@@ -4,23 +4,31 @@ WHY THIS EXISTS
 ---------------
 The CC loop on the H7 overshoots by up to 50% while the SAME control law on an
 Uno, driving the SAME board (INA296A gain 10, 0.2 ohm shunt), holds target to
-0.1%. Measured 2026-07-28 on sweep_20260728_215606:
+0.1%. The control law was diffed line for line first and is a faithful port, so
+the difference had to be the measurement.
 
-    Uno   0.90 mA sd @ 8 averages  ->    1.0x its quantisation floor
-    H7   72.20 mA sd @ 4 averages  -> 5981x its quantisation floor
+WHAT THE MEASUREMENTS ACTUALLY SAID (2026-07-28, five captures)
 
-Per SINGLE ADC reading that is 2.55 mA vs 144.4 mA — the H7 is 57x noisier
-before any averaging, so this is NOT a "we averaged less to reach 1 kHz"
-problem. Averaging is sqrt(N): closing 57x needs N ~ 25 700 per tick (~2.7 Hz
-loop). It cannot be fixed in the control code.
+    SMA disconnected, voltage   0.4 mA mean   12.10 mA sd   24.2 mA/read
+    connected, voltage          106 mA        14.44 mA      28.9 mA/read
+    connected, cc 106           112 mA        15.11 mA      30.2 mA/read
+    connected, cc 155           161 mA        15.60 mA      31.2 mA/read
+    connected, cc 100           108 mA        14.73 mA      29.5 mA/read
+    Uno reference               180 mA         0.90 mA       2.55 mA/read
 
-The noise breaks the controller in two specific places, both of which decide on
-ONE sample:
-  * the `near` gate (band = 12 mA at the 100 mA cool target) is evaluated
-    against a sample carrying +-72 mA, so it opens and closes at random;
-  * the bootstrap latches R_est = u/I from a single reading — a sample reading
-    80 mA when the truth is 160 gives 0.5/0.08 = 6.25 ohm, which is exactly the
-    wrong value the loop has been stuck on.
+The H7 front end is ~12x the Uno, flat in current and identical in CC vs voltage
+mode. An earlier version of this file claimed 144 mA/read, 5981x the
+quantisation floor, 57x the Uno, and "cannot be fixed in the control code" —
+ALL WRONG. That figure came from the sweep's cool phase, whose distribution is
+multimodal rather than Gaussian (see data/sweep_20260728_215606/README.md), and
+I generalised a contaminated condition to the hardware. The correction matters:
+at 15.6 mA sd, ADC_SAMPLES_CYCLE=64 gives 3.9 mA at 383 Hz — 3-sigma inside the
+gate and twice the Uno's rate. Averaging IS a viable fix.
+
+The noise still breaks the controller in two places, both deciding on ONE
+sample: the `near` gate (12 mA band at the 100 mA cool target) and the bootstrap
+latch of R_est = u/I, where a low sample gives 0.5/0.08 = 6.25 ohm — exactly the
+wrong value the loop gets stranded on.
 
 WHAT THIS TEST DECIDES
 ----------------------
@@ -161,10 +169,15 @@ def capture(args):
         "sma-connected": "SMA connected and preloaded as normal",
         "sma-higher": "SMA connected and preloaded as normal",
     }.get(args.label, "check the rig matches the label you chose")
-    print(f"\nisense noise test — condition '{args.label}'")
+    drive = {
+        "voltage": f"{args.volts:.3f} V static command, no CC loop",
+        "cc": f"cc {args.ma:.0f} mA, loop closed, DAC written every tick",
+        "cccycle": (f"cccycle {args.ma_high:.0f}/{args.ma:.0f} mA, 100 ms heat "
+                    f"/ 12 s cool — reproduces the sweep"),
+    }[args.mode]
+    print(f"\nisense noise test — condition '{args.label}' / mode '{args.mode}'")
     print(f"  {banner}")
-    print(f"  {args.volts:.3f} V static command, {args.secs:.0f} s, "
-          f"voltage mode (no CC loop)\n")
+    print(f"  {drive}, {args.secs:.0f} s\n")
     if input("  type GO to start: ").strip() != "GO":
         sys.exit("aborted")
 
@@ -175,7 +188,17 @@ def capture(args):
     try:
         h7.send("arm")
         time.sleep(0.5)
-        if args.mode == "cc":
+        if args.mode == "cccycle":
+            # Reproduce the ACTUAL failing condition. `cc` cannot: when R_est
+            # bootstraps correctly the loop lands near target and the gate opens
+            # (measured 2026-07-28: cc 100 -> 108.4 mA, err 8.4 < 12 mA band,
+            # 14.7 mA sd, clean). The sweep's cool phase only goes bad when
+            # R_est latches WRONG at cccycle start, which strands the loop 55%
+            # above target with the gate shut. That latch is a dice roll on one
+            # ADC sample, so it has to be reproduced, not commanded.
+            h7.send(f"cccycle {args.ma_high:.1f} {args.ma:.1f} 100 12000 "
+                    f"{max(1, int(args.secs // 12.1))}")
+        elif args.mode == "cc":
             # CC mode writes the MCP4728 over I2C EVERY control tick. Voltage
             # mode holds the DAC static. Comparing the two AT THE SAME CURRENT
             # is what isolates the per-tick DAC write as a noise source —
@@ -267,13 +290,18 @@ def main():
                     help="static LDO command; 0.5 = the idle floor (~155 mA)")
     ap.add_argument("--label", default="sma-connected",
                     choices=["sma-disconnected", "sma-connected", "sma-higher"])
-    ap.add_argument("--mode", default="voltage", choices=["voltage", "cc"],
+    ap.add_argument("--mode", default="voltage",
+                    choices=["voltage", "cc", "cccycle"],
                     help="voltage = DAC held static; cc = DAC written every "
                          "control tick. Compare AT THE SAME CURRENT to isolate "
                          "the per-tick I2C DAC write as a noise source.")
     ap.add_argument("--ma", type=float, default=106.0,
-                    help="target current for --mode cc; match the voltage-mode "
-                         "capture's MEASURED mean so only the mode differs")
+                    help="target current for --mode cc; for --mode cccycle this "
+                         "is i_low (the cool target). Match the voltage-mode "
+                         "capture's MEASURED mean so only the mode differs.")
+    ap.add_argument("--ma-high", type=float, default=550.0,
+                    help="--mode cccycle only: the heat target, i.e. the sweep "
+                         "level being reproduced")
     ap.add_argument("--outdir", default="data")
     ap.add_argument("--compare", nargs="+", metavar="DIR")
     args = ap.parse_args()
