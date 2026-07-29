@@ -39,7 +39,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -92,6 +92,10 @@ def main() -> int:
                    help="peak must stay below this (V) to pass")
     p.add_argument("--recover-frac", type=float, default=0.15,
                    help="baseline drift across cycles, as a fraction of rise")
+    p.add_argument("--min-rise", type=float, default=0.05,
+                   help="V of load rise below which a level counts as SUB-"
+                        "THRESHOLD (skipped, not failed). Default 0.05 V "
+                        "= 4.9 mN = ~10x the ~5 mV load-cell noise floor.")
     p.add_argument("--out", default=None)
     a = p.parse_args()
 
@@ -138,7 +142,7 @@ def main() -> int:
             save_capture(cap, out / f"level_{lvl:.0f}mA.csv",
                          {"level_mA": lvl, "heat_ms": a.heat_ms,
                           "cool_s": a.cool_s, "cycles": a.cycles,
-                          "captured_utc": datetime.utcnow().isoformat() + "Z"})
+                          "captured_utc": datetime.now(timezone.utc).isoformat()})
 
             per = analyse_level(cap, a.heat_ms)
             if not per:
@@ -165,6 +169,19 @@ def main() -> int:
 
             print(f"  baseline drift {drift:+.3f} V over {len(per)} cycles "
                   f"(mean rise {mean_rise:.3f} V)")
+
+            # SUB-THRESHOLD levels are SKIPPED, not failed. An SMA has a
+            # transformation threshold: below it the rise approaches the
+            # load-cell noise floor and every relative test becomes noise
+            # divided by noise. Measured 2026-07-28 at 150 mA — rise 0.018 V
+            # against a 0.043 V baseline drift and ~0.005 V RMS noise, which
+            # tripped the recovery test on a ratio that meant nothing. Keep
+            # climbing until the SMA actually responds.
+            if mean_rise < a.min_rise and not clipped and not faults:
+                print(f"  SUB-THRESHOLD (rise {mean_rise:.3f} V < "
+                      f"{a.min_rise:.3f} V) — not actuating yet, continuing\n")
+                continue
+
             if faults:
                 stop_reason = f"{lvl:.0f} mA: firmware FAULT — {faults[0][:70]}"
             elif clipped:
@@ -211,7 +228,12 @@ def main() -> int:
         print(f"  limit is a PAIR; a shorter cool lowers it.")
     else:
         print(f"  NO LEVEL PASSED — {stop_reason}")
-        print("  Re-zero the amplifier and/or lengthen --cool-s, then retry.")
+        if rows and max(r["rise"] for r in rows) < a.min_rise:
+            print("  Every level was SUB-THRESHOLD: the SMA never actuated.")
+            print("  Raise the ladder — heating energy goes as I^2 x t, so")
+            print("  lengthening the cool will not help; nothing got hot.")
+        else:
+            print("  Lengthen --cool-s, or re-check the preload, then retry.")
     print(f"  raw + summary -> {out}")
     print("=" * 62)
     return 0
