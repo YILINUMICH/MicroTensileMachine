@@ -131,21 +131,22 @@ def main() -> int:
                    help="V of load rise below which a level counts as SUB-"
                         "THRESHOLD (skipped, not failed). Default 0.05 V "
                         "= 4.9 mN = ~10x the ~5 mV load-cell noise floor.")
-    p.add_argument("--i-low", type=float, default=0.0,
-                   help="cool-phase CC target in mA. DEFAULT 0 = the design "
-                        "intent: cool parks the DAC at code 0 and the wire sits "
-                        "on the 0.5 V bias that keeps the shunt sense alive. "
-                        "The loop opens (ccRelease -> setLevel(V_IDLE)) and R "
-                        "is NOT re-bootstrapped from scratch: ccEngage seeds "
-                        "cc_u_cmd = codeToVldo(0) = 0.500 V = u_min, so the "
-                        "first heat tick is RAILED with ~120 mA flowing and "
-                        "latches R = 0.5/0.12 = 4.17 ohm immediately — off a "
-                        "point that has had the whole cool phase to settle, "
-                        "which is a BETTER bootstrap than the closed-loop form "
-                        "gets. Nonzero keeps the loop closed through cool; it "
-                        "was the default from 2026-07-28 f2a878a until the "
-                        "session that motivated it turned out to be a rig fault "
-                        "(see data/sweep_20260728_215606/README.md).")
+    p.add_argument("--i-low", type=float, default=100.0,
+                   help="cool-phase CC target in mA. 100 is ELECTRICALLY the "
+                        "'cool = DAC code 0' design: it is below the reachable "
+                        "floor (u_min 0.5 V / R ~4.7 ohm = ~106 mA) so the loop "
+                        "rails at u_min — code 0, 0.5 V bias. Measured on a "
+                        "healthy rig: cool sat at code 8, 0.510 V. "
+                        "DO NOT SET 0. It disengages the loop, so the next "
+                        "ccEngage() reseeds cc_u_i = codeToVldo(0) = 0.5 V and "
+                        "the bootstrap integral RESTARTS EVERY PULSE with only "
+                        "100 ms of ramp. Measured 2026-07-29 "
+                        "(sweep_20260729_000147): 150 mA cmd latched R_est on "
+                        "pulse 2 and reached 104%%, but 250 mA cmd NEVER emitted "
+                        "src=7 at all and sat at 118 mA (47%%) for the whole run. "
+                        "Keeping the loop engaged lets R_est latch off the "
+                        "railed cool point, which had the whole cool phase to "
+                        "settle.")
     p.add_argument("--min-dx-um", type=float, default=20.0,
                    help="displacement excursion below which a level counts as "
                         "SUB-THRESHOLD (skipped, not failed). ACTUATION IS "
@@ -153,6 +154,10 @@ def main() -> int:
                         "compliant so the coil moves rather than loading. "
                         "Default 20 um is ~14x the ~1.4 um laser noise; "
                         "measured 4.9 um at 225 mA (noise) vs 44 um at 426 mA.")
+    p.add_argument("--abort-on-bad-sense", action="store_true",
+                   help="halt the sweep when the current sense reads physically "
+                        "impossible values, instead of just warning. For "
+                        "UNATTENDED runs — at the bench you are the guard.")
     p.add_argument("--v-idle", type=float, default=0.5,
                    help="LDO output at DAC code 0 (the cool-phase bias). Must "
                         "match the firmware `offset`. Used by the sense check.")
@@ -285,11 +290,18 @@ def main() -> int:
             # bad sweep on 2026-07-28 and a wrong controller diagnosis with it.
             ok, why = measurement_sane(cap, heat_windows(cap),
                                        v_idle=a.v_idle, r_min_ohm=a.r_min)
+            # WARN, don't abort. An operator at the bench is a better judge than
+            # a threshold, and a guard that halts a run on a heuristic wastes
+            # more time than the bad data it prevents. --abort-on-bad-sense
+            # restores the hard stop for unattended runs.
             if not ok:
-                stop_reason = f"{lvl:.0f} mA: {why}"
-                print(f"  ABORT — {stop_reason}\n")
-                break
-            print(f"  sense check: {why}")
+                print(f"  !! SENSE WARNING: {why}")
+                if a.abort_on_bad_sense:
+                    stop_reason = f"{lvl:.0f} mA: {why}"
+                    print(f"  ABORT — {stop_reason}\n")
+                    break
+            else:
+                print(f"  sense check: {why}")
             i_ach = sum(r["i_mA"] for r in per_v) / len(per_v)
             print(f"  achieved current {i_ach:.0f} mA of {lvl:.0f} mA commanded "
                   f"({100*i_ach/lvl:.0f}%)")
