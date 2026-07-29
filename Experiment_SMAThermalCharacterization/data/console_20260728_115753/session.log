@@ -1,0 +1,390 @@
+2026-07-28 11:57:53,985  INFO   root                Session: console_20260728_115753
+2026-07-28 11:57:53,985  INFO   root                Output:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260728_115753
+2026-07-28 11:57:53,986  INFO   root                Config:  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\config.yaml  headless=False
+2026-07-28 11:57:54,669  INFO   H7Worker            H7 reader thread pinned: priority=above_normal core=31
+2026-07-28 11:57:54,675  INFO   PortentaReader      Requested RX buffer 4.0 MB (driver may cap it)
+2026-07-28 11:57:54,675  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-28 11:57:54,682  INFO   CameraProxy         camera process started (pid=152000)
+2026-07-28 11:57:55,955  INFO   Driver_ZaberStage   Configuration saved to zaber_config.json
+2026-07-28 11:57:55,986  INFO   Driver_ZaberStage   Connected to X-LSQ300A-E01 on COM5
+2026-07-28 11:57:55,986  INFO   ZaberWorker         Zaber ready: DeviceInfo(port='COM5', device_id=50138, serial_number='143153', name='X-LSQ300A-E01', firmware_version='7.48.24004', device_type='Linear Stage', axis_count=1)
+2026-07-28 11:57:58,693  WARNING  PortentaReader      Opened COM8 but no sample lines seen in 4.0s boot window. If this persists: power-cycle Hat Carrier, re-seat HAT.
+2026-07-28 11:57:58,747  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['cc_r', 'cc_u', 'laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-28 11:57:58,748  INFO   RecordingCore       Running 10.0 s full system check...
+2026-07-28 11:58:08,768  WARNING  RecordingCore       health H7    FAIL (0) — only 0 samples (need >=20)
+2026-07-28 11:58:08,769  INFO   RecordingCore       health stage PASS (628) — 628 reads, pos~55.00 mm
+2026-07-28 11:58:14,369  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-07-28 11:58:19,410  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:19,920  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:20,441  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:20,972  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:21,474  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:21,998  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:22,518  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:23,042  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:23,552  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:24,068  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:24,580  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:25,111  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:25,633  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:26,169  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:26,681  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:27,191  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:27,705  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:28,237  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:28,750  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:29,256  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:29,769  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:30,278  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:30,794  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:31,317  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:31,847  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:32,383  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:32,893  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:33,394  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:33,911  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:34,428  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:34,940  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:35,452  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:36,001  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:36,513  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:37,094  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:37,605  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:38,127  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:38,633  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:39,159  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:39,680  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:40,182  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:40,612  WARNING  H7Worker            H7 command 'disarm' failed: Write timeout
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,613  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,614  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,615  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,616  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,617  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,618  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,619  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,620  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,621  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,623  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,624  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,625  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,626  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,627  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,628  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,629  WARNING  H7Worker            H7 command 'disarm' failed: WriteFile failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,630  ERROR  H7Worker            H7 worker crashed: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+Traceback (most recent call last):
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\lib_workers.py", line 464, in run
+    self._main_loop()
+  File "c:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\lib_workers.py", line 534, in _main_loop
+    ev = reader.poll_event()     # samples + status over serial
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 646, in poll_event
+    line = self._readline()
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Calibrate_LaserHead\portenta_reader.py", line 593, in _readline
+    raw = self._ser.readline()
+          ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\.venv\Lib\site-packages\serial\serialwin32.py", line 275, in read
+    raise SerialException("ClearCommError failed ({!r})".format(ctypes.WinError()))
+serial.serialutil.SerialException: ClearCommError failed (PermissionError(13, 'The device does not recognize the command.', None, 22))
+2026-07-28 11:58:40,648  INFO   H7Worker            H7 worker exit  (pushed=0, dropped=0, filtered=0)
+2026-07-28 11:58:44,942  INFO   RecordingCore       H7: reconnect requested
+2026-07-28 11:58:44,943  INFO   H7Worker            H7 reader thread pinned: priority=above_normal core=31
+2026-07-28 11:58:44,947  INFO   PortentaReader      Requested RX buffer 4.0 MB (driver may cap it)
+2026-07-28 11:58:44,947  INFO   PortentaReader      Opened COM8 @ 115200 baud, waiting 4.0s for firmware boot...
+2026-07-28 11:58:45,951  WARNING  RecordingCore       HEALTH WARNING: H7 silent 1.0s — no new samples (critical; other instruments still recording)
+2026-07-28 11:58:47,634  INFO   PortentaReader      boot banner (152 lines):
+2026-07-28 11:58:47,634  INFO   PortentaReader        traw\tV\thw_us\t
+2026-07-28 11:58:47,634  INFO   PortentaReader        seq   (src=1 l
+2026-07-28 11:58:47,634  INFO   PortentaReader        aser, src=2 lo
+2026-07-28 11:58:47,634  INFO   PortentaReader        ad)
+2026-07-28 11:58:47,634  INFO   PortentaReader        [ADC1] S
+2026-07-28 11:58:47,634  INFO   PortentaReader        TATUS alarm(s): 
+2026-07-28 11:58:47,634  INFO   PortentaReader        0xC9 PGAL_ALM
+2026-07-28 11:58:47,635  INFO   PortentaReader        3980	1	1176776584	2.739897	4030450	0
+2026-07-28 11:58:49,633  INFO   H7Worker            H7 ready: port=COM8 baud=115200 channels=['cc_r', 'cc_u', 'laser', 'load', 'sma_i', 'sma_r', 'sma_v']
+2026-07-28 12:01:06,154  INFO   H7Worker            H7 worker exit  (pushed=26562, dropped=0, filtered=0)
+2026-07-28 12:01:06,350  INFO   Driver_ZaberStage   Disconnected
+2026-07-28 12:01:06,350  INFO   ZaberWorker         Zaber worker exit  (pushed=8311, dropped=0)
+2026-07-28 12:01:06,687  INFO   RecordingCore       Wrote C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\console_20260728_115753\meta.json
