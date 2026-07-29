@@ -43,20 +43,39 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from lib_h7_session import (H7, SAT_GUARD_V, SRC_CC_U, SRC_LOAD,   # noqa: E402
-                            SRC_SMA_I, heat_windows, measurement_sane,
-                            save_capture, window_stats)
+from lib_h7_session import (H7, SAT_GUARD_V, SRC_CC_U, SRC_LASER,  # noqa: E402
+                            SRC_LOAD, SRC_SMA_I, heat_windows,
+                            measurement_sane, save_capture, window_stats)
+
+# Calibrate_LaserHead/calibration.json (2026-05-27, r2 = 0.999998).
+K_UM_PER_MV, V0_MV = -0.49779577092171906, 2503.7500968693835
+disp_um = lambda v: (v * 1e3 - V0_MV) / K_UM_PER_MV
 
 # Baseline captured BEFORE the cycle starts, so pulse 1 has a pre-window.
 LEAD_IN_S = 2.0
 
 
 def analyse_level(cap, heat_ms: float):
-    """Per-pulse baseline / peak / rise / recovery for one current level."""
+    """Per-pulse response for one current level, on BOTH channels.
+
+    DISPLACEMENT decides whether the SMA actuated; FORCE decides whether the
+    load cell is running out of range. Judging actuation on force was wrong and
+    cost a whole sweep: this fixture is compliant, so a contracting coil mostly
+    MOVES. Measured 2026-07-28 across 150-650 mA, per pulse:
+
+        force        -0.18 .. -14.4 mN   inside the ~0.5 mN noise for most levels
+        displacement  +4.9 .. -530  um   cleanly monotonic in current
+
+    The load cell never saturated at all (380 mN peak against a 490 mN rating),
+    so it cannot set the ceiling on 100 ms pulses — but it is still the right
+    channel for the saturation guard if a longer pulse ever gets there.
+    """
     out = []
     wins = heat_windows(cap)
     load = sorted(((s.hw_us * 1e-6, s.value) for s in cap.samples
                    if s.src == SRC_LOAD))
+    disp = sorted(((s.hw_us * 1e-6, s.value) for s in cap.samples
+                   if s.src == SRC_LASER))
     if not load:
         return out
     for k, (t0, t1) in enumerate(wins, 1):
@@ -68,14 +87,26 @@ def analyse_level(cap, heat_ms: float):
             continue
         base, peak = sum(pre) / len(pre), max(post)
         cur = window_stats(cap, SRC_SMA_I, t0, t1)
-        out.append({
+        row = {
             "cycle": k,
             "i_mA": 1e3 * cur["mean"] if cur else float("nan"),
             "baseline": base,
             "peak": peak,
             "rise": peak - base,
             "clipped": peak >= SAT_GUARD_V,
-        })
+            "dx_um": float("nan"),
+            "x_base_um": float("nan"),
+        }
+        xpre = [v for t, v in disp if t0 - 0.40 <= t < t0 - 0.02]
+        xpost = [v for t, v in disp if t0 <= t <= t1 + 1.5]
+        if xpre and xpost:
+            xb = sum(xpre) / len(xpre)
+            # Signed: take the largest EXCURSION either way, so the sign shows
+            # which direction the stage moved without assuming the geometry.
+            far = max(xpost, key=lambda v: abs(v - xb))
+            row["x_base_um"] = disp_um(xb)
+            row["dx_um"] = disp_um(far) - disp_um(xb)
+        out.append(row)
     return out
 
 
@@ -115,6 +146,13 @@ def main() -> int:
                         "was the default from 2026-07-28 f2a878a until the "
                         "session that motivated it turned out to be a rig fault "
                         "(see data/sweep_20260728_215606/README.md).")
+    p.add_argument("--min-dx-um", type=float, default=20.0,
+                   help="displacement excursion below which a level counts as "
+                        "SUB-THRESHOLD (skipped, not failed). ACTUATION IS "
+                        "JUDGED ON THIS, not on force — the fixture is "
+                        "compliant so the coil moves rather than loading. "
+                        "Default 20 um is ~14x the ~1.4 um laser noise; "
+                        "measured 4.9 um at 225 mA (noise) vs 44 um at 426 mA.")
     p.add_argument("--v-idle", type=float, default=0.5,
                    help="LDO output at DAC code 0 (the cool-phase bias). Must "
                         "match the firmware `offset`. Used by the sense check.")
@@ -214,12 +252,12 @@ def main() -> int:
                 print(f"  STOP — {stop_reason}")
                 break
 
-            print(f"  {'cyc':>3} {'I[mA]':>7} {'base':>7} {'peak':>7} "
-                  f"{'rise':>7}  {'clip':>5}")
+            print(f"  {'cyc':>3} {'I[mA]':>7} {'dx[um]':>8} {'base':>7} "
+                  f"{'peak':>7} {'rise':>7}  {'clip':>5}")
             for r in per:
                 tag = " (bootstrap, excluded)" if r["cycle"] == 1 else ""
-                print(f"  {r['cycle']:3d} {r['i_mA']:7.1f} {r['baseline']:7.3f} "
-                      f"{r['peak']:7.3f} {r['rise']:7.3f}  "
+                print(f"  {r['cycle']:3d} {r['i_mA']:7.1f} {r['dx_um']:8.1f} "
+                      f"{r['baseline']:7.3f} {r['peak']:7.3f} {r['rise']:7.3f}  "
                       f"{'YES' if r['clipped'] else 'no':>5}{tag}")
                 r["level_mA"] = lvl
                 r["bootstrap"] = (r["cycle"] == 1)
