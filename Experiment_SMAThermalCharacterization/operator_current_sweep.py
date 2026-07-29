@@ -44,8 +44,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from lib_h7_session import (H7, SAT_GUARD_V, SRC_CC_U, SRC_LOAD,   # noqa: E402
-                            SRC_SMA_I, heat_windows, save_capture,
-                            window_stats)
+                            SRC_SMA_I, heat_windows, measurement_sane,
+                            save_capture, window_stats)
 
 # Baseline captured BEFORE the cycle starts, so pulse 1 has a pre-window.
 LEAD_IN_S = 2.0
@@ -100,16 +100,30 @@ def main() -> int:
                    help="V of load rise below which a level counts as SUB-"
                         "THRESHOLD (skipped, not failed). Default 0.05 V "
                         "= 4.9 mN = ~10x the ~5 mV load-cell noise floor.")
-    p.add_argument("--i-low", type=float, default=100.0,
-                   help="cool-phase CC target in mA. MUST BE NONZERO: with "
-                        "i_low=0 the loop OPENS during cool, so every heat "
-                        "pulse restarts bootstrap from u_min and a 100 ms pulse "
-                        "never reaches target (measured 2026-07-28: 650 mA "
-                        "commanded delivered 180 mA). Nonzero keeps the loop "
-                        "closed so R_est latches during the long cool and each "
-                        "pulse gets an instant feedforward. Below the LDO floor "
-                        "it simply rails at u_min = V_IDLE, so the cool-phase "
-                        "current and heating are UNCHANGED.")
+    p.add_argument("--i-low", type=float, default=0.0,
+                   help="cool-phase CC target in mA. DEFAULT 0 = the design "
+                        "intent: cool parks the DAC at code 0 and the wire sits "
+                        "on the 0.5 V bias that keeps the shunt sense alive. "
+                        "The loop opens (ccRelease -> setLevel(V_IDLE)) and R "
+                        "is NOT re-bootstrapped from scratch: ccEngage seeds "
+                        "cc_u_cmd = codeToVldo(0) = 0.500 V = u_min, so the "
+                        "first heat tick is RAILED with ~120 mA flowing and "
+                        "latches R = 0.5/0.12 = 4.17 ohm immediately — off a "
+                        "point that has had the whole cool phase to settle, "
+                        "which is a BETTER bootstrap than the closed-loop form "
+                        "gets. Nonzero keeps the loop closed through cool; it "
+                        "was the default from 2026-07-28 f2a878a until the "
+                        "session that motivated it turned out to be a rig fault "
+                        "(see data/sweep_20260728_215606/README.md).")
+    p.add_argument("--v-idle", type=float, default=0.5,
+                   help="LDO output at DAC code 0 (the cool-phase bias). Must "
+                        "match the firmware `offset`. Used by the sense check.")
+    p.add_argument("--r-min", type=float, default=2.0,
+                   help="lowest believable wire resistance, ohm. A cool sample "
+                        "implying less than this is physically impossible and "
+                        "means the current sense is corrupted — the sweep "
+                        "ABORTS rather than record unusable data. The wire "
+                        "measures ~4.2-4.8 ohm, so 2.0 is a wide margin.")
     p.add_argument("--out", default=None)
     a = p.parse_args()
 
@@ -228,6 +242,16 @@ def main() -> int:
                 break
             if len(per) < n_cyc:
                 print(f"  NOTE: {len(per)} pulses found, {n_cyc} commanded")
+            # Before believing ANY number from this level, check the current
+            # sense is physically possible. A corrupted sense produced a whole
+            # bad sweep on 2026-07-28 and a wrong controller diagnosis with it.
+            ok, why = measurement_sane(cap, heat_windows(cap),
+                                       v_idle=a.v_idle, r_min_ohm=a.r_min)
+            if not ok:
+                stop_reason = f"{lvl:.0f} mA: {why}"
+                print(f"  ABORT — {stop_reason}\n")
+                break
+            print(f"  sense check: {why}")
             i_ach = sum(r["i_mA"] for r in per_v) / len(per_v)
             print(f"  achieved current {i_ach:.0f} mA of {lvl:.0f} mA commanded "
                   f"({100*i_ach/lvl:.0f}%)")

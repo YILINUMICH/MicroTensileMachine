@@ -60,8 +60,7 @@ correctly as `ccUMin() == vldoMin() == codeToVldo(0)`.
 ## 0. RESOLVED (23:36) — this session had an intermittent contact fault
 
 **Read this before trusting anything below.** Re-running the identical
-`cccycle 550/100` profile 100 minutes later, after the SMA had been unclipped
-and reseated for the disconnected noise test, gives a completely different rig:
+`cccycle 550/100` profile 100 minutes later gives a completely different rig:
 
 | | cool sd | per read | kurtosis | >mean+100 mA | heat pulses vs 550 mA |
 |---|---|---|---|---|---|
@@ -95,10 +94,46 @@ argument, the 120 mA armed floor, and — most importantly — **that displaceme
 not force, is the actuation signal** (§1). Those do not depend on the current
 sense being clean.
 
+### The cause is NOT identified
+
+An earlier version of this file blamed reseating the SMA clips. **The timeline
+refutes that**: the fault was gone by the first isense capture at 02:44 UTC, and
+the SMA was not unclipped until 03:12 — 28 minutes later. Corrected 2026-07-28.
+
+Excluded by measurement, every one an *operating-point* variable:
+
+| ruled out | by |
+|---|---|
+| per-tick I²C DAC write | 1.05× |
+| DAC command jitter | the quiet capture has *more* |
+| heat-pulse aftermath | flat across all 12 s |
+| operating point / current level | `cc 155` clean at the sweep's current |
+| **drive voltage / DAC code** | sweep gap 4 sat at code 5 (the 0.5 V floor, the intended cool state) and was still 68 mA sd, 13% impossible |
+| load current | disconnected equally quiet |
+| heat-vs-cool code path | `ccEngage`/`serviceActuationPhase` identical |
+| A0→A1 mux leakage | 272 vs 157 mA, uncorrelated |
+| clip reseating | fault gone 28 min before it |
+| progressive degradation | uniform across all six levels from the first |
+| dropped samples / torn ring reads | 0 missing on src=3/4 |
+| board uptime | sweep 23–101 s vs re-run 13–54 s — overlapping, opposite results |
+
+**The fault tracks the session, not the operating point.** Identical conditions
+give 68 mA sd in one session and 15 mA in another. Whatever it is lives in rig
+state that persists across serial opens — supply/power state, a connection, or
+temperature. Note that opening the port resets the H7 but **not** the EVM analog
+rails, so board-level state survives what the firmware clock shows.
+
+The shunt is not the limit either: 0.2 Ω × gain 10 = 2 V/A, and at 16-bit over
+3.145 V that is 24 µA/LSB, so 155 mA is ~6460 LSB. Healthy noise is ~625 LSB and
+the faulty noise ~3000 LSB — both far above the resolution floor. No shunt or
+gain change would have helped; something was injecting signal.
+
 **Suspect this fault first** when the rig behaves oddly: today's ADC2 dropouts
 and crc storms may share the cause. Symptom to look for: a current distribution
 with modes that are *physically impossible* — here, 270 and 400 mA readings when
-`u = 0.625 V` into 4.2 Ω caps the current at 149 mA.
+`u = 0.625 V` into 4.2 Ω caps the current at 149 mA. That check now runs
+automatically: `measurement_sane()` in `lib_h7_session.py`, wired into the sweep,
+aborts the run rather than record unusable data.
 
 ## 3. The CC loop overshoots because `R_est` bootstraps wrong
 

@@ -232,6 +232,50 @@ def heat_windows(cap: Capture, gap_s: float = 0.20, min_ms: float = 20.0):
     return out
 
 
+def measurement_sane(cap: Capture, windows, v_idle: float = 0.5,
+                     r_min_ohm: float = 2.0, max_frac: float = 0.01):
+    """Is the current sense telling the truth? Returns (ok, message).
+
+    On 2026-07-28 a whole 9-minute sweep was recorded through a corrupted
+    current sense and every downstream number was wrong — including a
+    "the CC loop overshoots 50%" conclusion that sent a session chasing the
+    controller. The rig fault was never identified; it was present for the
+    entire sweep and gone 40 minutes later, and every operating-point variable
+    (drive voltage, DAC code, current, load connected, loop open or closed,
+    heat or cool) was ruled out. So this does NOT try to diagnose it. It just
+    refuses to record data that cannot be physically true.
+
+    The test: during COOL with i_low=0 the DAC parks at code 0, so the wire sees
+    a known `v_idle`. Any sample implying R = v_idle/I below `r_min_ohm` is
+    impossible — a Flexinol coil on this rig measures ~4.2-4.8 ohm and cannot
+    approach 2. In the corrupted sweep 13-14% of cool samples implied R < 2;
+    in six healthy captures it is 0.00%.
+
+    Cheap, needs no root cause, and would have killed that sweep in its first
+    second instead of after nine minutes of unusable data.
+    """
+    i_max = v_idle / r_min_ohm
+    rows = sorted((s.hw_us * 1e-6, s.value) for s in cap.samples
+                  if s.src == SRC_SMA_I)
+    if not rows:
+        return True, "no current samples to check"
+    hot = [(a, b) for a, b in windows]
+    cool = [v for t, v in rows if not any(a <= t <= b for a, b in hot)]
+    if len(cool) < 200:
+        return True, f"only {len(cool)} cool samples — not enough to judge"
+    bad = sum(1 for v in cool if v > i_max)
+    frac = bad / len(cool)
+    if frac > max_frac:
+        return False, (
+            f"{100*frac:.2f}% of cool samples exceed {1e3*i_max:.0f} mA, which "
+            f"at the {v_idle:.3f} V idle bias implies R < {r_min_ohm:.1f} ohm — "
+            f"physically impossible for this wire (~4.2-4.8 ohm). The current "
+            f"sense is corrupted; the data is NOT usable. Power-cycle USB + EVM, "
+            f"reseat the SMA clips, and re-run. "
+            f"See data/sweep_20260728_215606/README.md.")
+    return True, f"{100*frac:.2f}% impossible cool samples (limit {100*max_frac:.0f}%)"
+
+
 def window_stats(cap: Capture, src: int, t0: float, t1: float):
     rows = [(s.hw_us * 1e-6, s.value) for s in cap.samples if s.src == src]
     vals = [v for t, v in rows if t0 <= t <= t1]

@@ -207,8 +207,7 @@
 > ### ✔ RESOLVED — "CC OVERSHOOT" WAS AN INTERMITTENT CONTACT (2026-07-28)
 >
 > **The CC loop is fine.** Re-running the identical `cccycle 550/100` profile
-> 100 minutes later — after the SMA was unclipped and reseated for the
-> disconnected noise test — holds **540.8 / 540.1 mA against 550 commanded
+> 100 minutes later holds **540.8 / 540.1 mA against 550 commanded
 > (98.2%)** with `R_est` at 4.68 Ω. The failing sweep held 769–817 mA (140–148%)
 > with `R_est` stranded at 6.27 Ω. Cool-phase noise fell 71.53 → 14.96 mA sd,
 > kurtosis 4.57 → 3.11, samples >mean+100 mA 12.91% → 0.00%.
@@ -220,10 +219,19 @@
 > own **pulse 5 proves it**: `R_est` fell to 4.73 Ω and that pulse landed at
 > **102%**.
 >
+> **THE RIG FAULT ITSELF IS NOT DIAGNOSED.** I first blamed reseating the clips;
+> the timeline refutes it (fault gone 02:44 UTC, unclipped 03:12). Every
+> *operating-point* variable is excluded — drive voltage, DAC code (sweep gap 4
+> sat at the 0.5 V floor and was still corrupt), current level, load connected,
+> loop open or closed, heat or cool phase, uptime, dropped samples, mux leakage.
+> It tracks the SESSION, not the condition. Opening the port resets the H7 but
+> not the EVM analog rails, so board state survives across captures.
+>
 > **Diagnostic tell:** a current distribution with *physically impossible* modes.
 > Readings of 270 and 400 mA when `u = 0.625 V` into 4.2 Ω caps current at
 > 149 mA. Suspect this before suspecting firmware — today's ADC2 dropouts and crc
-> storms may share the cause.
+> storms may share the cause. Now checked automatically by `measurement_sane()`,
+> which ABORTS a sweep rather than record unusable data.
 >
 > **Two numbers I published during this were wrong, both from the contaminated
 > phase:** 144 mA/read (real: ~30 mA/read, 12× the Uno not 57×) and "averaging
