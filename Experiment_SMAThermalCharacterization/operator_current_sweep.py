@@ -43,8 +43,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from lib_h7_session import (H7, SAT_GUARD_V, SRC_LOAD, SRC_SMA_I,   # noqa: E402
-                            heat_windows, save_capture, window_stats)
+from lib_h7_session import (H7, SAT_GUARD_V, SRC_CC_U, SRC_LOAD,   # noqa: E402
+                            SRC_SMA_I, heat_windows, save_capture,
+                            window_stats)
+
+# Baseline captured BEFORE the cycle starts, so pulse 1 has a pre-window.
+LEAD_IN_S = 2.0
 
 
 def analyse_level(cap, heat_ms: float):
@@ -127,6 +131,23 @@ def main() -> int:
 
             h7.send("arm")
             time.sleep(0.6)
+
+            # LEAD-IN. The first cccycle pulse starts ~60 ms after the command,
+            # so without this there is no pre-pulse window and cycle 1 gets
+            # silently dropped from the analysis (observed: 5 commanded, 4
+            # reported). Capture a baseline first, then merge.
+            lead = h7.capture(LEAD_IN_S, ping=True)
+
+            # Gate on the LOAD channel actually streaming. ADC2 has died
+            # mid-session repeatedly; without this the level runs to completion,
+            # actuates the SMA, and produces no force data at all.
+            if not lead.by_src(SRC_LOAD):
+                stop_reason = (f"{lvl:.0f} mA: load cell (ADC2) is not "
+                               f"streaming — hub fault. Power-cycle USB + EVM.")
+                print(f"  STOP — {stop_reason}")
+                h7.disarm()
+                break
+
             cool_ms = int(a.cool_s * 1000)
             h7.send(f"cccycle {lvl:.0f} 0 {a.heat_ms} {cool_ms} {a.cycles}")
             run_s = a.cycles * (a.heat_ms / 1000.0 + a.cool_s) + 3.0
@@ -135,6 +156,8 @@ def main() -> int:
             cap = h7.capture(
                 run_s, ping=True,
                 on_console=lambda t, s: faults.append(s) if "FAULT" in s else None)
+            cap.samples = lead.samples + cap.samples      # hw_us stays monotonic
+            cap.console = lead.console + cap.console
             h7.send("stop")
             time.sleep(0.3)
             h7.disarm()
@@ -144,10 +167,23 @@ def main() -> int:
                           "cool_s": a.cool_s, "cycles": a.cycles,
                           "captured_utc": datetime.now(timezone.utc).isoformat()})
 
+            # Distinguish the failure modes — they need opposite responses.
+            # src=6 missing  -> the CC loop never engaged (arming / command)
+            # src=2 missing  -> the load channel died (hub fault, power-cycle)
             per = analyse_level(cap, a.heat_ms)
             if not per:
-                stop_reason = f"{lvl:.0f} mA: no heat pulses seen — check arming"
-                print(f"  {stop_reason}")
+                n_cc, n_load = len(cap.by_src(SRC_CC_U)), len(cap.by_src(SRC_LOAD))
+                if n_cc == 0:
+                    stop_reason = (f"{lvl:.0f} mA: CC never engaged (no src=6) "
+                                   f"— check arming / the cccycle command")
+                elif n_load == 0:
+                    stop_reason = (f"{lvl:.0f} mA: load cell (ADC2) produced no "
+                                   f"data — hub fault. Power-cycle USB + EVM.")
+                else:
+                    stop_reason = (f"{lvl:.0f} mA: {n_cc} cc samples and "
+                                   f"{n_load} load samples, but no pulse had a "
+                                   f"usable pre/post window")
+                print(f"  STOP — {stop_reason}")
                 break
 
             print(f"  {'cyc':>3} {'I[mA]':>7} {'base':>7} {'peak':>7} "
