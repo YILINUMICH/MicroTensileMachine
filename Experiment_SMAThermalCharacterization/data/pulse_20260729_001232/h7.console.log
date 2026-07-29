@@ -1,0 +1,51 @@
+[   0.051] [SMA] ARMED (MOSFET on); idle=0.500 V
+[   0.051] [STATUS] t_ms=22329 hwm=256 cap=256 dropped=47 dropped_total=609 crc_err=0 crc_err_total=0 rate1=403 rate2=402 prod1=490 prod2=490 dac_err=0 tx_drop=0 hb_ms=0 sma_state=0 m7_us=23002285 m4_us=20565258 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=29 loop_us_max=306444 loop_hz=34482 cycle_log_ms=1 n_cycle=4 cc=0 cc_hz=0 cc_i_tgt=0.0000 cc_u=0.0000 cc_r=0.0000 cc_tau_ms=7.00
+[   0.369] [ADC1]
+[   0.369] STATUS alarm(s):
+[   0.369] PGAH_ALM
+[   1.065] [STATUS] t_ms=23329 hwm=197 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=608 rate2=605 prod1=512 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=0 m7_us=24035357 m4_us=21840806 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=22 loop_us_max=5802 loop_hz=45454 cycle_log_ms=1 n_cycle=4 cc=0 cc_hz=0 cc_i_tgt=0.0000 cc_u=0.0000 cc_r=0.0000 cc_tau_ms=7.00
+[   1.383] [ADC1] ST
+[   1.383] ATUS alarm(s): 0
+[   0.064] [SMA] [CC] start i_high=300.0mA i_low=100.0mA t_high=100 t_idle=3000 n=5 (0=cont) tau_ms=7.0 wdt_ms=5000
+[   0.064] [SMA] [ACT] heat n=1/5 I=300.0mA ms=100
+[   0.064] [STATUS] t_ms=24329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=513 prod1=512 prod2=513 dac_err=0 tx_drop=0 hb_ms=0 sma_state=5 m7_us=25068977 m4_us=22875294 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=23 loop_us_max=2784 loop_hz=43478 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=53 cc_i_tgt=0.3000 cc_u=0.5786 cc_r=0.0000 cc_tau_ms=7.00
+[   0.127] [SMA] [ACT] cool n=1/5 I=100.0mA ms=3000
+[   0.382] [ADC1] STA
+[   1.143] [STATUS] t_ms=25329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=26102339 m4_us=23908715 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=2762 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1029 cc_i_tgt=0.1000 cc_u=0.5354 cc_r=5.1207 cc_tau_ms=7.00
+[   2.157] [STATUS] t_ms=26329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=511 prod1=512 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=27135639 m4_us=24941062 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=2697 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1029 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=5.0058 cc_tau_ms=7.00
+[   2.411] [ADC1]
+[   2.411] STATUS alarm(s):
+[   3.172] [STATUS] t_ms=27329 hwm=4 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=513 prod1=512 prod2=513 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=28169240 m4_us=25975438 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=3639 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5085 cc_r=5.0660 cc_tau_ms=7.00
+[   3.236] [SMA] [ACT] heat n=2/5 I=300.0mA ms=100
+[   3.364] [SMA] [ACT] cool n=2/5 I=100.0mA ms=3000
+[   4.251] [STATUS] t_ms=28329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=511 prod1=512 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=29202343 m4_us=27007712 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=2945 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1029 cc_i_tgt=0.1000 cc_u=0.5071 cc_r=5.0956 cc_tau_ms=7.00
+[   4.440] [ADC1] S
+[   5.266] [STATUS] t_ms=29329 hwm=4 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=30235582 m4_us=28040992 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=3456 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1029 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9971 cc_tau_ms=7.00
+[   6.280] [STATUS] t_ms=30329 hwm=4 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=31268880 m4_us=29074282 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=3804 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5311 cc_r=5.0505 cc_tau_ms=7.00
+[   6.471] [SMA] [ACT] heat n=3/5 I=300.0mA ms=100
+[   6.534] [SMA] [ACT] cool n=3/5 I=100.0mA ms=3000
+[   7.294] [STATUS] t_ms=31329 hwm=4 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=513 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=32302015 m4_us=30107504 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=91 loop_us_max=3615 loop_hz=10989 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5074 cc_r=5.0654 cc_tau_ms=7.00
+[   8.372] [STATUS] t_ms=32329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=513 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=33335370 m4_us=31141703 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=3349 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1029 cc_i_tgt=0.1000 cc_u=0.5230 cc_r=5.0655 cc_tau_ms=7.00
+[   8.498] [A
+[   9.384] [STATUS] t_ms=33329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=34368501 m4_us=32174887 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=2635 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1030 cc_i_tgt=0.1000 cc_u=0.5083 cc_r=5.0139 cc_tau_ms=7.00
+[   9.637] [SMA] [ACT] heat n=4/5 I=300.0mA ms=100
+[   9.766] [SMA] [ACT] cool n=4/5 I=100.0mA ms=3000
+[  10.399] [STATUS] t_ms=34329 hwm=2 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=35401694 m4_us=33208103 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=2465 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1030 cc_i_tgt=0.1000 cc_u=0.5343 cc_r=5.1713 cc_tau_ms=7.00
+[  11.475] [STATUS] t_ms=35329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=511 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=36434827 m4_us=34240285 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=91 loop_us_max=2695 loop_hz=10989 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5081 cc_r=5.0371 cc_tau_ms=7.00
+[  12.490] [STATUS] t_ms=36329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=37468151 m4_us=35273517 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=3307 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1029 cc_i_tgt=0.1000 cc_u=0.5150 cc_r=5.0643 cc_tau_ms=7.00
+[  12.490] [ADC1] STA
+[  12.870] [SMA] [ACT] heat n=5/5 I=300.0mA ms=100
+[  12.933] [SMA] [ACT] cool n=5/5 I=100.0mA ms=3000
+[  13.505] [STATUS] t_ms=37329 hwm=4 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=513 prod1=512 prod2=513 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=38501509 m4_us=36307799 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=3747 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1028 cc_i_tgt=0.1000 cc_u=0.5143 cc_r=5.0404 cc_tau_ms=7.00
+[  14.522] [ADC1] STAT
+[  14.522] [STATUS] t_ms=38329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=511 prod1=512 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=39534474 m4_us=37340000 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=2858 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5046 cc_r=4.9424 cc_tau_ms=7.00
+[  15.534] [ADC1] STATUS alarm(s):
+[  15.598] [STATUS] t_ms=39329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=513 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=40567646 m4_us=38373158 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=3267 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1029 cc_i_tgt=0.1000 cc_u=0.5288 cc_r=5.0899 cc_tau_ms=7.00
+[  16.042] [SMA] [ACT] -> idle (done) after 5 cycle(s); still armed
+[  16.551] [ADC1]
+[  16.551] STATUS alarm(s):
+[  16.614] [STATUS] t_ms=40329 hwm=4 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=0 m7_us=41600914 m4_us=39406346 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=34 loop_us_max=3465 loop_hz=29411 cycle_log_ms=1 n_cycle=4 cc=0 cc_hz=461 cc_i_tgt=0.1000 cc_u=0.5058 cc_r=5.0058 cc_tau_ms=7.00
+[  17.564] [A
+[  17.564] DC1] STATUS ala
+[  17.564] ALM
+[  17.627] [STATUS] t_ms=41329 hwm=3 cap=256 dropped=0 dropped_total=609 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=0 m7_us=42634188 m4_us=40439584 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=22 loop_us_max=2915 loop_hz=45454 cycle_log_ms=1 n_cycle=4 cc=0 cc_hz=0 cc_i_tgt=0.1000 cc_u=0.5058 cc_r=5.0058 cc_tau_ms=7.00

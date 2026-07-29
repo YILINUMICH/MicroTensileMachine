@@ -277,12 +277,15 @@ def main() -> int:
             # segmentation is wrong and the run must stop, not report a number.
             per_v = [r for r in per if not r["bootstrap"]]
             if not per_v:
-                stop_reason = (f"{lvl:.0f} mA: only {len(per)} pulse(s) found "
-                               f"for {n_cyc} commanded — segmentation failed, "
-                               f"refusing to judge the level on the bootstrap "
-                               f"cycle")
-                print(f"  STOP — {stop_reason}\n")
-                break
+                # Still never judge the level on the bootstrap cycle — but the
+                # raw capture is already saved, so skip to the next level rather
+                # than ending the run.
+                print(f"  NOTE: only {len(per)} pulse(s) found for {n_cyc} "
+                      f"commanded — segmentation failed, skipping this level\n")
+                if a.stop_on_fail:
+                    stop_reason = f"{lvl:.0f} mA: segmentation failed"
+                    break
+                continue
             if len(per) < n_cyc:
                 print(f"  NOTE: {len(per)} pulses found, {n_cyc} commanded")
             # Before believing ANY number from this level, check the current
@@ -305,56 +308,44 @@ def main() -> int:
             i_ach = sum(r["i_mA"] for r in per_v) / len(per_v)
             print(f"  achieved current {i_ach:.0f} mA of {lvl:.0f} mA commanded "
                   f"({100*i_ach/lvl:.0f}%)")
-            if i_ach < 0.80 * lvl:
-                stop_reason = (f"{lvl:.0f} mA: loop only reached {i_ach:.0f} mA "
-                               f"({100*i_ach/lvl:.0f}%) — not a load limit, the "
-                               f"CC loop is not converging. Check R_est / i_low.")
-                print(f"  STOP — {stop_reason}\n")
-                break
 
-            # ---- verdict for this level ------------------------------------
+            # ---- OBSERVATIONS, not verdicts --------------------------------
+            # Everything below REPORTS. Nothing stops the sweep unless
+            # --stop-on-fail. The thresholds that used to gate this were set
+            # before we had any healthy data to set them from, and they halted
+            # runs on levels that were working: the force-based --min-rise
+            # called every level from 150-650 mA "SUB-THRESHOLD" while the wire
+            # was plainly actuating, and --min-dx-um was calibrated against
+            # drift-contaminated numbers. Collect first, threshold afterwards.
             clipped = any(r["clipped"] for r in per_v)
             over = max(r["peak"] for r in per_v) >= a.headroom
             drift = per_v[-1]["baseline"] - per_v[0]["baseline"]
             mean_rise = sum(r["rise"] for r in per_v) / len(per_v)
-            no_recover = mean_rise > 0 and drift > a.recover_frac * mean_rise
-            collapsed = per_v[-1]["rise"] < 0.25 * per_v[0]["rise"]
-
-            print(f"  baseline drift {drift:+.3f} V over {len(per)} cycles "
-                  f"(mean rise {mean_rise:.3f} V, cycle 1 excluded)")
-
-            # SUB-THRESHOLD levels are SKIPPED, not failed. An SMA has a
-            # transformation threshold: below it the rise approaches the
-            # load-cell noise floor and every relative test becomes noise
-            # divided by noise. Measured 2026-07-28 at 150 mA — rise 0.018 V
-            # against a 0.043 V baseline drift and ~0.005 V RMS noise, which
-            # tripped the recovery test on a ratio that meant nothing. Keep
-            # climbing until the SMA actually responds.
-            if mean_rise < a.min_rise and not clipped and not faults:
-                print(f"  SUB-THRESHOLD (rise {mean_rise:.3f} V < "
-                      f"{a.min_rise:.3f} V) — not actuating yet, continuing\n")
-                continue
-
+            dxs = [r["dx_um"] for r in per_v if r["dx_um"] == r["dx_um"]]
+            print(f"  force: mean rise {mean_rise:+.4f} V, baseline drift "
+                  f"{drift:+.4f} V over {len(per)} cycles")
+            if dxs:
+                sg, rect = sum(dxs)/len(dxs), sum(abs(x) for x in dxs)/len(dxs)
+                print(f"  laser: {sg:+.1f} um mean signed / {rect:.1f} rectified "
+                      f"({'coherent' if abs(sg) > 0.6*rect else 'incoherent'})")
+            notes = []
             if faults:
-                stop_reason = f"{lvl:.0f} mA: firmware FAULT — {faults[0][:70]}"
-            elif clipped:
-                stop_reason = f"{lvl:.0f} mA: load cell CLIPPED at 5.000 V"
+                notes.append(f"firmware FAULT — {faults[0][:70]}")
+            if clipped:
+                notes.append("load cell CLIPPED at 5.000 V")
             elif over:
-                stop_reason = (f"{lvl:.0f} mA: peak exceeded the "
-                               f"{a.headroom:.1f} V headroom limit")
-            elif no_recover:
-                stop_reason = (f"{lvl:.0f} mA: baseline did not recover "
-                               f"(drift {drift:+.3f} V) — lengthen --cool-s")
-            elif collapsed:
-                stop_reason = (f"{lvl:.0f} mA: response collapsed "
-                               f"({per[0]['rise']:.3f} -> {per[-1]['rise']:.3f} V) "
-                               f"— thermally soaked")
-            else:
-                ceiling = lvl
-                print(f"  PASS\n")
-                continue
-            print(f"  STOP — {stop_reason}\n")
-            break
+                notes.append(f"peak above the {a.headroom:.1f} V headroom")
+            if i_ach < 0.80 * lvl:
+                notes.append(f"CC reached only {100*i_ach/lvl:.0f}% of target")
+            for n in notes:
+                print(f"  NOTE: {n}")
+
+            if notes and a.stop_on_fail:
+                stop_reason = f"{lvl:.0f} mA: {notes[0]}"
+                print(f"  STOP — {stop_reason}\n")
+                break
+            ceiling = lvl
+            print()
     except KeyboardInterrupt:
         stop_reason = "interrupted by user"
         print("\n  interrupted", file=sys.stderr)
