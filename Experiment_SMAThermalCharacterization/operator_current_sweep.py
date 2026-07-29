@@ -100,6 +100,16 @@ def main() -> int:
                    help="V of load rise below which a level counts as SUB-"
                         "THRESHOLD (skipped, not failed). Default 0.05 V "
                         "= 4.9 mN = ~10x the ~5 mV load-cell noise floor.")
+    p.add_argument("--i-low", type=float, default=100.0,
+                   help="cool-phase CC target in mA. MUST BE NONZERO: with "
+                        "i_low=0 the loop OPENS during cool, so every heat "
+                        "pulse restarts bootstrap from u_min and a 100 ms pulse "
+                        "never reaches target (measured 2026-07-28: 650 mA "
+                        "commanded delivered 180 mA). Nonzero keeps the loop "
+                        "closed so R_est latches during the long cool and each "
+                        "pulse gets an instant feedforward. Below the LDO floor "
+                        "it simply rails at u_min = V_IDLE, so the cool-phase "
+                        "current and heating are UNCHANGED.")
     p.add_argument("--out", default=None)
     a = p.parse_args()
 
@@ -148,9 +158,13 @@ def main() -> int:
                 h7.disarm()
                 break
 
+            # One EXTRA cycle: cccycle heats FIRST, so pulse 1 still runs before
+            # any cool phase has had a chance to bootstrap R_est. It is a ramp,
+            # not a measurement, and is dropped from the verdict below.
             cool_ms = int(a.cool_s * 1000)
-            h7.send(f"cccycle {lvl:.0f} 0 {a.heat_ms} {cool_ms} {a.cycles}")
-            run_s = a.cycles * (a.heat_ms / 1000.0 + a.cool_s) + 3.0
+            n_cyc = a.cycles + 1
+            h7.send(f"cccycle {lvl:.0f} {a.i_low:.0f} {a.heat_ms} {cool_ms} {n_cyc}")
+            run_s = n_cyc * (a.heat_ms / 1000.0 + a.cool_s) + 3.0
 
             faults = []
             cap = h7.capture(
@@ -189,22 +203,37 @@ def main() -> int:
             print(f"  {'cyc':>3} {'I[mA]':>7} {'base':>7} {'peak':>7} "
                   f"{'rise':>7}  {'clip':>5}")
             for r in per:
+                tag = " (bootstrap, excluded)" if r["cycle"] == 1 else ""
                 print(f"  {r['cycle']:3d} {r['i_mA']:7.1f} {r['baseline']:7.3f} "
                       f"{r['peak']:7.3f} {r['rise']:7.3f}  "
-                      f"{'YES' if r['clipped'] else 'no':>5}")
+                      f"{'YES' if r['clipped'] else 'no':>5}{tag}")
                 r["level_mA"] = lvl
+                r["bootstrap"] = (r["cycle"] == 1)
                 rows.append(r)
 
+            # Pulse 1 is the bootstrap ramp — judging the level on it would
+            # report the loop's convergence, not the SMA's response.
+            per_v = [r for r in per if not r["bootstrap"]] or per
+            i_ach = sum(r["i_mA"] for r in per_v) / len(per_v)
+            print(f"  achieved current {i_ach:.0f} mA of {lvl:.0f} mA commanded "
+                  f"({100*i_ach/lvl:.0f}%)")
+            if i_ach < 0.80 * lvl:
+                stop_reason = (f"{lvl:.0f} mA: loop only reached {i_ach:.0f} mA "
+                               f"({100*i_ach/lvl:.0f}%) — not a load limit, the "
+                               f"CC loop is not converging. Check R_est / i_low.")
+                print(f"  STOP — {stop_reason}\n")
+                break
+
             # ---- verdict for this level ------------------------------------
-            clipped = any(r["clipped"] for r in per)
-            over = max(r["peak"] for r in per) >= a.headroom
-            drift = per[-1]["baseline"] - per[0]["baseline"]
-            mean_rise = sum(r["rise"] for r in per) / len(per)
+            clipped = any(r["clipped"] for r in per_v)
+            over = max(r["peak"] for r in per_v) >= a.headroom
+            drift = per_v[-1]["baseline"] - per_v[0]["baseline"]
+            mean_rise = sum(r["rise"] for r in per_v) / len(per_v)
             no_recover = mean_rise > 0 and drift > a.recover_frac * mean_rise
-            collapsed = per[-1]["rise"] < 0.25 * per[0]["rise"]
+            collapsed = per_v[-1]["rise"] < 0.25 * per_v[0]["rise"]
 
             print(f"  baseline drift {drift:+.3f} V over {len(per)} cycles "
-                  f"(mean rise {mean_rise:.3f} V)")
+                  f"(mean rise {mean_rise:.3f} V, cycle 1 excluded)")
 
             # SUB-THRESHOLD levels are SKIPPED, not failed. An SMA has a
             # transformation threshold: below it the rise approaches the
