@@ -204,36 +204,38 @@
 
 ## TODOs
 
-> ### ▶ OPEN ISSUE — SWEEP COOL PHASE IS MULTIMODAL, CAUSE UNKNOWN (2026-07-28)
+> ### ✔ RESOLVED — "CC OVERSHOOT" WAS AN INTERMITTENT CONTACT (2026-07-28)
 >
-> **Symptom.** In `data/sweep_20260728_215606` the cool-phase current sense reads
-> 71 mA sd, while four steady captures (`data/isense_20260728_2*`) read 12–16 mA
-> under every condition tried. The sweep distribution is **not Gaussian** —
-> discrete modes near 65/100/135/270/400 mA, 22% of samples >220 mA, skew +1.37,
-> kurtosis 4.50. Its clean sub-population is 28 mA sd. See `fig5_spikes.png`.
+> **The CC loop is fine.** Re-running the identical `cccycle 550/100` profile
+> 100 minutes later — after the SMA was unclipped and reseated for the
+> disconnected noise test — holds **540.8 / 540.1 mA against 550 commanded
+> (98.2%)** with `R_est` at 4.68 Ω. The failing sweep held 769–817 mA (140–148%)
+> with `R_est` stranded at 6.27 Ω. Cool-phase noise fell 71.53 → 14.96 mA sd,
+> kurtosis 4.57 → 3.11, samples >mean+100 mA 12.91% → 0.00%.
+> `data/isense_20260728_233618_sma-connected-cccycle`.
 >
-> **Why it matters.** This is the condition in which the CC loop actually fails.
-> The `near` gate is ±12 mA and the `R_est` bootstrap latches `u/I` from ONE
-> sample, so a contaminated stream is what strands `R_est` at 6.25 Ω against a
-> true 4.2 and drives the ≤50% overshoot.
+> **Chain:** intermittent clip contact → multimodal current readings → the
+> `R_est` bootstrap latches `u/I` from ONE bad sample → feedforward overshoots
+> 46% → the ±12% `near` gate can never open → stuck all run. The failing sweep's
+> own **pulse 5 proves it**: `R_est` fell to 4.73 Ω and that pulse landed at
+> **102%**.
 >
-> **REFUTED — do not re-run** (each killed by measurement, detail in the sweep
-> README): per-tick I²C DAC write (1.05×); DAC command jitter (the quiet capture
-> has *more*); heat-pulse aftermath (flat across 12 s); operating point (`cc 155`
-> is clean); load current (disconnected is equally quiet); a different code path
-> in cool (`ccEngage`/`serviceActuationPhase` are identical); A0→A1 mux leakage
-> (272 vs 157 mA, uncorrelated).
+> **Diagnostic tell:** a current distribution with *physically impossible* modes.
+> Readings of 270 and 400 mA when `u = 0.625 V` into 4.2 Ω caps current at
+> 149 mA. Suspect this before suspecting firmware — today's ADC2 dropouts and crc
+> storms may share the cause.
 >
-> **Only untested difference.** The sweep's cool target (100 mA) is below the
-> reachable floor (~120 mA), so the loop rails and the gate stays shut; every
-> clean capture had it open. Next step is one capture:
-> `python operator_noise_isense.py --port COM8 --mode cc --ma 100`.
+> **Two numbers I published during this were wrong, both from the contaminated
+> phase:** 144 mA/read (real: ~30 mA/read, 12× the Uno not 57×) and "averaging
+> cannot fix this". Seven hypotheses were chased and refuted before the rig
+> itself turned out to be the variable — the sweep README lists them with the
+> measurement that killed each, so nobody re-runs them.
 >
-> **Corrected number.** An earlier claim of 144 mA/read (and "averaging cannot
-> fix this") came from this contaminated phase and was wrong. The real front end
-> is ~31 mA/read — 12× the Uno, not 57×. At that level `ADC_SAMPLES_CYCLE=64`
-> gives 3.9 mA at 383 Hz, 3σ inside the gate and 2× the Uno's rate, so averaging
-> IS viable. `operator_sweep_adcavg.py` measures the curve.
+> **Still worth doing, but NOT blocking:** the `R_est` bootstrap should latch
+> from a *settled* railed point rather than one sample, and `cccycle` should be
+> able to emit the reachability warning (it is gated on `cc_R_valid`, which
+> `startCycleCC()` clears via `ccReset()` on the line before). A single bad
+> sample stranding the loop for an entire run is a real robustness gap.
 
 > ### ▶ JUDGE ACTUATION ON DISPLACEMENT, NOT FORCE (2026-07-28)
 >

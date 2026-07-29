@@ -57,6 +57,49 @@ regardless of `i_low` — `i_low = 0` opens the loop but not the circuit. The
 120 mA floor is deliberate (it keeps the shunt sense alive); the loop models it
 correctly as `ccUMin() == vldoMin() == codeToVldo(0)`.
 
+## 0. RESOLVED (23:36) — this session had an intermittent contact fault
+
+**Read this before trusting anything below.** Re-running the identical
+`cccycle 550/100` profile 100 minutes later, after the SMA had been unclipped
+and reseated for the disconnected noise test, gives a completely different rig:
+
+| | cool sd | per read | kurtosis | >mean+100 mA | heat pulses vs 550 mA |
+|---|---|---|---|---|---|
+| this sweep, 21:56 | 71.53 mA | 143.1 mA | 4.57 | 12.91% | 769–817 mA (140–148%) |
+| re-run, 23:36 | **14.96 mA** | 29.9 mA | **3.11** | **0.00%** | **540.8 / 540.1 mA (98.2%)** |
+
+`../isense_20260728_233618_sma-connected-cccycle`.
+
+**The CC loop is fine — it holds 550 mA to 1.8%.** The causal chain was:
+
+> intermittent clip contact → multimodal current readings → the `R_est`
+> bootstrap latches 6.27 Ω instead of ~4.6 → feedforward overshoots 46% → the
+> ±12% `near` gate can never open → stuck for the whole run
+
+This sweep's own **pulse 5 proves it**: `R_est` fell to 4.73 Ω and that pulse
+landed at **102%**. The loop self-corrected the moment the readings cleaned up.
+
+**What this invalidates in the data below:**
+- **All noise numbers from this session — discard them.** The 71 mA sd, the
+  multimodal distribution, `fig5_spikes.png`: rig fault, not firmware.
+- **The actuation curve is suspect.** Achieved currents were measured through
+  the same contaminated sense, and the wire saw an unstable contact, so the
+  displacement-vs-current mapping needs re-running on the healthy rig.
+- **The firmware needs no change to unblock work.** The `R_est`-bootstrap and
+  `cccycle`-reachability items are still real robustness gaps — a single bad
+  sample should not be able to strand the loop for a whole run — but they are
+  *not* the cause and are not blocking.
+
+**What still stands:** the timing measurements (§2), the duty-cycle energy
+argument, the 120 mA armed floor, and — most importantly — **that displacement,
+not force, is the actuation signal** (§1). Those do not depend on the current
+sense being clean.
+
+**Suspect this fault first** when the rig behaves oddly: today's ADC2 dropouts
+and crc storms may share the cause. Symptom to look for: a current distribution
+with modes that are *physically impossible* — here, 270 and 400 mA readings when
+`u = 0.625 V` into 4.2 Ω caps the current at 149 mA.
+
 ## 3. The CC loop overshoots because `R_est` bootstraps wrong
 
 `R_est` latches at **6.25 Ω** against a true `u/I` of **4.2 Ω**, so the
