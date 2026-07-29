@@ -204,6 +204,60 @@
 
 ## TODOs
 
+> ### ▶ OPEN ISSUE — SWEEP COOL PHASE IS MULTIMODAL, CAUSE UNKNOWN (2026-07-28)
+>
+> **Symptom.** In `data/sweep_20260728_215606` the cool-phase current sense reads
+> 71 mA sd, while four steady captures (`data/isense_20260728_2*`) read 12–16 mA
+> under every condition tried. The sweep distribution is **not Gaussian** —
+> discrete modes near 65/100/135/270/400 mA, 22% of samples >220 mA, skew +1.37,
+> kurtosis 4.50. Its clean sub-population is 28 mA sd. See `fig5_spikes.png`.
+>
+> **Why it matters.** This is the condition in which the CC loop actually fails.
+> The `near` gate is ±12 mA and the `R_est` bootstrap latches `u/I` from ONE
+> sample, so a contaminated stream is what strands `R_est` at 6.25 Ω against a
+> true 4.2 and drives the ≤50% overshoot.
+>
+> **REFUTED — do not re-run** (each killed by measurement, detail in the sweep
+> README): per-tick I²C DAC write (1.05×); DAC command jitter (the quiet capture
+> has *more*); heat-pulse aftermath (flat across 12 s); operating point (`cc 155`
+> is clean); load current (disconnected is equally quiet); a different code path
+> in cool (`ccEngage`/`serviceActuationPhase` are identical); A0→A1 mux leakage
+> (272 vs 157 mA, uncorrelated).
+>
+> **Only untested difference.** The sweep's cool target (100 mA) is below the
+> reachable floor (~120 mA), so the loop rails and the gate stays shut; every
+> clean capture had it open. Next step is one capture:
+> `python operator_noise_isense.py --port COM8 --mode cc --ma 100`.
+>
+> **Corrected number.** An earlier claim of 144 mA/read (and "averaging cannot
+> fix this") came from this contaminated phase and was wrong. The real front end
+> is ~31 mA/read — 12× the Uno, not 57×. At that level `ADC_SAMPLES_CYCLE=64`
+> gives 3.9 mA at 383 Hz, 3σ inside the gate and 2× the Uno's rate, so averaging
+> IS viable. `operator_sweep_adcavg.py` measures the curve.
+
+> ### ▶ JUDGE ACTUATION ON DISPLACEMENT, NOT FORCE (2026-07-28)
+>
+> The fixture is compliant, so a contracting coil mostly **moves**. Per pulse,
+> force changes 1–3 mN (inside the noise) while displacement changes 5–530 µm and
+> is cleanly monotonic in current. The load cell **never saturates** — 380 mN
+> peak against a 490 mN rating even at 928 mA, so "max current before the load
+> cell saturates" is not the binding constraint for the RNN upper bound.
+> `operator_current_sweep.py` still judges on src=2 and must be moved to src=1.
+> Above ~750 mA the force baseline ratchets *down* across a run (180 → 380 → 232
+> mN), which is not repeatable cycling — cap at 550 mA until that is understood.
+
+> ### ▶ CC BOOTSTRAP + REACHABILITY (firmware — ASK BEFORE EDITING) (2026-07-28)
+>
+> In `Firmware_SMAConstantCurrent_PIO`, unchanged pending approval:
+> 1. `R_est` bootstraps from a **single** ADC sample on a railed point taken mid
+>    rise (`0.5 V / 0.08 A = 6.25 Ω`). Latch from a *settled* railed point.
+> 2. `cccycle` emits **no** reachability warning: it lives only in the `cc <mA>`
+>    path and is gated on `cc_R_valid`, which `startCycleCC()` clears via
+>    `ccReset()` on the line before — structurally dead for every cycle run.
+> 3. Runtime-only workaround, untested: `ccgain 25`. `cc_Kp` defaults to 0, so
+>    there is no proportional term at all; with `Kp > 0` the P term pulls the
+>    error inside the gate, which lets `R_est` self-correct. Survives `ccReset`.
+
 > ### ▶ OPEN ISSUE — CYCLE TIMING DISTORTED BY USB-CDC BACK-PRESSURE (2026-07-15)
 >
 > **Symptom.** In firmware-timed `cycle` runs the cool phase overshoots: the
