@@ -213,7 +213,21 @@ def main() -> int:
 
             # Pulse 1 is the bootstrap ramp — judging the level on it would
             # report the loop's convergence, not the SMA's response.
-            per_v = [r for r in per if not r["bootstrap"]] or per
+            #
+            # NO `or per` FALLBACK. That silently made a level PASS on the very
+            # cycle it claimed to exclude when segmentation returned a single
+            # window (2026-07-28). If only the bootstrap pulse survives, the
+            # segmentation is wrong and the run must stop, not report a number.
+            per_v = [r for r in per if not r["bootstrap"]]
+            if not per_v:
+                stop_reason = (f"{lvl:.0f} mA: only {len(per)} pulse(s) found "
+                               f"for {n_cyc} commanded — segmentation failed, "
+                               f"refusing to judge the level on the bootstrap "
+                               f"cycle")
+                print(f"  STOP — {stop_reason}\n")
+                break
+            if len(per) < n_cyc:
+                print(f"  NOTE: {len(per)} pulses found, {n_cyc} commanded")
             i_ach = sum(r["i_mA"] for r in per_v) / len(per_v)
             print(f"  achieved current {i_ach:.0f} mA of {lvl:.0f} mA commanded "
                   f"({100*i_ach/lvl:.0f}%)")

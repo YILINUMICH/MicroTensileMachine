@@ -174,24 +174,61 @@ class H7:
 
 
 # ─────────────────────────── analysis helpers ────────────────────────────────
-def heat_windows(cap: Capture, gap_s: float = 0.20):
-    """Heat phases, from src=6 (cc_u) presence.
+def heat_windows(cap: Capture, gap_s: float = 0.20, min_ms: float = 20.0):
+    """Heat phases from the CC command channel (src=6). Handles BOTH cccycle
+    forms, which look completely different on the wire:
 
-    The firmware emits the CC command channel ONLY while the current loop is
-    closed, i.e. during a heat phase — so clusters of src=6 separated by a gap
-    are exactly the pulses. More reliable than thresholding current, which is
-    noisy at low setpoints.
+      i_low == 0  -> the loop OPENS during cool, so src=6 exists only during
+                     heat. Clusters separated by a time GAP are the pulses.
+      i_low  > 0  -> the loop stays CLOSED through cool, so src=6 streams
+                     CONTINUOUSLY. Gap-based clustering then returns ONE window
+                     spanning the whole run (measured 2026-07-28: 75 s of
+                     samples, max gap 4 ms, 1 "pulse" found for 6 commanded —
+                     every downstream number was an average over heat AND cool).
+                     Segment on cc_u VALUE instead.
+
+    Thresholding the COMMAND rather than the measured current is deliberate: the
+    controller always drives u higher during heat than cool even when the
+    current fails to follow, so it marks the phase correctly regardless of
+    whether the loop converges — which is exactly the case being diagnosed.
     """
-    rows = sorted((s.hw_us * 1e-6 for s in cap.samples if s.src == SRC_CC_U))
+    rows = sorted(((s.hw_us * 1e-6, s.value) for s in cap.samples
+                   if s.src == SRC_CC_U))
     if not rows:
         return []
-    out, start, prev = [], rows[0], rows[0]
-    for t in rows[1:]:
-        if t - prev > gap_s:
-            out.append((start, prev))
-            start = t
-        prev = t
-    out.append((start, prev))
+    t = [r[0] for r in rows]
+
+    # Dispatch on whether the stream is continuous.
+    if max((b - a for a, b in zip(t, t[1:])), default=0.0) > gap_s:
+        out, start, prev = [], t[0], t[0]
+        for x in t[1:]:
+            if x - prev > gap_s:
+                out.append((start, prev))
+                start = x
+            prev = x
+        out.append((start, prev))
+        return [w for w in out if (w[1] - w[0]) * 1e3 >= min_ms or len(out) == 1]
+
+    # Continuous: cool dominates the timeline, so the median IS the cool level.
+    v = sorted(r[1] for r in rows)
+    cool = v[len(v) // 2]
+    top = v[int(0.999 * (len(v) - 1))]
+    if top - cool < 1e-3:
+        return []                      # command never rose — no heat phase
+    thr = cool + 0.25 * (top - cool)
+
+    out, start, prev = [], None, None
+    for tt, vv in rows:
+        if vv >= thr:
+            if start is None:
+                start = tt
+            prev = tt
+        elif start is not None:
+            if (prev - start) * 1e3 >= min_ms:
+                out.append((start, prev))
+            start = None
+    if start is not None and (prev - start) * 1e3 >= min_ms:
+        out.append((start, prev))
     return out
 
 
