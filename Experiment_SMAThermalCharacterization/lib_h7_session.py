@@ -232,6 +232,51 @@ def heat_windows(cap: Capture, gap_s: float = 0.20, min_ms: float = 20.0):
     return out
 
 
+def m4_clock_offset_s(console_path) -> float:
+    """Seconds to ADD to src=1/2 hw_us to put them on the M7 clock.
+
+    THE TWO CORES DO NOT SHARE A CLOCK. src=1 (laser) and src=2 (load) are
+    stamped by the M4; src=3/4/6/7 (SMA V/I, CC command, R_est) by the M7. The
+    M7 boots first, so its micros() runs AHEAD — measured 2026-07-29 at
+    +2.193 s, stable to 1 ms across an 8-minute run.
+
+    Plotting them on one axis without this correction puts the sensors ~2.2 s
+    EARLY, which makes the displacement response appear to PEAK BEFORE the
+    current pulse that causes it. That cost a whole session: every per-pulse
+    displacement and force number measured the decay tail of the PREVIOUS pulse,
+    which is why the signs looked random and the amplitudes looked like noise.
+    Corrected, the same sweep gives a clean monotonic curve (22.8 -> 367.7 um
+    from 150 to 650 mA) and a consistent 128 ms mechanical lag.
+
+    The firmware prints both counters in its STATUS line, so the offset is
+    recoverable per session from the saved console log. Returns 0.0 if no STATUS
+    line is present — callers that need it should say so rather than silently
+    plotting misaligned channels.
+    """
+    import re
+    try:
+        with open(console_path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                m = re.search(r"m7_us=(\d+)\s+m4_us=(\d+)", line)
+                if m:
+                    return (int(m.group(1)) - int(m.group(2))) * 1e-6
+    except OSError:
+        pass
+    return 0.0
+
+
+def align_m4(cap: Capture, offset_s: float) -> Capture:
+    """Return a copy of `cap` with src=1/2 shifted onto the M7 clock."""
+    out = Capture(console=list(cap.console))
+    for s in cap.samples:
+        if s.src in (SRC_LASER, SRC_LOAD):
+            out.samples.append(Sample(s.src, s.hw_us + int(offset_s * 1e6),
+                                      s.value, s.raw, s.seq))
+        else:
+            out.samples.append(s)
+    return out
+
+
 def measurement_sane(cap: Capture, windows, v_idle: float = 0.5,
                      r_min_ohm: float = 2.0, max_frac: float = 0.01):
     """Is the current sense telling the truth? Returns (ok, message).

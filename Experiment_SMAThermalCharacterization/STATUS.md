@@ -204,6 +204,47 @@
 
 ## TODOs
 
+> ### ▶ M7 AND M4 DO NOT SHARE A CLOCK — +2.193 s (2026-07-29)
+>
+> `src=1` (laser) and `src=2` (load) are stamped by the **M4**; `src=3/4/6/7`
+> (SMA V/I, CC command, R_est) by the **M7**, which boots first and runs
+> **2.193 s AHEAD**, stable to 1 ms over an 8-minute run. Untreated, sensors plot
+> 2.2 s early and displacement appears to **peak before the current pulse that
+> causes it**. Every per-pulse number taken before this was measuring the decay
+> tail of the PREVIOUS pulse.
+>
+> `lib_h7_session.m4_clock_offset_s()` reads it from a saved console log
+> (`m7_us=` / `m4_us=` in the firmware STATUS line); `align_m4()` applies it.
+> **Any analysis joining sensor and SMA channels must use them** —
+> `operator_console.py` and `operator_explore.ipynb` have NOT been audited yet.
+
+> ### ▶ REFERENCE DATASET + ACTUATION CURVE (2026-07-29)
+>
+> `data/sweep_20260729_002212` — guards off, clock-corrected, CC tracking to a
+> few percent at every level:
+>
+> | cmd | achieved | Δx peak | ΔF peak |
+> |---|---|---|---|
+> | 150 | 156 mA | 22.8 µm | 2.19 mN |
+> | 350 | 346 mA | 83.3 µm | 4.26 mN |
+> | 650 | 640 mA | 367.7 µm | 12.90 mN |
+>
+> Monotonic and superlinear on both channels; 128 ms mechanical lag to peak.
+> **Nothing has saturated** — force is at 43% of the 490 mN rating at 640 mA — so
+> the next session pushes past 650 mA. Watch for the force baseline ratcheting
+> *down* across a run (seen above ~750 mA on 2026-07-28, suspected wire or clamp
+> damage).
+>
+> **Sample rates:** sma_i/sma_v **954 Hz** (one per CC tick, `ADC_SAMPLES_CYCLE=4`
+> reads averaged, ~95 points per 100 ms pulse); cc_u/R_est 993 Hz; laser/load
+> 495 Hz streamed but **400 SPS converted** (19% duplicate rows, Nyquist 200 Hz).
+>
+> **Judge actuation on DISPLACEMENT.** The fixture is compliant, so the coil
+> moves rather than loading: force moves 1–3 mN per pulse (noise) while
+> displacement moves 20–370 µm. Use the SIGNED mean across cycles — real
+> actuation is coherent in sign; averaging magnitudes rectifies the noise and
+> turns a 4.9 µm non-response into 23.3 µm.
+
 > ### ✔ RESOLVED — "CC OVERSHOOT" WAS AN INTERMITTENT CONTACT (2026-07-28)
 >
 > **The CC loop is fine.** Re-running the identical `cccycle 550/100` profile
