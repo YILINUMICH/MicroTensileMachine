@@ -223,6 +223,55 @@
 
 ## TODOs
 
+> ### ▶ NEXT: FIX HIGH-ENERGY CURRENT SENSE, THEN RERUN FULL SPAN @ 30 s COOL (2026-07-30)
+>
+> **Where the heat-time map stands.** Five 2026-07-30 sweeps merged into
+> `data/heat_time_map_20260730_clean.csv` (219 clean cycles; regenerate with
+> `data/make_heat_time_map_clean.py`, envelopes in
+> `heat_time_map_20260730_{envelope,force_envelope}.png`). Coverage:
+> 100/200/300 ms rows complete over 150–950 mA (950×300 is n=1, needs one
+> confirming retry); **400 ms row missing above 650 mA**. Cycles were dropped
+> for: supply-OCP dead (i pinned ~39 mA, `u` railed 5 V — the PSU current
+> limit was set too low; raised since, keep it ≥1.5 A), over-current
+> transients, load-cell clip, baseline ratchet, bootstrap. `cool_s` is now a
+> recorded per-cycle column — at 850×300 the 25 s cycles read ~10% larger
+> stroke than the 15 s ones, so **cool time is an input variable, not
+> bookkeeping**.
+>
+> **1) TROUBLESHOOT FIRST — current sense dies at high energy.** Twice
+> (sweep_150846 during 750×300; sweep_162137 from 950×300 onward) the sense
+> read a flat, wandering **111–131 mA regardless of commanded current**
+> (~0.25 V at A1; true current ~1.1 A should read 2.2 V at the 2 V/A scale)
+> while the coil visibly actuated — the blind CC loop then railed the LDO and
+> overdrove everything after. **It is hardware, in the sense CHAIN, not the
+> shunt element and not firmware:** the 200 mΩ / 1 W shunt dissipates only
+> 0.24 W even railed (4× margin, ~2% duty); an open shunt would have stopped
+> actuation entirely; and in sweep_150846 the fault **self-healed mid-run**
+> within one firmware session (dead for 750×300, correct 846 mA by 850×300) —
+> latched software doesn't recover, loose contacts do. Both onsets followed
+> the most violent conditions (heat + multi-mm yank on the wiring). Check in
+> order: (a) INA296A OUT → A1 jumper + ground return, (b) INA296A supply pin,
+> (c) shunt Kelvin sense taps; then verify with the CC firmware `read`
+> command against a series DMM. Run retries with `--abort-on-bad-sense` so a
+> dead sense aborts instead of firing railed 1.1 A pulses through the rest of
+> the sweep (that is what burned the fill run's tail).
+>
+> **2) THEN rerun the full span at 30 s cool** —
+> `profiles/heat_time_map_30s.json` (9 levels × 4 heats, cool 30 s, ~2 h;
+> `--dry-run` first). One protocol for the whole grid supersedes the mixed
+> 15/25/30 s data. Expected instrument limits, from the current envelope:
+> **750×400** should come back clean; **850×400** marginal (force peak
+> ~4.0 V of 5, stroke ~7.5 of ~8.6 mm); **950×400 is beyond the
+> instrumentation** — force rise ≥3 V clips the 490 mN load cell from a cold
+> baseline, and stroke hits the laser rail. The laser rail is the amp's
+> **default ±5 mm analog scaling, not the sensor** (IL-030 measures
+> 20–45 mm; IL-E manual p.4-27): free-range rescaling would recover the
+> displacement at the cost of ~2× noise and a **fresh laser calibration**
+> (k/V₀ die with the scaling). Force above 490 mN is unmeasurable with this
+> load cell regardless. Note this supersedes the 2026-07-28 "load cell never
+> saturates" claim below — that held for 100 ms pulses; at 300–400 ms it
+> saturates from ~850 mA.
+
 > ### ▶ M7 AND M4 DO NOT SHARE A CLOCK — +2.193 s (2026-07-29)
 >
 > `src=1` (laser) and `src=2` (load) are stamped by the **M4**; `src=3/4/6/7`
