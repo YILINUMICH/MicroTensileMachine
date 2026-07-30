@@ -10,6 +10,25 @@
 
 ## Entry points
 
+- **`operator_current_sweep.py`** — condition sweeps (current × pulse length),
+  CLI flags or a **JSON test profile** (`--profile profiles/*.json`; the
+  profile WINS over flags for what it specifies and is copied into the output
+  folder). Two profile forms: `levels_ma × heat_ms` grid, or explicit
+  `conditions: [{i_ma, heat_ms, cool_s?, cycles?}]` executed in order with
+  repeats allowed — the shape the RNN collector will generate. **ALWAYS
+  `--dry-run` first to check a profile** — it prints the plan without opening
+  the port; a profile carries its own `port`, so a "syntax check" without
+  `--dry-run` WILL drive the rig (six 150 mA pulses fired this way
+  2026-07-30).
+- **`operator_sweep_report.py <folder>`** — standard post-sweep analysis:
+  re-analyses every capture from raw through the clock-aligned path and emits
+  `report.txt` (health verdicts: laser-rail, cc-track, sense, load-clip,
+  base-jump, missing pulses), `summary_report.csv` (per-pulse flat table),
+  `fig_envelope.png`, and `--timeline` strips. Run it the moment a sweep ends;
+  it is the reference over any in-run summary.csv. Validated against the
+  compromised `sweep_20260730_031337` (flags all 17 bad conditions, keeps the
+  2 clean ones; near-window-edge baselines are NOT flagged).
+
 - **`operator_console.py`** — the primary entry point. One window controls the
   stage, LCR, and SMA from a continuously-logging session (live plots, startup
   full-system check, mid-run staleness monitor, always-available `DISARM`).

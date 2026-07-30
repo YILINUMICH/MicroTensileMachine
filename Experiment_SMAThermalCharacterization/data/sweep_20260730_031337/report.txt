@@ -1,0 +1,60 @@
+SWEEP REPORT — sweep_20260730_031337
+================================================================
+ 150 mA / 100 ms:  I   156 mA, dx    +20.6 µm   OK
+ 150 mA / 200 ms:  I   301 mA, dx   +320.3 µm (4/5 valid)
+        !! sense: 17.04% of cool samples exceed 250 mA, which at the 0.500 V idle bias implies R < 2.0 ohm — physically impossible for this wire (~4.2-4.8 ohm). The current sense is corrupted; the data is NOT usable. Power-cycle USB + EVM, reseat the SMA clips, and re-run. See data/sweep_20260728_215606/README.md.
+        !! pulses: 5 segmented of 6 commanded
+        !! cc-track: achieved 301 mA of 150 (200%)
+        !! base-jump: laser baseline moved +5455 µm
+        !! base-jump: force baseline moved +168.5 mN
+ 150 mA / 300 ms:  I   156 mA, dx     +nan µm (0/6 valid)
+        !! laser-rail: 6/6 pulses blind (target out of the measuring window)
+ 250 mA / 100 ms:  I   251 mA, dx    +46.7 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+ 250 mA / 200 ms:  I   300 mA, dx   +171.0 µm (2/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+        !! laser-rail: 3/5 pulses blind (target out of the measuring window)
+        !! cc-track: achieved 300 mA of 250 (120%)
+ 350 mA / 100 ms:  I   470 mA, dx   +170.8 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+        !! cc-track: achieved 470 mA of 350 (134%)
+        !! base-jump: laser baseline moved +407 µm
+ 350 mA / 200 ms:  I   475 mA, dx   +445.1 µm (1/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+        !! laser-rail: 4/5 pulses blind (target out of the measuring window)
+        !! cc-track: achieved 475 mA of 350 (136%)
+ 450 mA / 100 ms:  I   399 mA, dx   +246.0 µm   OK
+ 450 mA / 200 ms:  I   643 mA, dx  +1127.3 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+        !! laser-rail: 1/5 pulses blind (target out of the measuring window)
+        !! cc-track: achieved 643 mA of 450 (143%)
+        !! base-jump: force baseline moved +16.3 mN
+ 550 mA / 100 ms:  I   546 mA, dx   +262.6 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+ 550 mA / 200 ms:  I   548 mA, dx     +nan µm (0/6 valid)
+        !! laser-rail: 6/6 pulses blind (target out of the measuring window)
+ 650 mA / 100 ms:  I   696 mA, dx   +418.4 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+ 650 mA / 200 ms:  I   709 mA, dx     +nan µm (0/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+        !! laser-rail: 5/5 pulses blind (target out of the measuring window)
+ 750 mA / 100 ms:  I   774 mA, dx   +529.5 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+ 750 mA / 200 ms:  I   922 mA, dx  +4752.2 µm (1/5 valid)
+        !! sense: 5.20% of cool samples exceed 250 mA, which at the 0.500 V idle bias implies R < 2.0 ohm — physically impossible for this wire (~4.2-4.8 ohm). The current sense is corrupted; the data is NOT usable. Power-cycle USB + EVM, reseat the SMA clips, and re-run. See data/sweep_20260728_215606/README.md.
+        !! pulses: 5 segmented of 6 commanded
+        !! laser-rail: 4/5 pulses blind (target out of the measuring window)
+        !! load-clip: force at the 5 V rail
+        !! cc-track: achieved 922 mA of 750 (123%)
+        !! base-jump: force baseline moved +181.5 mN
+ 850 mA / 100 ms:  I   886 mA, dx   +725.4 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+ 850 mA / 200 ms:  I   876 mA, dx     +nan µm (0/6 valid)
+        !! laser-rail: 6/6 pulses blind (target out of the measuring window)
+ 950 mA / 100 ms:  I   944 mA, dx   +837.4 µm (4/5 valid)
+        !! pulses: 5 segmented of 6 commanded
+ 950 mA / 200 ms:  I   981 mA, dx     +nan µm (0/6 valid)
+        !! laser-rail: 6/6 pulses blind (target out of the measuring window)
+        !! base-jump: force baseline moved +19.2 mN
+================================================================
+2/19 conditions clean; outputs: summary_report.csv, fig_envelope.png

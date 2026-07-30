@@ -1,0 +1,15 @@
+{
+  "name": "example_explicit",
+  "description": "Explicit-conditions form: executed IN THIS ORDER, each condition may carry its own cool_s/cycles, and repeats are allowed (files get a c##_ sequence prefix). This is the shape the RNN collector will generate - shuffled (i_ma, heat_ms) pairs.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 15,
+  "cycles": 5,
+  "conditions": [
+    { "i_ma": 650, "heat_ms": 100 },
+    { "i_ma": 350, "heat_ms": 200 },
+    { "i_ma": 650, "heat_ms": 100 },
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 25, "cycles": 3 }
+  ]
+}

@@ -114,6 +114,18 @@ def analyse_level(cap, heat_ms: float):
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--profile", default=None,
+                   help="JSON test profile. WINS over CLI flags for whatever it "
+                        "specifies (flags fill the rest); a copy is saved into "
+                        "the output folder. Two forms, 'conditions' preferred: "
+                        "explicit `conditions: [{i_ma, heat_ms, cool_s?, "
+                        "cycles?}, ...]` executed IN PROFILE ORDER (the RNN-"
+                        "collector shape), or grid `levels_ma: [...]` x "
+                        "`heat_ms: [...]` expanded heat-outer/level-inner. "
+                        "Scalar keys: port, out, max_ma, settle_s, cool_s, "
+                        "cycles, i_low_ma, v_idle, r_min_ohm, "
+                        "abort_on_bad_sense, stop_on_fail. See "
+                        "profiles/heat_time_map.json.")
     p.add_argument("--port", default="COM8")
     p.add_argument("--levels", default="150,250,350,450,550",
                    help="CC setpoints in mA, ascending (default 150..550)")
@@ -178,31 +190,88 @@ def main() -> int:
                         "ABORTS rather than record unusable data. The wire "
                         "measures ~4.2-4.8 ohm, so 2.0 is a wide margin.")
     p.add_argument("--out", default=None)
+    p.add_argument("--dry-run", action="store_true",
+                   help="print the resolved condition plan and exit WITHOUT "
+                        "opening the serial port. ALWAYS use this to check a "
+                        "profile: a profile carries its own `port`, so a "
+                        "\"test\" invocation without it WILL drive the rig "
+                        "(learned 2026-07-30 — six 650 mA pulses fired by a "
+                        "profile syntax check).")
     a = p.parse_args()
 
-    levels = [float(x) for x in a.levels.split(",") if x.strip()]
-    heats = [int(x) for x in str(a.heat_ms).split(",") if x.strip()]
-    if any(l > a.max_ma for l in levels):
-        return _die(f"a level exceeds --max-ma ({a.max_ma:.0f} mA)")
-    if levels != sorted(levels):
-        return _die("--levels must be ascending; the sweep stops on failure")
-    if heats != sorted(heats):
-        return _die("--heat-ms must be ascending (longer pulses are the "
-                    "unexplored regime; walk into it, not out of it)")
+    # -- profile intake. The profile WINS over flags for what it specifies. ---
+    profile = {}
+    if a.profile:
+        import json as _json
+        profile = _json.loads(Path(a.profile).read_text())
+        for pk, ak in (("port", "port"), ("out", "out"), ("max_ma", "max_ma"),
+                       ("settle_s", "settle_s"), ("cool_s", "cool_s"),
+                       ("cycles", "cycles"), ("i_low_ma", "i_low"),
+                       ("v_idle", "v_idle"), ("r_min_ohm", "r_min"),
+                       ("abort_on_bad_sense", "abort_on_bad_sense"),
+                       ("stop_on_fail", "stop_on_fail")):
+            if pk in profile:
+                setattr(a, ak, profile[pk])
+
+    # -- build the condition list: {i_ma, heat_ms, cool_s, cycles} each. ------
+    if profile.get("conditions"):
+        # Explicit list, executed IN PROFILE ORDER — the profile owns the
+        # sequencing (the RNN collector will hand us shuffled conditions).
+        conditions = [{"i_ma": float(c["i_ma"]), "heat_ms": int(c["heat_ms"]),
+                       "cool_s": float(c.get("cool_s", a.cool_s)),
+                       "cycles": int(c.get("cycles", a.cycles))}
+                      for c in profile["conditions"]]
+        shape = f"{len(conditions)} explicit conditions from {a.profile}"
+    else:
+        if profile.get("levels_ma"):
+            levels = [float(x) for x in profile["levels_ma"]]
+            heats = [int(x) for x in profile.get("heat_ms", [100])]
+        else:
+            levels = [float(x) for x in a.levels.split(",") if x.strip()]
+            heats = [int(x) for x in str(a.heat_ms).split(",") if x.strip()]
+        if levels != sorted(levels):
+            return _die("levels must be ascending; the sweep stops on failure")
+        if heats != sorted(heats):
+            return _die("heat_ms must be ascending (longer pulses are the "
+                        "unexplored regime; walk into it, not out of it)")
+        # Heat OUTER, level inner: each heat time reproduces the familiar
+        # ascending-current ladder, so a fault shows up against a known
+        # baseline.
+        conditions = [{"i_ma": l, "heat_ms": h,
+                       "cool_s": a.cool_s, "cycles": a.cycles}
+                      for h in heats for l in levels]
+        shape = (f"levels {levels} mA x heat {heats} ms | cool {a.cool_s:.0f} s"
+                 f" | {a.cycles} cycles/condition")
+    if not conditions:
+        return _die("no conditions to run")
+    if any(c["i_ma"] > a.max_ma for c in conditions):
+        return _die(f"a condition exceeds max_ma ({a.max_ma:.0f} mA)")
+
+    if a.dry_run:
+        print(f"\nDRY RUN — plan only, port NOT opened ({a.port})")
+        t_total = 0.0
+        for k, c in enumerate(conditions):
+            t_c = (a.settle_s + LEAD_IN_S + 4
+                   + (c["cycles"] + 1) * (c["heat_ms"] / 1e3 + c["cool_s"]))
+            t_total += t_c
+            print(f"  {k:3d}: {c['i_ma']:6.0f} mA  {c['heat_ms']:4d} ms  "
+                  f"cool {c['cool_s']:5.1f} s  x{c['cycles']}+1  (~{t_c:.0f} s)")
+        print(f"  total ~{t_total/60:.0f} min")
+        return 0
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = Path(a.out) if a.out else Path(__file__).parent / "data" / f"sweep_{stamp}"
     out.mkdir(parents=True, exist_ok=True)
+    if profile:                     # provenance: the profile rides with the data
+        (out / "profile.json").write_text(
+            Path(a.profile).read_text(), encoding="utf-8")
 
-    # Heat OUTER, level inner: each heat time reproduces the familiar
-    # ascending-current ladder, so a fault shows up against a known baseline.
-    conditions = [(h, l) for h in heats for l in levels]
-    per_cond = a.settle_s + LEAD_IN_S + (a.cycles + 1) * (max(heats)/1e3 + a.cool_s) + 4
+    per_cond = [a.settle_s + LEAD_IN_S + 4
+                + (c["cycles"] + 1) * (c["heat_ms"]/1e3 + c["cool_s"])
+                for c in conditions]
     print(f"\ncurrent sweep -> {out}")
-    print(f"  levels {levels} mA | heat {heats} ms | cool {a.cool_s:.0f} s "
-          f"| {a.cycles} cycles/condition")
-    print(f"  {len(conditions)} conditions, ~{len(conditions)*per_cond/60:.0f} "
-          f"min total\n")
+    print(f"  {shape}")
+    print(f"  {len(conditions)} conditions, ~{sum(per_cond)/60:.0f} min total\n")
 
     h7 = H7(a.port)
     rows, ceiling, stop_reason = [], None, "all levels passed"
@@ -211,7 +280,10 @@ def main() -> int:
         h7.send("disarm")
         time.sleep(0.5)
 
-        for heat_ms, lvl in conditions:
+        explicit = bool(profile.get("conditions"))
+        for k, cond in enumerate(conditions):
+            lvl, heat_ms = cond["i_ma"], cond["heat_ms"]
+            cool_s, cycles = cond["cool_s"], cond["cycles"]
             print(f"--- {lvl:.0f} mA / {heat_ms} ms " + "-" * 40)
             print(f"  cold-start settle {a.settle_s:.0f}s ...", flush=True)
             h7.capture(a.settle_s, ping=False)
@@ -238,10 +310,10 @@ def main() -> int:
             # One EXTRA cycle: cccycle heats FIRST, so pulse 1 still runs before
             # any cool phase has had a chance to bootstrap R_est. It is a ramp,
             # not a measurement, and is dropped from the verdict below.
-            cool_ms = int(a.cool_s * 1000)
-            n_cyc = a.cycles + 1
+            cool_ms = int(cool_s * 1000)
+            n_cyc = cycles + 1
             h7.send(f"cccycle {lvl:.0f} {a.i_low:.0f} {heat_ms} {cool_ms} {n_cyc}")
-            run_s = n_cyc * (heat_ms / 1000.0 + a.cool_s) + 3.0
+            run_s = n_cyc * (heat_ms / 1000.0 + cool_s) + 3.0
 
             faults = []
             cap = h7.capture(
@@ -261,9 +333,13 @@ def main() -> int:
             # only the in-run verdict uses the aligned copy, and the offset is
             # recorded in meta.json so offline analysis applies the same shift.
             m4_off = m4_offset_from_capture(cap)
-            save_capture(cap, out / f"level_{lvl:.0f}mA_h{heat_ms}ms.csv",
-                         {"level_mA": lvl, "heat_ms": heat_ms,
-                          "cool_s": a.cool_s, "cycles": a.cycles,
+            # Explicit profiles may repeat a condition (a shuffled RNN set), so
+            # their files carry the sequence index to stay collision-free.
+            stem = (f"c{k:02d}_level_{lvl:.0f}mA_h{heat_ms}ms" if explicit
+                    else f"level_{lvl:.0f}mA_h{heat_ms}ms")
+            save_capture(cap, out / f"{stem}.csv",
+                         {"seq": k, "level_mA": lvl, "heat_ms": heat_ms,
+                          "cool_s": cool_s, "cycles": cycles,
                           "m4_clock_offset_s": m4_off,
                           "captured_utc": datetime.now(timezone.utc).isoformat()})
             if m4_off == 0.0:
