@@ -217,23 +217,41 @@
 > (`m7_us=` / `m4_us=` in the firmware STATUS line); `align_m4()` applies it.
 > **Any analysis joining sensor and SMA channels must use them** —
 > `operator_console.py` and `operator_explore.ipynb` have NOT been audited yet.
+> `operator_current_sweep.py` now applies it LIVE (2026-07-30):
+> `m4_offset_from_capture()` parses the offset from the run's own console
+> stream, the in-run verdict analyses the aligned copy, the CSV keeps raw
+> timestamps, and `meta.json` records `m4_clock_offset_s`. Verified by
+> replaying `level_650mA` through the live path: +367.3 µm mean signed dx
+> (reference 367.7) vs −86 µm incoherent unaligned. Same commit fixes
+> `--stop-on-fail`, which 9d71b76 referenced but never added to argparse —
+> any NOTE (clip / CC <80% / FAULT) raised `AttributeError` and killed the
+> sweep, so the >650 mA session would have died at its first marginal level.
+> `summary.csv` now also carries `dx_um`/`x_base_um`/`bootstrap`.
 
-> ### ▶ REFERENCE DATASET + ACTUATION CURVE (2026-07-29)
+> ### ▶ REFERENCE DATASET + ACTUATION CURVE — FULL SPAN 150–950 mA (2026-07-30)
 >
-> `data/sweep_20260729_002212` — guards off, clock-corrected, CC tracking to a
-> few percent at every level:
+> **`data/sweep_full_150-950mA/`** — the 2026-07-29 (150–650) and 2026-07-30
+> (650–950) sweeps merged, every level re-analysed from raw through one
+> identical clock-aligned path (`summary_combined.csv`,
+> `fig_actuation_150-950mA.png`; per-file `_YYYYMMDD` suffixes give
+> provenance; folder README has the method + full table). Level means
+> (signed dx over verdict cycles):
 >
-> | cmd | achieved | Δx peak | ΔF peak |
+> | cmd | achieved | Δx | ΔF |
 > |---|---|---|---|
-> | 150 | 156 mA | 22.8 µm | 2.19 mN |
-> | 350 | 346 mA | 83.3 µm | 4.26 mN |
-> | 650 | 640 mA | 367.7 µm | 12.90 mN |
+> | 150 | 156 mA | 13.4 µm | 2.2 mN |
+> | 650 (run 1 / run 2) | 640 / 644 mA | **367.3 / 363.6 µm** | 12.8 / 13.2 mN |
+> | 950 | 939 mA | 864.0 µm | 28.8 mN |
 >
-> Monotonic and superlinear on both channels; 128 ms mechanical lag to peak.
-> **Nothing has saturated** — force is at 43% of the 490 mN rating at 640 mA — so
-> the next session pushes past 650 mA. Watch for the force baseline ratcheting
-> *down* across a run (seen above ~750 mA on 2026-07-28, suspected wire or clamp
-> damage).
+> Monotonic and superlinear across the whole decade; the 650 mA cross-day
+> repeat agrees to **1%**. No clipping, no force-baseline ratchet even at
+> 950 mA (the >750 mA damage signature of 2026-07-28 did NOT reappear at
+> 100 ms / 12 s duty), CC at 99% of command at 850/950. Exception: the
+> **750-command level overshot** (757–857 mA across cycles, mean 792) — a
+> control anomaly, not a response one; its points sit on the curve when
+> plotted against achieved current. Likely the `R_est` single-sample
+> bootstrap (below). **RNN range: 150–950 mA**; the binding ceiling is the
+> LDO (~5.2 V / R_wire ≈ 1.1 A), not any sensor.
 >
 > **Sample rates:** sma_i/sma_v **954 Hz** (one per CC tick, `ADC_SAMPLES_CYCLE=4`
 > reads averaged, ~95 points per 100 ms pulse); cc_u/R_est 993 Hz; laser/load
