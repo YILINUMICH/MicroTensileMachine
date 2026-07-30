@@ -1,0 +1,11 @@
+{
+  "name": "heat_time_map",
+  "description": "2D performance map: pulse length x current. Grid form - expands heat-outer/level-inner, ascending both. cool_s 15 chosen for ~1h total; raise to 20-25 for the 300/400 ms rows if baselines stop recovering.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 15,
+  "cycles": 5,
+  "levels_ma": [150, 250, 350, 450, 550, 650, 750, 850, 950],
+  "heat_ms": [100, 200, 300, 400]
+}

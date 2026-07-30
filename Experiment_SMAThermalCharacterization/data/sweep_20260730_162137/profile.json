@@ -1,0 +1,21 @@
+{
+  "name": "heat_time_map_fill",
+  "description": "Fill-in for the cells lost/thin after the 2026-07-30 supply-OCP incident (see data/heat_time_map_20260730_clean.csv). BEFORE RUNNING: raise the bench supply current limit to >= 1.5 A (the OCP at ~1 A killed sweep_132601 entirely and the tail of _135311) AND power-cycle USB + EVM. Cool is raised to 25-30 s for the 300/400 ms rows - at 15 s the baseline ratcheted monotonically above 650 mA. Expect the load cell to clip (490 mN / 5 V) at >=850 mA x 300 ms and >=750 mA x 400 ms: force is lost there but displacement may still be usable while the laser stays in window.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 15,
+  "cycles": 5,
+  "conditions": [
+    { "i_ma": 750, "heat_ms": 100 },
+    { "i_ma": 850, "heat_ms": 100 },
+    { "i_ma": 750, "heat_ms": 200 },
+    { "i_ma": 750, "heat_ms": 300, "cool_s": 25 },
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 25 },
+    { "i_ma": 950, "heat_ms": 300, "cool_s": 30 },
+    { "i_ma": 650, "heat_ms": 400, "cool_s": 25 },
+    { "i_ma": 750, "heat_ms": 400, "cool_s": 25 },
+    { "i_ma": 850, "heat_ms": 400, "cool_s": 30 },
+    { "i_ma": 950, "heat_ms": 400, "cool_s": 30 }
+  ]
+}
