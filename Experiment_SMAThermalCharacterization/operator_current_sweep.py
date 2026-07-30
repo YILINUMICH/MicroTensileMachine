@@ -44,8 +44,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from lib_h7_session import (H7, SAT_GUARD_V, SRC_CC_U, SRC_LASER,  # noqa: E402
-                            SRC_LOAD, SRC_SMA_I, heat_windows,
-                            measurement_sane, save_capture, window_stats)
+                            SRC_LOAD, SRC_SMA_I, align_m4, heat_windows,
+                            m4_offset_from_capture, measurement_sane,
+                            save_capture, window_stats)
 
 # Calibrate_LaserHead/calibration.json (2026-05-27, r2 = 0.999998).
 K_UM_PER_MV, V0_MV = -0.49779577092171906, 2503.7500968693835
@@ -116,7 +117,11 @@ def main() -> int:
     p.add_argument("--port", default="COM8")
     p.add_argument("--levels", default="150,250,350,450,550",
                    help="CC setpoints in mA, ascending (default 150..550)")
-    p.add_argument("--heat-ms", type=int, default=100)
+    p.add_argument("--heat-ms", default="100",
+                   help="actuation pulse length(s) in ms. A comma list sweeps "
+                        "heat time as the OUTER loop (e.g. 100,200,300,400): "
+                        "each heat time runs the full level ladder before the "
+                        "next, so every (heat, current) cell is captured.")
     p.add_argument("--cool-s", type=float, default=12.0,
                    help="cool per cycle; 3 s was demonstrably too short")
     p.add_argument("--cycles", type=int, default=3)
@@ -154,6 +159,11 @@ def main() -> int:
                         "compliant so the coil moves rather than loading. "
                         "Default 20 um is ~14x the ~1.4 um laser noise; "
                         "measured 4.9 um at 225 mA (noise) vs 44 um at 426 mA.")
+    p.add_argument("--stop-on-fail", action="store_true",
+                   help="halt the escalation at the first level that raises a "
+                        "NOTE (clip / headroom / CC non-convergence / failed "
+                        "segmentation) instead of collecting every level. For "
+                        "UNATTENDED runs; the default reports and keeps going.")
     p.add_argument("--abort-on-bad-sense", action="store_true",
                    help="halt the sweep when the current sense reads physically "
                         "impossible values, instead of just warning. For "
@@ -171,18 +181,28 @@ def main() -> int:
     a = p.parse_args()
 
     levels = [float(x) for x in a.levels.split(",") if x.strip()]
+    heats = [int(x) for x in str(a.heat_ms).split(",") if x.strip()]
     if any(l > a.max_ma for l in levels):
         return _die(f"a level exceeds --max-ma ({a.max_ma:.0f} mA)")
     if levels != sorted(levels):
         return _die("--levels must be ascending; the sweep stops on failure")
+    if heats != sorted(heats):
+        return _die("--heat-ms must be ascending (longer pulses are the "
+                    "unexplored regime; walk into it, not out of it)")
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out = Path(a.out) if a.out else Path(__file__).parent / "data" / f"sweep_{stamp}"
     out.mkdir(parents=True, exist_ok=True)
 
+    # Heat OUTER, level inner: each heat time reproduces the familiar
+    # ascending-current ladder, so a fault shows up against a known baseline.
+    conditions = [(h, l) for h in heats for l in levels]
+    per_cond = a.settle_s + LEAD_IN_S + (a.cycles + 1) * (max(heats)/1e3 + a.cool_s) + 4
     print(f"\ncurrent sweep -> {out}")
-    print(f"  levels {levels} mA | heat {a.heat_ms} ms | cool {a.cool_s:.0f} s "
-          f"| {a.cycles} cycles/level\n")
+    print(f"  levels {levels} mA | heat {heats} ms | cool {a.cool_s:.0f} s "
+          f"| {a.cycles} cycles/condition")
+    print(f"  {len(conditions)} conditions, ~{len(conditions)*per_cond/60:.0f} "
+          f"min total\n")
 
     h7 = H7(a.port)
     rows, ceiling, stop_reason = [], None, "all levels passed"
@@ -191,8 +211,8 @@ def main() -> int:
         h7.send("disarm")
         time.sleep(0.5)
 
-        for lvl in levels:
-            print(f"--- {lvl:.0f} mA " + "-" * 46)
+        for heat_ms, lvl in conditions:
+            print(f"--- {lvl:.0f} mA / {heat_ms} ms " + "-" * 40)
             print(f"  cold-start settle {a.settle_s:.0f}s ...", flush=True)
             h7.capture(a.settle_s, ping=False)
 
@@ -220,8 +240,8 @@ def main() -> int:
             # not a measurement, and is dropped from the verdict below.
             cool_ms = int(a.cool_s * 1000)
             n_cyc = a.cycles + 1
-            h7.send(f"cccycle {lvl:.0f} {a.i_low:.0f} {a.heat_ms} {cool_ms} {n_cyc}")
-            run_s = n_cyc * (a.heat_ms / 1000.0 + a.cool_s) + 3.0
+            h7.send(f"cccycle {lvl:.0f} {a.i_low:.0f} {heat_ms} {cool_ms} {n_cyc}")
+            run_s = n_cyc * (heat_ms / 1000.0 + a.cool_s) + 3.0
 
             faults = []
             cap = h7.capture(
@@ -233,15 +253,32 @@ def main() -> int:
             time.sleep(0.3)
             h7.disarm()
 
-            save_capture(cap, out / f"level_{lvl:.0f}mA.csv",
-                         {"level_mA": lvl, "heat_ms": a.heat_ms,
+            # M4→M7 CLOCK OFFSET, applied LIVE. laser/load (src=1/2) are
+            # stamped by the M4, the heat windows (src=6) by the M7, which runs
+            # ~2.2 s AHEAD — joined untreated, every pre/post window lands on
+            # the PREVIOUS pulse's decay tail (the bug that hid a whole
+            # session's actuation, 2026-07-29). The CSV keeps RAW timestamps;
+            # only the in-run verdict uses the aligned copy, and the offset is
+            # recorded in meta.json so offline analysis applies the same shift.
+            m4_off = m4_offset_from_capture(cap)
+            save_capture(cap, out / f"level_{lvl:.0f}mA_h{heat_ms}ms.csv",
+                         {"level_mA": lvl, "heat_ms": heat_ms,
                           "cool_s": a.cool_s, "cycles": a.cycles,
+                          "m4_clock_offset_s": m4_off,
                           "captured_utc": datetime.now(timezone.utc).isoformat()})
+            if m4_off == 0.0:
+                print("  WARNING: no m7_us/m4_us STATUS line captured — "
+                      "laser/load stay ~2.2 s early and the numbers below "
+                      "measure the PREVIOUS pulse's tail")
+            else:
+                print(f"  clock align: src=1/2 shifted {m4_off:+.3f} s onto "
+                      f"the M7 clock")
+                cap = align_m4(cap, m4_off)
 
             # Distinguish the failure modes — they need opposite responses.
             # src=6 missing  -> the CC loop never engaged (arming / command)
             # src=2 missing  -> the load channel died (hub fault, power-cycle)
-            per = analyse_level(cap, a.heat_ms)
+            per = analyse_level(cap, heat_ms)
             if not per:
                 n_cc, n_load = len(cap.by_src(SRC_CC_U)), len(cap.by_src(SRC_LOAD))
                 if n_cc == 0:
@@ -265,6 +302,7 @@ def main() -> int:
                       f"{r['baseline']:7.3f} {r['peak']:7.3f} {r['rise']:7.3f}  "
                       f"{'YES' if r['clipped'] else 'no':>5}{tag}")
                 r["level_mA"] = lvl
+                r["heat_ms"] = heat_ms
                 r["bootstrap"] = (r["cycle"] == 1)
                 rows.append(r)
 
@@ -344,7 +382,7 @@ def main() -> int:
                 stop_reason = f"{lvl:.0f} mA: {notes[0]}"
                 print(f"  STOP — {stop_reason}\n")
                 break
-            ceiling = lvl
+            ceiling = f"{lvl:.0f} mA / {heat_ms} ms"
             print()
     except KeyboardInterrupt:
         stop_reason = "interrupted by user"
@@ -357,19 +395,21 @@ def main() -> int:
         h7.close()
 
     with open(out / "summary.csv", "w", newline="") as fh:
-        fh.write("level_mA,cycle,i_mA,baseline_V,peak_V,rise_V,clipped\n")
+        fh.write("level_mA,heat_ms,cycle,bootstrap,i_mA,dx_um,x_base_um,"
+                 "baseline_V,peak_V,rise_V,clipped\n")
         for r in rows:
-            fh.write(f"{r['level_mA']:.0f},{r['cycle']},{r['i_mA']:.2f},"
+            fh.write(f"{r['level_mA']:.0f},{r['heat_ms']},{r['cycle']},"
+                     f"{int(r['bootstrap'])},"
+                     f"{r['i_mA']:.2f},{r['dx_um']:.2f},{r['x_base_um']:.2f},"
                      f"{r['baseline']:.5f},{r['peak']:.5f},{r['rise']:.5f},"
                      f"{int(r['clipped'])}\n")
 
     print("=" * 62)
     if ceiling is not None:
-        print(f"  HIGHEST PASSING LEVEL: {ceiling:.0f} mA")
+        print(f"  LAST CLEAN CONDITION: {ceiling}")
         print(f"  stopped because: {stop_reason}")
-        print(f"\n  Use {ceiling:.0f} mA as the RNN upper current bound.")
-        print(f"  Verified at heat {a.heat_ms} ms / cool {a.cool_s:.0f} s — the")
-        print(f"  limit is a PAIR; a shorter cool lowers it.")
+        print(f"  cool {a.cool_s:.0f} s — any limit found is a PAIR with the")
+        print(f"  duty cycle; a shorter cool lowers it.")
     else:
         print(f"  NO LEVEL PASSED — {stop_reason}")
         if rows and max(r["rise"] for r in rows) < a.min_rise:

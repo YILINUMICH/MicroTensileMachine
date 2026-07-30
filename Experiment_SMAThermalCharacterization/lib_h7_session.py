@@ -232,6 +232,24 @@ def heat_windows(cap: Capture, gap_s: float = 0.20, min_ms: float = 20.0):
     return out
 
 
+def m4_offset_from_capture(cap: Capture) -> float:
+    """M4→M7 clock offset from a LIVE capture's console lines.
+
+    Same STATUS-line source as `m4_clock_offset_s`, but parsed from
+    `cap.console` so an in-progress run can align its own analysis instead of
+    only fixing it offline. Takes the LAST STATUS line seen (most recent
+    counters; the offset is stable to ~1 ms anyway). Returns 0.0 if no STATUS
+    line was captured — callers should warn, not silently join misaligned
+    channels.
+    """
+    import re
+    for _, txt in reversed(cap.console):
+        m = re.search(r"m7_us=(\d+)\s+m4_us=(\d+)", txt)
+        if m:
+            return (int(m.group(1)) - int(m.group(2))) * 1e-6
+    return 0.0
+
+
 def m4_clock_offset_s(console_path) -> float:
     """Seconds to ADD to src=1/2 hw_us to put them on the M7 clock.
 
