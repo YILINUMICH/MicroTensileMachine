@@ -1,38 +1,63 @@
 #!/usr/bin/env python3
-"""operator_current_sweep.py — find the usable current ceiling for the rig.
+"""operator_current_sweep.py — sweep SMA drive conditions (current x pulse time).
 
-WHAT THIS ANSWERS
-    The highest CC setpoint that still actuates the SMA while keeping the load
-    cell inside its 0-5 V window AND letting the force return to baseline
-    between cycles. That current is the upper limit for the RNN data set.
+WHAT THIS DOES
+    Runs a ladder of CC conditions — each a (current, heat_ms, cool_s, cycles)
+    cell — capturing the full stream per condition, with an in-run clock-aligned
+    verdict (achieved current, signed displacement, force rise) printed live.
+    Originally built to find the current ceiling for the RNN set; now the
+    general condition runner. The measured envelope (2026-07-30): 150-950 mA at
+    100 ms is clean end to end (21 -> 837 um), the binding ceiling is the LDO
+    (~5.2 V / R_wire ~= 1.1 A), not any sensor.
 
-WHY IT IS A PAIR, NOT A SINGLE NUMBER
+USAGE
+    # ALWAYS dry-run a profile first: it prints the plan WITHOUT opening the
+    # port. A profile carries its own `port`, so a "syntax check" without
+    # --dry-run WILL drive the rig (six 150 mA pulses fired this way).
+    python operator_current_sweep.py --profile profiles/heat_time_map.json --dry-run
+    python operator_current_sweep.py --profile profiles/heat_time_map.json
+
+    # CLI form (no profile): 2D sweep, heat as the OUTER loop
+    python operator_current_sweep.py --port COM8 \
+        --levels 150,250,350,450,550,650,750,850,950 \
+        --heat-ms 100,200,300,400 --cycles 5 --cool-s 15 --max-ma 1000
+
+    # afterwards, ALWAYS:
+    python operator_sweep_report.py data/sweep_<stamp>
+
+PROFILES (profiles/*.json) — the profile WINS over CLI flags for what it
+    specifies, and a copy is saved into the output folder. Two forms:
+      grid      "levels_ma": [...], "heat_ms": [...]  (ascending both)
+      explicit  "conditions": [{"i_ma", "heat_ms", "cool_s"?, "cycles"?}, ...]
+                executed IN PROFILE ORDER, repeats allowed (files get a c##_
+                sequence prefix) — the shape the RNN collector will generate.
+    Scalar keys: port, out, max_ma, settle_s, cool_s, cycles, i_low_ma,
+    v_idle, r_min_ohm, abort_on_bad_sense, stop_on_fail.
+
+WHY A LIMIT IS A PAIR, NOT A SINGLE NUMBER
     Analysis of console_20260715_193936_5V0.5V showed the load cell saturating
     NOT from any single pulse — the per-pulse rise was only ~1.5 V — but from
     the pre-pulse BASELINE ratcheting 2.43 V -> 5.00 V across cycles because a
     3 s cool never let the coil return. By cycle ~15 the rise had collapsed to
-    0.004 V: thermally soaked, no longer actuating at all. So the ceiling is set
-    jointly by CURRENT and COOL TIME, and a sweep that ignores recovery will
-    report a limit that is really a duty-cycle artefact.
+    0.004 V: thermally soaked, no longer actuating at all. Any ceiling is set
+    jointly by PULSE ENERGY and COOL TIME; a sweep that ignores recovery
+    reports a limit that is really a duty-cycle artefact. Longer pulses raise
+    the stakes: the FIRST 200 ms cell of sweep_20260730_031337 shifted the
+    coil ~5 mm and took the laser target out of its window for the rest of
+    the run.
 
-    That session also predates the 2026-07-24 sense fix, so its currents are 2x
-    too high as recorded. This script measures fresh.
-
-BEFORE RUNNING — re-zero the amplifier
-    In that session the load cell sat at a 2.43 V BASELINE on a 0-5 V channel
-    before anything was driven: static preload ate half the range. The LCA-9PC
-    has a 25-turn zero pot. Zero it at the preloaded condition first, or this
-    sweep will find an artificially low ceiling and you will redo it.
-
-USAGE
-    python operator_current_sweep.py --port COM8
-    python operator_current_sweep.py --port COM8 --levels 150,250,350,450 \
-                                     --heat-ms 100 --cool-s 12 --cycles 3
+BEFORE RUNNING
+    - Power-cycle USB + EVM (crc storms accumulate; ADC2 dies silently first).
+    - Reseat the SMA clips (intermittent contact -> R_est latches wrong ->
+      CC overshoots up to 2x; the sense check flags the impossible readings).
+    - Check the laser target sits MID-WINDOW at rest and the LCA-9PC zero pot
+      leaves headroom at the preloaded condition.
 
 SAFETY
     Disarms in a finally block on every exit path including Ctrl-C; refuses
-    setpoints above --max-ma; and STOPS ESCALATING the moment a level saturates
-    or fails to recover, so it never climbs further into a bad regime.
+    setpoints above max_ma. Guards REPORT by default (collect first, threshold
+    afterwards); --stop-on-fail / --abort-on-bad-sense restore hard stops for
+    unattended runs.
 """
 from __future__ import annotations
 

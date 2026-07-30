@@ -416,6 +416,52 @@ was 8× larger. It tracks the 0.7 A drive, not the mechanics: **drive feedthroug
 not displacement.** The `cycles` view tests for this automatically and labels the
 panel when it triggers.
 
+## Condition sweeps — `operator_current_sweep.py` → `operator_sweep_report.py`
+
+The scripted (non-console) path for mapping the SMA's actuation envelope:
+ladders of CC conditions, each a `(i_ma, heat_ms, cool_s, cycles)` cell driven
+via `cccycle` with a cold-start settle, a lead-in baseline, and an in-run
+**clock-aligned** verdict (the M4 stamps laser/load ~2.2 s behind the M7's SMA
+channels; the sweep parses the offset from the firmware's own STATUS line and
+aligns live — see STATUS for the bug this killed).
+
+**Workflow — profile → dry-run → run → report:**
+
+```
+python operator_current_sweep.py --profile profiles/heat_time_map.json --dry-run
+python operator_current_sweep.py --profile profiles/heat_time_map.json
+python operator_sweep_report.py  data/sweep_<stamp>          # ALWAYS, right after
+```
+
+- **Profiles** (`profiles/*.json`) win over CLI flags and are copied into the
+  output folder. Grid form (`levels_ma × heat_ms`) or explicit
+  `conditions: [{i_ma, heat_ms, cool_s?, cycles?}, ...]` executed in profile
+  order with repeats allowed — the same shape the planned RNN collector will
+  generate. **Always `--dry-run` a profile first**: a profile carries its own
+  `port`, so a bare "syntax check" drives the rig.
+- **`operator_sweep_report.py <folder>`** re-analyses every capture from raw
+  and emits `report.txt` (health verdicts), `summary_report.csv` (per-pulse
+  flat table with a `railed` validity flag), `fig_envelope.png`, and
+  `--timeline` strips. Its checks encode every failure mode this rig has
+  produced: laser out-of-window rail, CC tracking >15% (R_est bootstrap /
+  clip contact), physically-impossible current sense, load clip, baseline
+  jumps, missing pulses.
+
+**Reference dataset: `data/sweep_full_150-950mA/`** — two sessions merged and
+uniformly re-analysed (`make_summary_and_curve.py` / `make_timeline.py` in the
+folder). 100 ms pulses, 12 s cool: monotonic, superlinear, 21 → 864 µm and
+2 → 29 mN across 156–939 mA achieved; the 650 mA cross-day repeat agrees to
+1%; nothing clips and the binding ceiling is the LDO (~5.2 V / R_wire ≈ 1.1 A),
+not any sensor. Judge actuation on DISPLACEMENT (signed mean) — the fixture is
+compliant, so the coil moves rather than loading.
+
+**Cautionary dataset: `data/sweep_20260730_031337/`** — the first heat-time
+map attempt. The 100 ms row is clean; the FIRST 200 ms cell (150 mA commanded,
+301 mA achieved) shifted the coil ~5 mm, took the laser target out of its
+window, and blinded 33/82 pulses. Longer pulses raise the stakes: re-check the
+laser is mid-window at rest before every session, and treat a CC overshoot as
+a clip-contact symptom, not a firmware bug.
+
 ## Files
 
 Files carry a role prefix: **`operator_`** = a human launches it directly;
@@ -429,6 +475,16 @@ Experiment_SMAThermalCharacterization/
 ├── operator_console.py         PRIMARY entry — GUI console + --headless (record + control)
 ├── operator_explore.ipynb      interactive Plotly analysis notebook (raw / converted / cross-plots)
 │
+├── operator_current_sweep.py   condition sweeps (current × pulse length); --profile / --dry-run
+├── operator_sweep_report.py    post-sweep analysis + health report (run after EVERY sweep)
+├── operator_pulse_capture.py   plain single-pulse capture tool
+├── operator_noise_psd.py       ┐ CC current-sense noise diagnostics
+├── operator_noise_isense.py    ┘ (see the 2026-07-28 investigation in STATUS)
+├── operator_sweep_adcavg.py    ADC_SAMPLES_CYCLE averaging sweep (rate-vs-noise)
+├── profiles/                   JSON test profiles (grid + explicit-conditions forms)
+│
+├── lib_h7_session.py           shared H7 drive/capture plumbing: port revival, calibration
+│                               restore, watchdog ping, clock offset, sanity checks
 ├── lib_config.py               typed dataclasses (h7/stage/phases/calibration/run; no LCR)
 ├── lib_workers.py              H7Worker (multi-channel), ZaberWorker, CameraWorker
 ├── lib_h7_commands.py          firmware command builders (single source of truth)
