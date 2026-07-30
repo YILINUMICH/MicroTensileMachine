@@ -112,22 +112,19 @@ fig, ax = plt.subplots(figsize=(9.2, 6.2), dpi=150)
 fig.patch.set_facecolor(SURFACE)
 ax.set_facecolor(SURFACE)
 
-Y_FLOOR = 4.0
-n_below = 0
 for h in HEATS:
     c = SERIES[h]
     med = []
     for lv in LEVELS:
         cell = env.get((h, lv))
         med.append(np.median(cell["dx"]) if cell else np.nan)
-        if cell:  # cycle scatter, clipped to the log floor
+        if cell:
             dx = cell["dx"]
-            n_below += int((dx < Y_FLOOR).sum())
-            ax.scatter([lv] * len(dx), np.clip(dx, Y_FLOOR, None),
+            ax.scatter([lv] * len(dx), dx,
                        s=16, color=c, alpha=0.45, edgecolors=SURFACE,
                        linewidths=0.8, zorder=3)
     med = np.array(med, dtype=float)
-    ax.plot(LEVELS, np.clip(med, Y_FLOOR, None), color=c, linewidth=2,
+    ax.plot(LEVELS, med, color=c, linewidth=2,
             marker="o", markersize=7, markeredgecolor=SURFACE,
             markeredgewidth=1.2, zorder=4, label=f"{h} ms pulse")
     # direct label at the last valid point
@@ -145,20 +142,18 @@ ax.text(130, 8600, "≈ laser 0 V rail (stroke from typical rest)", fontsize=8.5
 
 # missing corner annotation
 ax.annotate("no valid data: 750–950 mA × 400 ms\n(current-sense fault / load-cell clip)",
-            xy=(860, 280), fontsize=8.5, color=MUTED, ha="center", va="center")
+            xy=(760, 5800), fontsize=8.5, color=MUTED, ha="center", va="center")
 
-ax.set_yscale("log")
-ax.set_ylim(Y_FLOOR, 14000)
+ax.set_ylim(-200, 9300)
 ax.set_xticks(LEVELS)
 ax.set_xlim(115, 1050)
-ax.grid(axis="y", color=GRID, linewidth=0.8, which="major")
-ax.grid(axis="y", color=GRID, linewidth=0.4, alpha=0.6, which="minor")
+ax.grid(axis="y", color=GRID, linewidth=0.8)
 ax.set_axisbelow(True)
 for side in ("top", "right"):
     ax.spines[side].set_visible(False)
 
 ax.set_xlabel("Commanded current (mA)")
-ax.set_ylabel("Contraction stroke Δx (µm, log)")
+ax.set_ylabel("Contraction stroke Δx (µm)")
 ax.set_title("SMA actuation envelope — stroke vs current and pulse length",
              fontsize=13, loc="left", pad=14)
 sub = (f"2026-07-30, {len(SWEEPS)} sweeps merged · {len(good)} clean cycles "
@@ -166,7 +161,8 @@ sub = (f"2026-07-30, {len(SWEEPS)} sweeps merged · {len(good)} clean cycles "
        f"median line, individual cycles as dots")
 ax.text(0, 1.012, sub, transform=ax.transAxes, fontsize=8.5, color=MUTED)
 
-leg = ax.legend(loc="lower right", frameon=False, fontsize=9,
+leg = ax.legend(loc="upper left", bbox_to_anchor=(0.02, 0.90),
+                frameon=False, fontsize=9,
                 title="Heat pulse", title_fontsize=9)
 leg.get_title().set_color(INK2)
 for t in leg.get_texts():
@@ -176,14 +172,12 @@ png_path = os.path.join(BASE, "heat_time_map_20260730_envelope.png")
 fig.tight_layout()
 fig.savefig(png_path, facecolor=SURFACE, bbox_inches="tight")
 print("wrote", png_path)
-print(f"scatter points clipped to {Y_FLOOR} um floor (noise floor): {n_below}")
 
 # ------------------------------------------------------- force chart
 fig2, ax2 = plt.subplots(figsize=(9.2, 6.2), dpi=150)
 fig2.patch.set_facecolor(SURFACE)
 ax2.set_facecolor(SURFACE)
 
-F_FLOOR = 0.2
 for h in HEATS:
     c = SERIES[h]
     med = []
@@ -192,11 +186,11 @@ for h in HEATS:
         med.append(np.median(cell["f"]) if cell else np.nan)
         if cell:
             fm = cell["f"]
-            ax2.scatter([lv] * len(fm), np.clip(fm, F_FLOOR, None),
+            ax2.scatter([lv] * len(fm), fm,
                         s=16, color=c, alpha=0.45, edgecolors=SURFACE,
                         linewidths=0.8, zorder=3)
     med = np.array(med, dtype=float)
-    ax2.plot(LEVELS, np.clip(med, F_FLOOR, None), color=c, linewidth=2,
+    ax2.plot(LEVELS, med, color=c, linewidth=2,
              marker="o", markersize=7, markeredgecolor=SURFACE,
              markeredgewidth=1.2, zorder=4, label=f"{h} ms pulse")
     last = max(i for i in range(len(LEVELS)) if not np.isnan(med[i]))
@@ -207,24 +201,19 @@ for h in HEATS:
 ax2.axhline(490, color=AXIS, linewidth=1, linestyle=(0, (4, 3)), zorder=2)
 ax2.text(1040, 490, "load-cell full scale (5 V ≈ 490 mN)", fontsize=8.5,
          color=MUTED, va="bottom", ha="right")
-ax2.axhline(0.5, color=AXIS, linewidth=1, linestyle=(0, (1, 3)), zorder=2)
-ax2.text(130, 0.5, "≈ load-cell noise floor", fontsize=8.5,
-         color=MUTED, va="bottom", ha="left")
 ax2.annotate("no valid data: 750–950 mA × 400 ms\n(current-sense fault / load-cell clip)",
-             xy=(860, 7), fontsize=8.5, color=MUTED, ha="center", va="center")
+             xy=(550, 380), fontsize=8.5, color=MUTED, ha="center", va="center")
 
-ax2.set_yscale("log")
-ax2.set_ylim(F_FLOOR, 900)
+ax2.set_ylim(-10, 520)
 ax2.set_xticks(LEVELS)
 ax2.set_xlim(115, 1050)
-ax2.grid(axis="y", color=GRID, linewidth=0.8, which="major")
-ax2.grid(axis="y", color=GRID, linewidth=0.4, alpha=0.6, which="minor")
+ax2.grid(axis="y", color=GRID, linewidth=0.8)
 ax2.set_axisbelow(True)
 for side in ("top", "right"):
     ax2.spines[side].set_visible(False)
 
 ax2.set_xlabel("Commanded current (mA)")
-ax2.set_ylabel("Force rise (mN, log)")
+ax2.set_ylabel("Force rise (mN)")
 ax2.set_title("SMA force envelope — load-cell force rise vs current and pulse length",
               fontsize=13, loc="left", pad=14)
 sub2 = (f"2026-07-30, same {len(good)} clean cycles · 98.0 mN/V "
@@ -232,7 +221,8 @@ sub2 = (f"2026-07-30, same {len(good)} clean cycles · 98.0 mN/V "
         f"median line, individual cycles as dots")
 ax2.text(0, 1.012, sub2, transform=ax2.transAxes, fontsize=8.5, color=MUTED)
 
-leg2 = ax2.legend(loc="lower right", frameon=False, fontsize=9,
+leg2 = ax2.legend(loc="upper left", bbox_to_anchor=(0.02, 0.90),
+                  frameon=False, fontsize=9,
                   title="Heat pulse", title_fontsize=9)
 leg2.get_title().set_color(INK2)
 for t in leg2.get_texts():
