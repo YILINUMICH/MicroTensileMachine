@@ -47,11 +47,20 @@ def classify(r):
 
 good, dropped = [], {}
 for s in SWEEPS:
+    # cool_s is per-condition protocol metadata, recorded in each capture's
+    # meta.json (grid sweeps: 15 s everywhere; the fill run: 25-30 s on the
+    # 300/400 ms rows).
+    import json, glob
+    cool = {}
+    for mf in glob.glob(os.path.join(BASE, s, "*.meta.json")):
+        m = json.load(open(mf))
+        cool[(float(m["level_mA"]), int(m["heat_ms"]))] = float(m["cool_s"])
     with open(os.path.join(BASE, s, "summary.csv"), newline="") as f:
         for r in csv.DictReader(f):
             flag = classify(r)
             if flag == "OK":
                 r["sweep"] = s
+                r["cool_s"] = cool.get((float(r["level_mA"]), int(r["heat_ms"])), 15.0)
                 good.append(r)
             else:
                 dropped[flag] = dropped.get(flag, 0) + 1
@@ -61,10 +70,10 @@ cols = ["level_mA", "heat_ms", "sweep", "cycle", "i_mA", "dx_um",
         "x_base_um", "baseline_V", "peak_V", "rise_V"]
 with open(clean_path, "w", newline="") as f:
     w = csv.writer(f)
-    w.writerow(cols + ["force_mN"])
+    w.writerow(cols + ["force_mN", "cool_s"])
     for r in sorted(good, key=lambda r: (int(r["heat_ms"]), float(r["level_mA"]), int(r["cycle"]))):
         w.writerow([r[c] for c in cols] +
-                   [round(float(r["rise_V"]) * F_MN_PER_V, 2)])
+                   [round(float(r["rise_V"]) * F_MN_PER_V, 2), r["cool_s"]])
 
 env_path = os.path.join(BASE, "heat_time_map_20260730_envelope.csv")
 env = {}   # (heat, level) -> dict
@@ -72,23 +81,25 @@ with open(env_path, "w", newline="") as f:
     w = csv.writer(f)
     w.writerow(["heat_ms", "level_mA", "n_cycles", "i_mA_mean",
                 "dx_um_median", "dx_um_mean", "dx_um_std", "dx_um_min", "dx_um_max",
-                "force_mN_median", "force_mN_std"])
+                "force_mN_median", "force_mN_std", "cool_s"])
     for h in HEATS:
         for lv in LEVELS:
             sel = [r for r in good if int(r["heat_ms"]) == h and float(r["level_mA"]) == lv]
             if not sel:
-                w.writerow([h, lv, 0, "", "", "", "", "", "", "", ""])
+                w.writerow([h, lv, 0, "", "", "", "", "", "", "", "", ""])
                 continue
             dx = np.array([float(r["dx_um"]) for r in sel])
             i = np.array([float(r["i_mA"]) for r in sel])
             fm = np.array([float(r["rise_V"]) * F_MN_PER_V for r in sel])
-            env[(h, lv)] = dict(n=len(sel), dx=dx, i=i, f=fm)
+            cools = np.array([float(r["cool_s"]) for r in sel])
+            env[(h, lv)] = dict(n=len(sel), dx=dx, i=i, f=fm, cool=cools)
             w.writerow([h, lv, len(sel), round(i.mean(), 1),
                         round(np.median(dx), 1), round(dx.mean(), 1),
                         round(dx.std(ddof=1), 1) if len(dx) > 1 else "",
                         round(dx.min(), 1), round(dx.max(), 1),
                         round(np.median(fm), 2),
-                        round(fm.std(ddof=1), 2) if len(fm) > 1 else ""])
+                        round(fm.std(ddof=1), 2) if len(fm) > 1 else "",
+                        ";".join(f"{c:.0f}" for c in sorted(set(cools)))])
 
 print(f"kept {len(good)} cycles; dropped: " +
       ", ".join(f"{k}={v}" for k, v in sorted(dropped.items())))
@@ -112,6 +123,17 @@ fig, ax = plt.subplots(figsize=(9.2, 6.2), dpi=150)
 fig.patch.set_facecolor(SURFACE)
 ax.set_facecolor(SURFACE)
 
+def scatter_by_cool(axis, lv, ys, cools, color):
+    """Cycle dots; cool protocol carried by marker shape (o=15 s, s=25-30 s)."""
+    short, long_ = cools <= 15, cools > 15
+    if short.any():
+        axis.scatter([lv] * int(short.sum()), ys[short], s=16, color=color,
+                     alpha=0.45, edgecolors=SURFACE, linewidths=0.8, zorder=3)
+    if long_.any():
+        axis.scatter([lv] * int(long_.sum()), ys[long_], s=22, color=color,
+                     alpha=0.7, marker="s", edgecolors=SURFACE,
+                     linewidths=0.8, zorder=3)
+
 for h in HEATS:
     c = SERIES[h]
     med = []
@@ -119,10 +141,7 @@ for h in HEATS:
         cell = env.get((h, lv))
         med.append(np.median(cell["dx"]) if cell else np.nan)
         if cell:
-            dx = cell["dx"]
-            ax.scatter([lv] * len(dx), dx,
-                       s=16, color=c, alpha=0.45, edgecolors=SURFACE,
-                       linewidths=0.8, zorder=3)
+            scatter_by_cool(ax, lv, cell["dx"], cell["cool"], c)
     med = np.array(med, dtype=float)
     ax.plot(LEVELS, med, color=c, linewidth=2,
             marker="o", markersize=7, markeredgecolor=SURFACE,
@@ -161,7 +180,17 @@ sub = (f"2026-07-30, {len(SWEEPS)} sweeps merged · {len(good)} clean cycles "
        f"median line, individual cycles as dots")
 ax.text(0, 1.012, sub, transform=ax.transAxes, fontsize=8.5, color=MUTED)
 
-leg = ax.legend(loc="upper left", bbox_to_anchor=(0.02, 0.90),
+from matplotlib.lines import Line2D
+COOL_PROXIES = [
+    Line2D([], [], linestyle="", marker="o", markersize=5, color=MUTED,
+           alpha=0.6, label="cycle, 15 s cool"),
+    Line2D([], [], linestyle="", marker="s", markersize=5, color=MUTED,
+           alpha=0.8, label="cycle, 25–30 s cool"),
+]
+
+hnd, lbl = ax.get_legend_handles_labels()
+leg = ax.legend(hnd + COOL_PROXIES, lbl + [p.get_label() for p in COOL_PROXIES],
+                loc="upper left", bbox_to_anchor=(0.02, 0.90),
                 frameon=False, fontsize=9,
                 title="Heat pulse", title_fontsize=9)
 leg.get_title().set_color(INK2)
@@ -185,10 +214,7 @@ for h in HEATS:
         cell = env.get((h, lv))
         med.append(np.median(cell["f"]) if cell else np.nan)
         if cell:
-            fm = cell["f"]
-            ax2.scatter([lv] * len(fm), fm,
-                        s=16, color=c, alpha=0.45, edgecolors=SURFACE,
-                        linewidths=0.8, zorder=3)
+            scatter_by_cool(ax2, lv, cell["f"], cell["cool"], c)
     med = np.array(med, dtype=float)
     ax2.plot(LEVELS, med, color=c, linewidth=2,
              marker="o", markersize=7, markeredgecolor=SURFACE,
@@ -221,7 +247,10 @@ sub2 = (f"2026-07-30, same {len(good)} clean cycles · 98.0 mN/V "
         f"median line, individual cycles as dots")
 ax2.text(0, 1.012, sub2, transform=ax2.transAxes, fontsize=8.5, color=MUTED)
 
-leg2 = ax2.legend(loc="upper left", bbox_to_anchor=(0.02, 0.90),
+hnd2, lbl2 = ax2.get_legend_handles_labels()
+leg2 = ax2.legend(hnd2 + COOL_PROXIES,
+                  lbl2 + [p.get_label() for p in COOL_PROXIES],
+                  loc="upper left", bbox_to_anchor=(0.02, 0.90),
                   frameon=False, fontsize=9,
                   title="Heat pulse", title_fontsize=9)
 leg2.get_title().set_color(INK2)
