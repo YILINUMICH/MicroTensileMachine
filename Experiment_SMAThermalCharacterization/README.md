@@ -462,6 +462,27 @@ window, and blinded 33/82 pulses. Longer pulses raise the stakes: re-check the
 laser is mid-window at rest before every session, and treat a CC overshoot as
 a clip-contact symptom, not a firmware bug.
 
+## RNN training ranges — plan as of 2026-07-30 (sweep still incomplete)
+
+Target model: inputs **SMA resistance + electrical power**, output
+**displacement**; training data = randomly sampled drive conditions via the
+explicit-`conditions` profile form; labels = `summary_report.csv` (per-pulse,
+`railed`-flagged). What the measured data supports so far:
+
+| knob | range | why |
+|---|---|---|
+| current | **150–950 mA** (+ a few sub-threshold 110–150 mA samples) | <150 mA: no learnable signal (13–21 µm ≈ noise) and the CC floor is ~106 mA (u_min 0.5 V / 4.7 Ω); 950 mA validated clean at 100 ms; the LDO rails at ~1.1 A — don't sample onto the rail. Sub-threshold samples teach the network that "power in, nothing out" is a real state. |
+| pulse width | **100–400 ms**, subject to the energy cap | validated 100 ms fully, 200 ms partially. |
+| **energy cap** | start **~1 J** (∝ I²·t); calibrate from the finished sweep | stroke tracks pulse ENERGY to first order (0.39 J → 1.13 mm at 643 mA/200 ms vs 0.42 J → 0.86 mm at 939 mA/100 ms), and the **±5 mm laser window — not the SMA — is the binding stroke ceiling**. Sample (I, t) pairs under the cap, not the full rectangle: the (950 mA, 400 ms) corner is ~1.7 J, 4× anything tested. |
+| inter-pulse gap | dataset **A: 12–20 s** (quasi-independent pulses, clean backbone); dataset **B: 2–12 s** (thermal memory — the RNN's reason to exist) | τ_cool ≳ 6 s. With gaps < τ the coil carries state between pulses and **R is the temperature proxy** — the 0.5 V idle bias keeps ~106 mA flowing so R stays observable BETWEEN pulses. Don't go below ~2 s until soak is characterized: a soaked coil stops actuating (2026-07-15) and a ratcheting force baseline is the damage tell. |
+
+Two input-side cautions from the known artifacts: **power carries the +7%
+conversion-duty bias** (consistent → the network absorbs it, but don't mix
+data across firmware configs that change ADC duty), and the **laser drive
+feedthrough (~3.3 µm, synchronous with the pulse)** is correlated noise on the
+output exactly when the input is active — negligible at 100+ µm strokes, real
+at the threshold region.
+
 ## Files
 
 Files carry a role prefix: **`operator_`** = a human launches it directly;
