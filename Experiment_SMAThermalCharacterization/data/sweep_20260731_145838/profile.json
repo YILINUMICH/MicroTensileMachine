@@ -1,0 +1,151 @@
+{
+  "name": "heat_time_map_30s_v2",
+  "description": "Full-span heat-time map under ONE protocol: 30 s cool everywhere. Supersedes the 2026-07-30 campaign, which ran 15 s cool (25 s at two cells) and is therefore not protocol-comparable. 35 conditions = the 9x4 grid MINUS 950x400, which was measured in sweep_20260731_134414 (corner probe) and saturates BOTH instruments: laser pinned at the 0 V rail (1228 samples) and load cell clipped at 5.000 V (192 samples). 850x400 is the true edge of the envelope - clean with 1.10 V laser margin and 4.08 V of 5 V on the load cell. Corner probe also verified CC tracking at 100% for 750/850/950 at 300-400 ms, so no overshoot risk. Explicit-conditions form (grid form cannot omit a cell); order is level-ascending within each heat row, gentlest first. ~121 min. Run with --abort-on-bad-sense.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 30,
+  "cycles": 5,
+  "conditions": [
+    {
+      "i_ma": 150,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 250,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 350,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 450,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 550,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 150,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 250,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 350,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 450,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 550,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 150,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 250,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 350,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 450,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 550,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 150,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 250,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 350,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 450,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 550,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 400
+    }
+  ]
+}

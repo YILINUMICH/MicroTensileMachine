@@ -1,0 +1,37 @@
+SWEEP REPORT — sweep_20260731_145838
+================================================================
+ 150 mA / 100 ms (seq 0):  I   131 mA, dx    +36.0 µm (36/37 valid)
+        !! base-jump: laser baseline moved +285 µm
+ 250 mA / 100 ms (seq 1):  I   187 mA, dx    +45.0 µm (15/16 valid)
+        !! cc-track: achieved 187 mA of 250 (75%)
+ 350 mA / 100 ms (seq 2):  I   110 mA, dx    +73.1 µm (2/3 valid)
+        !! pulses: 3 segmented of 6 commanded
+        !! cc-track: achieved 110 mA of 350 (31%)
+ 450 mA / 100 ms (seq 3):  I   111 mA, dx   +180.3 µm (2/3 valid)
+        !! pulses: 3 segmented of 6 commanded
+        !! cc-track: achieved 111 mA of 450 (25%)
+        !! base-jump: laser baseline moved +158 µm
+ 550 mA / 100 ms (seq 4):  I   113 mA, dx   +302.9 µm (1/2 valid)
+        !! pulses: 2 segmented of 6 commanded
+        !! cc-track: achieved 113 mA of 550 (21%)
+        !! base-jump: laser baseline moved +208 µm
+ 650 mA / 100 ms (seq 5):  I   646 mA, dx   +368.7 µm (5/6 valid)
+        !! base-jump: laser baseline moved +176 µm
+ 750 mA / 100 ms (seq 6):  I   742 mA, dx   +526.9 µm (5/6 valid)
+        !! base-jump: laser baseline moved +169 µm
+ 850 mA / 100 ms (seq 7):  I   898 mA, dx   +892.2 µm (5/6 valid)
+        !! base-jump: laser baseline moved +253 µm
+ 950 mA / 100 ms (seq 8):  I   939 mA, dx   +902.0 µm   OK
+ 150 mA / 200 ms (seq 9):  I   135 mA, dx    +40.2 µm (24/25 valid)
+        !! base-jump: laser baseline moved +266 µm
+ 250 mA / 200 ms (seq 10):  I   181 mA, dx    +45.7 µm (16/17 valid)
+        !! cc-track: achieved 181 mA of 250 (72%)
+        !! base-jump: laser baseline moved +180 µm
+ 350 mA / 200 ms (seq 11):  I   446 mA, dx   +482.1 µm (9/11 valid)
+        !! sense: 35.03% of cool samples exceed 250 mA, which at the 0.500 V idle bias implies R < 2.0 ohm — physically impossible for this wire (~4.2-4.8 ohm). The current sense is corrupted; the data is NOT usable. Power-cycle USB + EVM, reseat the SMA clips, and re-run. See data/sweep_20260728_215606/README.md.
+        !! laser-rail: 1/11 pulses blind (target out of the measuring window)
+        !! load-clip: force at the 5 V rail
+        !! cc-track: achieved 446 mA of 350 (127%)
+        !! base-jump: force baseline moved +318.3 mN
+================================================================
+1/12 conditions clean; outputs: summary_report.csv, fig_envelope.png

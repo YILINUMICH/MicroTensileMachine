@@ -1,0 +1,11 @@
+{
+  "name": "heat_time_map_30s",
+  "description": "Full-span rerun of the 2D map under ONE protocol: 30 s cool everywhere (the 2026-07-30 campaign mixed 15/25/30 s, and cool time measurably changes the response - 850mAx300ms read ~10% larger stroke at 25 s than 15 s). PREREQUISITES: (1) current sense verified after the high-energy sense-death incidents (reseat INA296A OUT->A1 jumper, INA supply, shunt Kelvin taps; check with `read` vs a series DMM) - run with --abort-on-bad-sense; (2) PSU current limit >= 1.5 A. Expected limits: 950x300 and 850x400 near the laser/load-cell ceilings, 950x400 will clip both (force rise >= 3 V; stroke at the laser 0 V rail under default +/-5 mm analog scaling). ~2 h total.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 30,
+  "cycles": 5,
+  "levels_ma": [150, 250, 350, 450, 550, 650, 750, 850, 950],
+  "heat_ms": [100, 200, 300, 400]
+}

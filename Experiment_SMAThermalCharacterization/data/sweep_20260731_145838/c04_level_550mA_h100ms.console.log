@@ -1,0 +1,552 @@
+[   0.057] [SMA] ARMED (MOSFET on); idle=0.500 V
+[   0.057] AH_A
+[   0.057] [ADC1] STAT
+[   0.057] US alarm(s): 0x
+[   0.058] [STATUS] t_ms=850193 hwm=72 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=505 rate2=506 prod1=510 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=0 m7_us=877129329 m4_us=874924867 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=23 loop_us_max=73007 loop_hz=43478 cycle_log_ms=1 n_cycle=4 cc=0 cc_hz=0 cc_i_tgt=0.1000 cc_u=0.5081 cc_r=4.8672 cc_tau_ms=7.00
+[   0.689] AH_A
+[   0.689] [ADC1] STATU
+[   0.689] S alarm(s): 0x
+[   0.689] 49 PG
+[   1.071] [STATUS] t_ms=851193 hwm=14 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=516 rate2=517 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=0 m7_us=878161220 m4_us=875966851 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=22 loop_us_max=6885 loop_hz=45454 cycle_log_ms=1 n_cycle=4 cc=0 cc_hz=0 cc_i_tgt=0.1000 cc_u=0.5081 cc_r=4.8672 cc_tau_ms=7.00
+[   1.703] AL_ALM
+[   1.703] [AD
+[   1.703] C1] STATUS alar
+[   1.703] m(s): 0x49 PG
+[   0.064] [SMA] [CC] start i_high=550.0mA i_low=100.0mA t_high=100 t_idle=30000 n=6 (0=cont) tau_ms=7.0 wdt_ms=5000
+[   0.064] [STATUS] t_ms=852193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=7 m7_us=879193055 m4_us=876998784 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=22 loop_us_max=4741 loop_hz=45454 cycle_log_ms=1 n_cycle=4 cc=0 cc_hz=0 cc_i_tgt=0.1000 cc_u=0.0000 cc_r=0.0000 cc_tau_ms=7.00
+[   0.127] [SMA] [CC] seed R=4.769 ohm  I=104.8 mA  u=0.500 V  n=99
+[   0.127] [SMA] [ACT] heat n=1/6 I=550.0mA ms=100
+[   0.254] [SMA] [ACT] cool n=1/6 I=100.0mA ms=30000
+[   0.636] AL_ALM
+[   0.636] [ADC1] STATUS alarm(s): 0x49 PG
+[   1.145] [STATUS] t_ms=853193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=880225534 m4_us=878030675 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=84 loop_us_max=4886 loop_hz=11904 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=969 cc_i_tgt=0.1000 cc_u=0.5032 cc_r=4.8925 cc_tau_ms=7.00
+[   1.655] AL_ALM
+[   1.655] [ADC1] STATUS alarm(s): 0x9 PG
+[   2.162] [STATUS] t_ms=854193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=881256730 m4_us=879062499 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5350 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5025 cc_r=4.9274 cc_tau_ms=7.00
+[   2.668] AL_ALM
+[   2.668] [ADC1] STATUS alarm(s): 0x89 PG
+[   3.176] [STATUS] t_ms=855193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=882289127 m4_us=880094268 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5330 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9003 cc_tau_ms=7.00
+[   3.682] AL_ALM
+[   3.682] [ADC1] STATUS alarm(s): 0xC9 PG
+[   4.190] [STATUS] t_ms=856193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=883321206 m4_us=881127013 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5424 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5961 cc_r=6.0377 cc_tau_ms=7.00
+[   4.696] AL_ALM
+[   4.696] [ADC1] STATUS alarm(s): 0xC9 PG
+[   5.267] [STATUS] t_ms=857193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=884352641 m4_us=882157779 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5414 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=5.1060 cc_tau_ms=7.00
+[   5.710] AL_ALM
+[   5.710] [ADC1] STATUS alarm(s): 0x49 PG
+[   6.280] [STATUS] t_ms=858193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=885383776 m4_us=883189558 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5359 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8537 cc_tau_ms=7.00
+[   6.725] AL_ALM
+[   6.725] [ADC1] STATUS alarm(s): 0x49 PG
+[   7.295] [STATUS] t_ms=859193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=886416128 m4_us=884221267 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5479 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5011 cc_r=4.8426 cc_tau_ms=7.00
+[   7.736] AL_ALM
+[   7.736] [ADC1] STATUS alarm(s): 0x49 PG
+[   8.309] [STATUS] t_ms=860193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=887447236 m4_us=885252998 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5363 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5032 cc_r=4.9442 cc_tau_ms=7.00
+[   8.815] AL_ALM
+[   8.815] [ADC1] STATUS alarm(s): 0x9 PG
+[   9.383] [STATUS] t_ms=861193 hwm=126 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=511 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=888479558 m4_us=886284704 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=106 loop_us_max=127114 loop_hz=9433 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=898 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8777 cc_tau_ms=7.00
+[   9.702] AL_ALM
+[   9.702] [ADC1] STATUS alarm(s): 0x89 PG
+[  10.397] [STATUS] t_ms=862193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=889510663 m4_us=887316435 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5359 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5193 cc_r=4.9667 cc_tau_ms=7.00
+[  10.713] AL_ALM
+[  10.713] [A
+[  10.713] DC1] STATUS alarm(
+[  10.713] s): 0xC9 PG
+[  11.413] [STATUS] t_ms=863193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=890543151 m4_us=888348147 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5331 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8989 cc_tau_ms=7.00
+[  11.728] AL_ALM
+[  11.728] [ADC1] STATUS alarm(s): 0xC9 PG
+[  12.488] [STATUS] t_ms=864193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=891574785 m4_us=889380866 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5507 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8450 cc_tau_ms=7.00
+[  12.742] AL_ALM
+[  12.742] [ADC1]
+[  12.742] STATUS alarm(s): 0x49 PG
+[  13.503] [STATUS] t_ms=865193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=892606438 m4_us=890411584 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5422 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8820 cc_tau_ms=7.00
+[  13.755] AL_ALM
+[  13.755] [A
+[  13.755] DC1] STATUS alarm
+[  13.755] (s): 0x49 PG
+[  14.519] [STATUS] t_ms=866193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=893637570 m4_us=891443334 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5357 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5182 cc_r=4.9230 cc_tau_ms=7.00
+[  14.773] AL_ALM
+[  14.773] [ADC1] STATUS alarm(s): 0x49 PG
+[  15.535] [STATUS] t_ms=867193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=894669925 m4_us=892475059 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5331 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.7892 cc_tau_ms=7.00
+[  15.788] AL_ALM
+[  15.788] [ADC1] STATUS alarm(s): 0x9 PG
+[  16.611] [STATUS] t_ms=868193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=895701014 m4_us=893506790 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5364 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8349 cc_tau_ms=7.00
+[  16.801] AL
+[  16.801] _ALM
+[  16.801] [ADC1] STA
+[  16.801] TUS alarm(s): 0xC9 PG
+[  17.619] [STATUS] t_ms=869193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=896733336 m4_us=894538483 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5370 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8466 cc_tau_ms=7.00
+[  17.809] AL_ALM
+[  17.809] [ADC1] STATUS alarm(s): 0xC9 PG
+[  18.633] [STATUS] t_ms=870193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=897765367 m4_us=895571170 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5373 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9518 cc_tau_ms=7.00
+[  18.822] AL_ALM
+[  18.822] [ADC1] STATUS alarm(s): 0x49 PG
+[  19.710] [STATUS] t_ms=871193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=898796672 m4_us=896601817 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5420 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5153 cc_r=4.8849 cc_tau_ms=7.00
+[  19.837] AL_AL
+[  19.837] M
+[  19.837] [ADC1] STATUS ala
+[  19.837] rm(s): 0x49 PG
+[  20.726] [STATUS] t_ms=872193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=899828709 m4_us=897634514 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5350 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9145 cc_tau_ms=7.00
+[  20.789] AL_ALM
+[  20.789] [ADC1] STATUS alarm(s): 0x49 PG
+[  21.741] [STATUS] t_ms=873193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=900860009 m4_us=898665161 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5420 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5035 cc_r=4.9109 cc_tau_ms=7.00
+[  21.806] AL_ALM
+[  21.806] [ADC1] STATUS alarm(s): 0x9 PG
+[  22.757] [STATUS] t_ms=874193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=901892021 m4_us=899697832 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5356 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5108 cc_r=4.8460 cc_tau_ms=7.00
+[  22.820] AL_ALM
+[  22.820] [
+[  22.820] ADC1] STATUS alarm
+[  22.820] (s): 0xC9 PG
+[  23.835] [STATUS] t_ms=875193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=902923334 m4_us=900728473 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5411 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9230 cc_tau_ms=7.00
+[  23.835] AL_ALM
+[  23.835] [ADC1] STATUS alarm(s): 0xC9 PG
+[  24.853] [STATUS] t_ms=876193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=903955345 m4_us=901761154 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5347 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9318 cc_tau_ms=7.00
+[  24.853] AL_ALM
+[  24.853] [ADC1] STATUS alarm(s): 0x49 PG
+[  25.864] AL_ALM
+[  25.864] [ADC1] STATUS ala
+[  25.864] rm(s): 0x49 PG
+[  25.864] [STATUS] t_ms=877193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=904986708 m4_us=902791849 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5401 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5093 cc_r=4.8381 cc_tau_ms=7.00
+[  26.880] AL_ALM
+[  26.880] [ADC1] STATUS alarm(s): 0x49 PG
+[  26.880] [STATUS] t_ms=878193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=906017801 m4_us=903823568 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=91 loop_us_max=5356 loop_hz=10989 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.6528 cc_r=6.2333 cc_tau_ms=7.00
+[  27.894] AL_ALM
+[  27.894] [ADC1] STATUS alarm(s): 0x9 PG
+[  27.958] [STATUS] t_ms=879193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=907050102 m4_us=904855248 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5320 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5941 cc_r=6.0429 cc_tau_ms=7.00
+[  28.845] AL_AL
+[  28.845] M
+[  28.845] [ADC1] STATUS al
+[  28.845] arm(s): 0xC9 P
+[  28.972] [STATUS] t_ms=880193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=908081207 m4_us=905886992 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5349 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8751 cc_tau_ms=7.00
+[  29.864] GAL_ALM
+[  29.864] [ADC1] STATUS alarm(s): 0xC9 P
+[  29.989] [STATUS] t_ms=881193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=909113569 m4_us=906918723 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5325 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5155 cc_r=4.9077 cc_tau_ms=7.00
+[  30.878] GAL_ALM
+[  30.878] [ADC1] STATUS alarm(s): 0x49 P
+[  31.005] [STATUS] t_ms=882193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=910145652 m4_us=907951458 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5441 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5974 cc_r=6.1291 cc_tau_ms=7.00
+[  31.194] [SMA] [ACT] heat n=2/6 I=550.0mA ms=100
+[  31.320] [SMA] [ACT] cool n=2/6 I=100.0mA ms=30000
+[  31.891] GAL_ALM
+[  31.891] [ADC1
+[  31.891] ] STATUS alarm(
+[  31.891] s): 0x49 P
+[  32.082] [STATUS] t_ms=883193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=911177039 m4_us=908982179 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5422 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1023 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9883 cc_tau_ms=7.00
+[  32.905] GAL_ALM
+[  32.905] [ADC1] STATUS alarm(s): 0x49 P
+[  33.097] [STATUS] t_ms=884193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=912208179 m4_us=910013942 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5354 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8569 cc_tau_ms=7.00
+[  33.920] GAL_ALM
+[  33.920] [ADC1] STATUS alarm(s): 0x49 P
+[  34.110] [STATUS] t_ms=885193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=913240513 m4_us=911045651 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5332 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8931 cc_tau_ms=7.00
+[  34.933] GAL_ALM
+[  34.933] [
+[  34.933] ADC1] STATUS alarm
+[  34.933] (s): 0x89 P
+[  35.185] [STATUS] t_ms=886193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=914271626 m4_us=912077385 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5352 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5041 cc_r=4.8770 cc_tau_ms=7.00
+[  35.946] GAL_ALM
+[  35.946] [A
+[  35.946] DC1] STATUS alarm(s): 0xC9 P
+[  36.200] [STATUS] t_ms=887193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=915303982 m4_us=913109107 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5322 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9064 cc_tau_ms=7.00
+[  36.960] GAL_ALM
+[  36.960] [ADC1] STATUS alarm(s): 0xC9 P
+[  37.215] [STATUS] t_ms=888193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=916335092 m4_us=914140870 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5371 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9228 cc_tau_ms=7.00
+[  37.971] GAL_ALM
+[  37.971] [ADC1] STATUS alarm(s): 0x49 P
+[  38.225] [STATUS] t_ms=889193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=917367466 m4_us=915172611 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5342 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5219 cc_r=4.9241 cc_tau_ms=7.00
+[  38.919] GAL_ALM
+[  38.919] [ADC1] STATUS alarm(s): 0x49 P
+[  39.301] [STATUS] t_ms=890193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=918398645 m4_us=916204406 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5355 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9018 cc_tau_ms=7.00
+[  39.934] GAL_ALM
+[  39.934] [ADC1] STATUS alarm(s): 0x49 P
+[  40.315] [STATUS] t_ms=891193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=919431008 m4_us=917236147 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5326 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8593 cc_tau_ms=7.00
+[  40.948] GAL_ALM
+[  40.948] [ADC1] STATUS alarm(s): 0x49 P
+[  41.330] [STATUS] t_ms=892193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=920462111 m4_us=918267888 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5352 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5109 cc_r=5.7722 cc_tau_ms=7.00
+[  41.963] GAL_ALM
+[  41.963] [
+[  41.963] ADC1] STATUS alarm(s): 0x9 P
+[  42.406] [STATUS] t_ms=893193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=921494467 m4_us=919299603 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5440 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8604 cc_tau_ms=7.00
+[  42.977] GAL_ALM
+[  42.977] [ADC1] STATUS alarm(s): 0xC9 P
+[  43.420] [STATUS] t_ms=894193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=922525615 m4_us=920331318 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5359 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.6562 cc_r=5.7078 cc_tau_ms=7.00
+[  43.992] GAL_ALM
+[  43.992] [ADC1] STATUS alarm(s): 0xC9 P
+[  44.436] [STATUS] t_ms=895193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=923557835 m4_us=921362976 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5395 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9216 cc_tau_ms=7.00
+[  45.009] GAL_
+[  45.009] ALM
+[  45.009] [ADC1] STATUS alarm(s): 0x49 P
+[  45.453] [STATUS] t_ms=896193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=924589864 m4_us=922395666 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5346 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5013 cc_r=4.8722 cc_tau_ms=7.00
+[  46.023] GAL_ALM
+[  46.023] [ADC1] STATUS alarm(s): 0x49 P
+[  46.529] [STATUS] t_ms=897193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=925621210 m4_us=923426345 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5561 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8594 cc_tau_ms=7.00
+[  47.037] GAL_ALM
+[  47.037] [ADC1] STATUS alarm(s): 0x49 P
+[  47.543] [STATUS] t_ms=898193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=926653249 m4_us=924459036 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5364 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5036 cc_r=4.8840 cc_tau_ms=7.00
+[  47.985] GA
+[  47.985] L_ALM
+[  47.985] [ADC1] STATU
+[  48.049] S alarm(s): 0x9 P
+[  48.557] [STATUS] t_ms=899193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=927684593 m4_us=925489734 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5407 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5804 cc_r=6.0429 cc_tau_ms=7.00
+[  49.000] GAL_ALM
+[  49.000] [ADC1] STATUS alarm(s): 0xC9 P
+[  49.633] [STATUS] t_ms=900193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=928715680 m4_us=926521443 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5351 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5118 cc_r=4.9348 cc_tau_ms=7.00
+[  50.013] GAL_ALM
+[  50.013] [ADC1] STATUS alarm(s): 0xC9 P
+[  50.650] [STATUS] t_ms=901193 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=929747944 m4_us=927553075 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5334 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.6512 cc_r=5.7617 cc_tau_ms=7.00
+[  51.031] GAL_ALM
+[  51.031] [ADC
+[  51.031] 1] STATUS alarm(s
+[  51.031] ): 0x49 P
+[  51.668] [STATUS] t_ms=902193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=930779547 m4_us=928584704 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5364 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5200 cc_r=4.9363 cc_tau_ms=7.00
+[  52.050] GAL_ALM
+[  52.050] [ADC1] STATUS alarm(s): 0x49 P
+[  52.677] [STATUS] t_ms=903193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=931811203 m4_us=929616336 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5378 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5887 cc_r=5.9398 cc_tau_ms=7.00
+[  53.056] GAL_ALM
+[  53.056] [ADC1] STATUS alarm(s): 0x49 P
+[  53.754] [STATUS] t_ms=904193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=932842834 m4_us=930647984 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5375 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5061 cc_r=4.8623 cc_tau_ms=7.00
+[  54.071] GAL_ALM
+[  54.071] [ADC1] STATUS alarm(s): 0x89 P
+[  54.769] [STATUS] t_ms=905193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=933874474 m4_us=931679597 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5386 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8674 cc_tau_ms=7.00
+[  55.086] GAL_ALM
+[  55.086] [ADC1] STATUS alarm(s): 0xC9 P
+[  55.783] [STATUS] t_ms=906193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=934906066 m4_us=932711219 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5375 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5156 cc_r=4.8873 cc_tau_ms=7.00
+[  56.100] GAL_
+[  56.100] ALM
+[  56.100] [ADC1] STAT
+[  56.100] US alarm(s): 0xC9 P
+[  56.797] [STATUS] t_ms=907193 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=935937763 m4_us=933743823 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5361 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8623 cc_tau_ms=7.00
+[  57.114] GAL_ALM
+[  57.114] [ADC1] STATUS alarm(s): 0x49 P
+[  58.019] [STATUS] t_ms=908332 hwm=214 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=445 rate2=445 prod1=510 prod2=511 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=937112224 m4_us=934765410 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=114 loop_us_max=215792 loop_hz=8771 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=951 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8424 cc_tau_ms=7.00
+[  58.081] GAL_AL
+[  58.081] M
+[  58.081] [ADC1] STATUS al
+[  58.081] arm(s): 0x49 P
+[  59.031] [STATUS] t_ms=909332 hwm=156 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=587 rate2=586 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=938144421 m4_us=935950191 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=6755 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1024 cc_i_tgt=0.1000 cc_u=0.5038 cc_r=4.9005 cc_tau_ms=7.00
+[  59.094] GAL_
+[  59.094] ALM
+[  59.094] [ADC1] STATUS alarm(s): 0x9 P
+[  60.045] [STATUS] t_ms=910332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=939176089 m4_us=936981858 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5421 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5338 cc_r=5.8827 cc_tau_ms=7.00
+[  60.109] GAL_
+[  60.109] ALM
+[  60.109] [ADC1] STATUS
+[  60.109] alarm(s): 0xC9 P
+[  61.123] [STATUS] t_ms=911332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=940208088 m4_us=938013532 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5398 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8796 cc_tau_ms=7.00
+[  61.123] GAL_ALM
+[  61.123] [ADC1] STATUS alarm(s): 0xC9 P
+[  62.140] GAL_ALM
+[  62.140] [ADC1] STATUS alarm(s): 0x49 P
+[  62.140] [STATUS] t_ms=912332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=941239719 m4_us=939045173 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5416 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8955 cc_tau_ms=7.00
+[  62.267] [SMA] [ACT] heat n=3/6 I=550.0mA ms=100
+[  62.331] [SMA] [ACT] cool n=3/6 I=100.0mA ms=30000
+[  63.154] GAL_ALM
+[  63.154] [ADC1] STATUS alarm(s): 0x49 P
+[  63.154] [STATUS] t_ms=913332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=942271354 m4_us=940076812 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5393 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1023 cc_i_tgt=0.1000 cc_u=0.5309 cc_r=4.9248 cc_tau_ms=7.00
+[  64.168] GAL_ALM
+[  64.168] [ADC1] STATUS alarm(s): 0x49 P
+[  64.168] [STATUS] t_ms=914332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=943303027 m4_us=941108495 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5406 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5741 cc_r=5.1376 cc_tau_ms=7.00
+[  65.123] GAL_AL
+[  65.123] M
+[  65.123] [ADC1] STATUS alarm(s): 0x9 P
+[  65.251] [STATUS] t_ms=915332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=944334711 m4_us=942140184 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5407 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5150 cc_r=4.9017 cc_tau_ms=7.00
+[  66.135] GAL_ALM
+[  66.135] [A
+[  66.135] DC1] STATUS alarm
+[  66.135] (s): 0xC
+[  66.262] [STATUS] t_ms=916332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=945366388 m4_us=943171858 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5401 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9202 cc_tau_ms=7.00
+[  67.151] [ADC1] STATUS alarm(s): 0xC
+[  67.277] [STATUS] t_ms=917332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=946398016 m4_us=944203493 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5411 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8484 cc_tau_ms=7.00
+[  68.167] [ADC1] STATUS alarm(s): 0x4
+[  68.293] [STATUS] t_ms=918332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=947429658 m4_us=945235128 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5408 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5016 cc_r=4.8332 cc_tau_ms=7.00
+[  69.179] [ADC1] STATUS alarm(s): 0x4
+[  69.369] [STATUS] t_ms=919332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=948461294 m4_us=946266767 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5409 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.6352 cc_r=6.1967 cc_tau_ms=7.00
+[  70.193] [ADC1] STATUS alarm(s): 0x4
+[  70.384] [STATUS] t_ms=920332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=949492946 m4_us=947298418 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5419 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5739 cc_r=6.1833 cc_tau_ms=7.00
+[  71.210] 9 P
+[  71.210] GAL_ALM
+[  71.210] [ADC1] S
+[  71.210] TATUS alarm(s): 0x
+[  71.398] [STATUS] t_ms=921332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=950524617 m4_us=948330082 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5429 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5142 cc_r=4.8481 cc_tau_ms=7.00
+[  72.224] [ADC1] STATUS al
+[  72.224] arm(s): 0xC
+[  72.476] [STATUS] t_ms=922332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=951556239 m4_us=949361714 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5396 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5085 cc_r=4.8842 cc_tau_ms=7.00
+[  73.174] [ADC1] STATUS alarm(s): 0xC
+[  73.489] [STATUS] t_ms=923332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=952587903 m4_us=950393371 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5400 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5097 cc_r=4.9433 cc_tau_ms=7.00
+[  74.188] [ADC1] STATUS alarm(s): 0x4
+[  74.504] [STATUS] t_ms=924332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=953619580 m4_us=951425052 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5393 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8720 cc_tau_ms=7.00
+[  75.203] [ADC1] STATUS alarm(s): 0x4
+[  75.519] [STATUS] t_ms=925332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=954651309 m4_us=952456773 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5416 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8583 cc_tau_ms=7.00
+[  76.217] [ADC1] STATUS alarm(s): 0x4
+[  76.598] [STATUS] t_ms=926332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=955682987 m4_us=953488463 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5409 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8027 cc_tau_ms=7.00
+[  77.232] [
+[  77.232] ADC1] STATUS alarm(s): 0x
+[  77.612] [STATUS] t_ms=927332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=956714702 m4_us=954520178 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5401 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8733 cc_tau_ms=7.00
+[  78.246] [ADC1] STATUS alarm(s): 0xC
+[  78.628] [STATUS] t_ms=928332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=957746427 m4_us=955551899 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5408 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5029 cc_r=4.9126 cc_tau_ms=7.00
+[  79.261] [ADC1] STATUS alarm(s): 0xC
+[  79.639] [STATUS] t_ms=929332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=958778116 m4_us=956583592 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5403 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8831 cc_tau_ms=7.00
+[  80.276] [ADC1] STATUS alarm(s): 0xC
+[  80.722] [STATUS] t_ms=930332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=959809861 m4_us=957615333 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5671 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8979 cc_tau_ms=7.00
+[  81.292] [ADC1] STATUS alarm(s): 0x4
+[  81.738] [STATUS] t_ms=931332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=960841605 m4_us=958647074 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5411 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9436 cc_tau_ms=7.00
+[  82.248] 9 PG
+[  82.248] AL_ALM
+[  82.248] [ADC1] STATUS alarm(s): 0x4
+[  82.757] [STATUS] t_ms=932332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=961873325 m4_us=959678799 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5407 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8360 cc_tau_ms=7.00
+[  83.268] 9 P
+[  83.268] GAL_ALM
+[  83.268] [ADC1] ST
+[  83.268] ATUS alarm(s): 0x4
+[  83.776] [STATUS] t_ms=933332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=962905062 m4_us=960710536 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5400 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5114 cc_r=4.8733 cc_tau_ms=7.00
+[  84.285] [ADC1] STATUS alarm(s): 0x
+[  84.856] [STATUS] t_ms=934332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=963936788 m4_us=961742264 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5403 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.6158 cc_r=6.1948 cc_tau_ms=7.00
+[  85.301] [ADC1] STATUS alarm(s): 0xC
+[  85.870] [STATUS] t_ms=935332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=964968551 m4_us=962774024 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5400 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5051 cc_r=4.9338 cc_tau_ms=7.00
+[  86.312] [ADC1] STATUS alarm(s): 0xC
+[  86.881] [STATUS] t_ms=936332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=966000298 m4_us=963805768 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5402 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5588 cc_r=5.1109 cc_tau_ms=7.00
+[  87.326] [ADC1] STATUS alarm(s): 0xC
+[  87.895] [STATUS] t_ms=937332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=967032015 m4_us=964837490 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5409 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1024 cc_i_tgt=0.1000 cc_u=0.5763 cc_r=5.9499 cc_tau_ms=7.00
+[  88.338] 9 P
+[  88.338] GAL_ALM
+[  88.338] [ADC1] ST
+[  88.338] ATUS alarm(s): 0x4
+[  88.972] [STATUS] t_ms=938332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=968063768 m4_us=965869224 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5407 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.6029 cc_r=6.2013 cc_tau_ms=7.00
+[  89.353] [ADC1] STATUS
+[  89.353] alarm(s): 0x4
+[  89.986] [STATUS] t_ms=939332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=969095531 m4_us=966901007 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5404 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5076 cc_r=4.8702 cc_tau_ms=7.00
+[  90.304] [ADC1] STATUS alarm(s): 0x4
+[  91.001] [STATUS] t_ms=940332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=970127299 m4_us=967932770 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5404 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8262 cc_tau_ms=7.00
+[  91.318] [ADC1] STATUS alarm(s): 0x
+[  92.017] [STATUS] t_ms=941332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=971159039 m4_us=968964514 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5430 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5065 cc_r=4.8850 cc_tau_ms=7.00
+[  92.334] [ADC1] STATUS alarm(s): 0xC
+[  93.094] [STATUS] t_ms=942332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=972190794 m4_us=969996264 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5406 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5068 cc_r=4.9180 cc_tau_ms=7.00
+[  93.286] [SMA] [ACT] heat n=4/6 I=550.0mA ms=100
+[  93.349] [ADC1] STATUS alarm(s): 0xC
+[  93.411] [SMA] [ACT] cool n=4/6 I=100.0mA ms=30000
+[  94.107] [STATUS] t_ms=943332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=973222811 m4_us=971027986 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5402 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1023 cc_i_tgt=0.1000 cc_u=0.6118 cc_r=5.9532 cc_tau_ms=7.00
+[  94.362] M
+[  94.362] [ADC1] STATUS
+[  94.362] alarm(s): 0xC
+[  95.119] [STATUS] t_ms=944332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=974254278 m4_us=972059736 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5699 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1026 cc_i_tgt=0.1000 cc_u=0.5008 cc_r=4.8443 cc_tau_ms=7.00
+[  95.372] [ADC1] STATUS alarm(s): 0x4
+[  96.197] [STATUS] t_ms=945332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=975286008 m4_us=973091474 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5423 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8508 cc_tau_ms=7.00
+[  96.387] [ADC1] STA
+[  96.387] TUS alarm(s): 0x4
+[  97.214] [STATUS] t_ms=946332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=976317770 m4_us=974123240 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5394 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8741 cc_tau_ms=7.00
+[  97.404] [ADC1] STATUS alarm(s): 0x4
+[  98.228] [STATUS] t_ms=947332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=977349496 m4_us=975154962 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5405 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.7972 cc_tau_ms=7.00
+[  98.418] [ADC1] STATUS alarm(s): 0x
+[  99.240] [STATUS] t_ms=948332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=978381240 m4_us=976186712 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5408 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9777 cc_tau_ms=7.00
+[  99.428] [ADC1] STATUS alarm(s): 0x8
+[ 100.317] [STATUS] t_ms=949332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=979412964 m4_us=977218434 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5415 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9008 cc_tau_ms=7.00
+[ 100.380] 9 PGA
+[ 100.380] L_ALM
+[ 100.380] [ADC1] STATUS alarm(s): 0xC
+[ 101.331] [STATUS] t_ms=950332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=980444692 m4_us=978250162 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5404 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5051 cc_r=4.8950 cc_tau_ms=7.00
+[ 101.395] [ADC1] STATUS al
+[ 101.395] arm(s): 0xC
+[ 102.349] [STATUS] t_ms=951332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=981476457 m4_us=979281928 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5407 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5058 cc_r=4.8857 cc_tau_ms=7.00
+[ 102.411] [ADC1] STATUS alarm(s): 0x4
+[ 103.427] [STATUS] t_ms=952332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=982508268 m4_us=980313736 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5398 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8921 cc_tau_ms=7.00
+[ 103.427] [ADC1] STATUS alarm(s): 0x4
+[ 104.440] [STATUS] t_ms=953332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=983540045 m4_us=981345512 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5417 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5002 cc_r=4.9134 cc_tau_ms=7.00
+[ 104.440] [ADC1] STATUS alarm(s): 0x4
+[ 105.458] [ADC1] STATUS alarm(s): 0x4
+[ 105.458] [STATUS] t_ms=954332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=984571843 m4_us=982377304 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5404 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5019 cc_r=4.8790 cc_tau_ms=7.00
+[ 106.472] [ADC1] STATUS alarm(s): 0x
+[ 106.472] [STATUS] t_ms=955332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=985603631 m4_us=983409103 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5416 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5023 cc_r=4.8551 cc_tau_ms=7.00
+[ 107.486] [ADC1] STATUS alarm(s): 0xC
+[ 107.549] [STATUS] t_ms=956332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=986635429 m4_us=984440898 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5407 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5017 cc_r=4.8242 cc_tau_ms=7.00
+[ 108.498] [ADC1] STATUS alarm(s): 0xC
+[ 108.562] [STATUS] t_ms=957332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=987667237 m4_us=985472706 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5409 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8761 cc_tau_ms=7.00
+[ 109.450] 9
+[ 109.450] [ADC1] STAT
+[ 109.450] US alarm(s): 0xC
+[ 109.578] [STATUS] t_ms=958332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=988699066 m4_us=986504530 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5400 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5100 cc_r=4.8279 cc_tau_ms=7.00
+[ 110.464] [ADC1] STATUS alarm(s):
+[ 110.464] 0x4
+[ 110.592] [STATUS] t_ms=959332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=989730875 m4_us=987536344 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5411 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5098 cc_r=4.9207 cc_tau_ms=7.00
+[ 111.481] [ADC1] STATUS alarm(s): 0x4
+[ 111.673] [STATUS] t_ms=960332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=990762694 m4_us=988568156 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5403 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5100 cc_r=4.8580 cc_tau_ms=7.00
+[ 112.500] [ADC1] STATUS alarm(s): 0x4
+[ 112.687] [STATUS] t_ms=961332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=991794460 m4_us=989599928 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5420 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.6240 cc_r=6.0741 cc_tau_ms=7.00
+[ 113.510] [ADC1] STATUS alarm(s): 0x4
+[ 113.701] [STATUS] t_ms=962332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=992826227 m4_us=990631698 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5410 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=5.0789 cc_tau_ms=7.00
+[ 114.524] [ADC1] STATUS alarm(s): 0x
+[ 114.715] [STATUS] t_ms=963332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=993857997 m4_us=991663471 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5398 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5081 cc_r=4.9046 cc_tau_ms=7.00
+[ 115.538] M
+[ 115.538] [ADC1] STATUS a
+[ 115.538] larm(s): 0x8
+[ 115.791] [STATUS] t_ms=964332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=994889809 m4_us=992695269 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5403 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8727 cc_tau_ms=7.00
+[ 116.550] [ADC1] STATUS alarm(s): 0xC
+[ 116.804] [STATUS] t_ms=965332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=995921576 m4_us=993727052 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5399 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8646 cc_tau_ms=7.00
+[ 117.566] [ADC1] STATUS alarm(s): 0xC
+[ 117.818] [STATUS] t_ms=966332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=996953325 m4_us=994758796 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5403 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5062 cc_r=4.9170 cc_tau_ms=7.00
+[ 118.518] [ADC1] STATUS alarm(s): 0x4
+[ 118.896] [STATUS] t_ms=967332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=997985079 m4_us=995790552 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5400 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5044 cc_r=4.8565 cc_tau_ms=7.00
+[ 119.531] [ADC1] STATUS alarm(s): 0x4
+[ 120.291] [STATUS] t_ms=968332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=999016835 m4_us=996822303 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5407 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5312 cc_r=4.9623 cc_tau_ms=7.00
+[ 120.546] ALM
+[ 120.546] [ADC1] STATUS alarm(s): 0x4
+[ 120.927] [STATUS] t_ms=969332 hwm=139 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=511 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1000048003 m4_us=997854034 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=109 loop_us_max=139908 loop_hz=9174 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=885 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8592 cc_tau_ms=7.00
+[ 121.561] [ADC1] STATUS alarm(s): 0x4
+[ 121.941] [STATUS] t_ms=970332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1001079476 m4_us=998884797 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5589 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8924 cc_tau_ms=7.00
+[ 122.575] [ADC1] STATUS alarm(s): 0x
+[ 123.018] [STATUS] t_ms=971332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1002111526 m4_us=999917557 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5443 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5041 cc_r=4.8938 cc_tau_ms=7.00
+[ 123.591] [AD
+[ 123.591] C1] STATUS alarm(s):
+[ 123.591] 0xC
+[ 124.034] [STATUS] t_ms=972332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1003142922 m4_us=1000948313 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5417 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5064 cc_r=5.0038 cc_tau_ms=7.00
+[ 124.351] [SMA] [ACT] heat n=5/6 I=550.0mA ms=100
+[ 124.477] [SMA] [ACT] cool n=5/6 I=100.0mA ms=30000
+[ 124.604] [ADC1] STATUS alarm(s): 0xC
+[ 125.051] [STATUS] t_ms=973332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1004174868 m4_us=1001980032 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5392 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9156 cc_tau_ms=7.00
+[ 125.618] 9 PGA
+[ 125.618] L_ALM
+[ 125.618] [ADC1] STATUS
+[ 125.618] alarm(s): 0x4
+[ 126.063] [STATUS] t_ms=974332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1005206292 m4_us=1003011750 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5353 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5042 cc_r=4.8260 cc_tau_ms=7.00
+[ 126.573] 9
+[ 126.573] [ADC1] STATUS alarm(s): 0x4
+[ 127.145] [STATUS] t_ms=975332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1006238255 m4_us=1004043501 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5327 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5021 cc_r=4.8696 cc_tau_ms=7.00
+[ 127.589] [ADC1] STATUS alarm(s): 0x4
+[ 128.160] [STATUS] t_ms=976332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1007270281 m4_us=1005076296 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5365 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8496 cc_tau_ms=7.00
+[ 128.604] [ADC1] STATUS a
+[ 128.604] larm(s): 0x4
+[ 129.173] [STATUS] t_ms=977332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1008301655 m4_us=1006107053 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5411 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5031 cc_r=4.8854 cc_tau_ms=7.00
+[ 129.617] [ADC1] STATUS alarm(s): 0x
+[ 130.252] [STATUS] t_ms=978332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1009333618 m4_us=1007138793 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5357 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8736 cc_tau_ms=7.00
+[ 130.635] 9 PG
+[ 130.635] AL_ALM
+[ 130.635] [ADC1] STATUS alarm(s): 0xC
+[ 131.271] [STATUS] t_ms=979332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1010365631 m4_us=1008171589 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5350 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8932 cc_tau_ms=7.00
+[ 131.651] [ADC1] STATUS alarm(s): 0xC
+[ 132.286] [STATUS] t_ms=980332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1011396975 m4_us=1009202371 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5404 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8320 cc_tau_ms=7.00
+[ 132.665] [ADC1] STATUS al
+[ 132.665] arm(s): 0xC
+[ 133.299] [STATUS] t_ms=981332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1012428932 m4_us=1010234108 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5341 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5039 cc_r=4.8598 cc_tau_ms=7.00
+[ 133.678] [ADC1] STATUS alarm(s): 0x4
+[ 134.376] [STATUS] t_ms=982332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1013460428 m4_us=1011265805 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5518 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5155 cc_r=5.0028 cc_tau_ms=7.00
+[ 134.695] [ADC1] STATUS alarm(s): 0x4
+[ 135.391] [STATUS] t_ms=983332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1014492361 m4_us=1012297485 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5348 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9216 cc_tau_ms=7.00
+[ 135.645] _ALM
+[ 135.645] [ADC1] STATUS alarm(s): 0x4
+[ 136.408] [STATUS] t_ms=984332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1015523770 m4_us=1013329164 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5364 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8541 cc_tau_ms=7.00
+[ 136.661] [ADC1] STATUS alarm(s): 0x8
+[ 137.422] [STATUS] t_ms=985332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1016555726 m4_us=1014360883 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5397 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8885 cc_tau_ms=7.00
+[ 137.676] [ADC1] STATUS
+[ 137.676] alarm(s): 0xC
+[ 138.499] [STATUS] t_ms=986332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1017587740 m4_us=1015393640 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5362 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8774 cc_tau_ms=7.00
+[ 138.690] [ADC1] STATUS alarm(s): 0xC
+[ 139.513] [STATUS] t_ms=987332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1018618984 m4_us=1016424384 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5413 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5054 cc_r=4.9236 cc_tau_ms=7.00
+[ 139.703] [ADC1] STATUS alarm(s): 0x4
+[ 140.530] [STATUS] t_ms=988332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1019650995 m4_us=1017456121 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5367 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5094 cc_r=4.8836 cc_tau_ms=7.00
+[ 140.721] [ADC1] STATUS alarm(s): 0x4
+[ 141.544] [STATUS] t_ms=989332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1020682429 m4_us=1018487878 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5393 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5032 cc_r=4.8495 cc_tau_ms=7.00
+[ 141.734] [ADC1] STATUS alarm(s): 0x4
+[ 142.624] [STATUS] t_ms=990332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1021714381 m4_us=1019519590 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5331 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8935 cc_tau_ms=7.00
+[ 142.752] [ADC1] STATUS al
+[ 142.752] arm(s): 0x
+[ 143.642] [STATUS] t_ms=991332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1022746407 m4_us=1020552319 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5355 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5032 cc_r=4.9206 cc_tau_ms=7.00
+[ 143.706] [ADC1] STATUS alarm(s): 0xC
+[ 144.657] [STATUS] t_ms=992332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1023777656 m4_us=1021583001 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5414 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9316 cc_tau_ms=7.00
+[ 144.719] [ADC1] STATUS alarm(s): 0xC
+[ 145.668] [STATUS] t_ms=993332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1024809665 m4_us=1022615688 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5351 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5014 cc_r=4.8829 cc_tau_ms=7.00
+[ 145.732] [ADC1] STATUS alarm(s): 0x4
+[ 146.747] [STATUS] t_ms=994332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1025840971 m4_us=1023646368 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5416 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8196 cc_tau_ms=7.00
+[ 146.747] [ADC1] STATUS alarm(s): 0x4
+[ 147.762] [STATUS] t_ms=995332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1026872933 m4_us=1024678073 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5349 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9049 cc_tau_ms=7.00
+[ 147.762] 9
+[ 147.762] [ADC1] S
+[ 147.762] TATUS alarm(s): 0x4
+[ 148.776] [ADC1] STATUS alarm(s): 0x
+[ 148.776] [STATUS] t_ms=996332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1027904328 m4_us=1025709779 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5358 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5181 cc_r=4.9018 cc_tau_ms=7.00
+[ 149.789] [ADC1] STATUS alarm(s): 0xC
+[ 149.852] [STATUS] t_ms=997332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1028936278 m4_us=1026741459 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5318 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5849 cc_r=5.2612 cc_tau_ms=7.00
+[ 150.808] [ADC1] STATUS alarm(s): 0
+[ 150.808] xC
+[ 150.872] [STATUS] t_ms=998332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1029967694 m4_us=1027773142 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5355 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.6504 cc_r=6.3637 cc_tau_ms=7.00
+[ 151.818] [ADC1] STATUS alarm(s): 0x4
+[ 151.882] [STATUS] t_ms=999332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1030999666 m4_us=1028804793 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5337 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5135 cc_r=4.9435 cc_tau_ms=7.00
+[ 152.770] [ADC1] STATUS alarm(s): 0x4
+[ 152.897] [STATUS] t_ms=1000332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1032031076 m4_us=1029836451 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5373 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5010 cc_r=4.9602 cc_tau_ms=7.00
+[ 153.784] [ADC1] STATUS alarm(s): 0x
+[ 153.784] 4
+[ 153.974] [STATUS] t_ms=1001332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1033063096 m4_us=1030869144 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5382 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5001 cc_r=4.8654 cc_tau_ms=7.00
+[ 154.797] 9 PGA
+[ 154.797] L_ALM
+[ 154.797] [ADC1] STAT
+[ 154.797] US alarm(s): 0x
+[ 154.988] [STATUS] t_ms=1002332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1034094457 m4_us=1031899805 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5409 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8638 cc_tau_ms=7.00
+[ 155.430] [SMA] [ACT] heat n=6/6 I=550.0mA ms=100
+[ 155.494] [SMA] [ACT] cool n=6/6 I=100.0mA ms=30000
+[ 155.813] [ADC1] STATU
+[ 155.813] S alarm(s): 0xC
+[ 156.002] [STATUS] t_ms=1003332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1035126038 m4_us=1032931443 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5353 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1023 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9560 cc_tau_ms=7.00
+[ 156.826] [ADC1] STATUS alarm(s): 0xC
+[ 157.016] [STATUS] t_ms=1004332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1036158058 m4_us=1033964114 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5348 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5084 cc_r=4.9313 cc_tau_ms=7.00
+[ 157.845] [ADC1] STATUS alarm(s): 0x4
+[ 158.100] [STATUS] t_ms=1005332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1037189376 m4_us=1034994716 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5401 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5021 cc_r=4.9549 cc_tau_ms=7.00
+[ 158.853] [ADC1] STATUS a
+[ 158.853] larm(s): 0x4
+[ 159.108] [STATUS] t_ms=1006332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1038221404 m4_us=1036027330 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5353 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5015 cc_r=4.8972 cc_tau_ms=7.00
+[ 159.869] 9 P
+[ 159.869] GAL_ALM
+[ 159.869] [ADC1]
+[ 159.869] STATUS alarm(s): 0x4
+[ 160.125] [STATUS] t_ms=1007332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1039252641 m4_us=1037057955 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5483 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5054 cc_r=4.8673 cc_tau_ms=7.00
+[ 160.884] [ADC1] STATUS alarm(s): 0x8
+[ 161.203] [STATUS] t_ms=1008332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1040284671 m4_us=1038090584 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5356 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5004 cc_r=4.8822 cc_tau_ms=7.00
+[ 161.837] [ADC1] STATUS alarm(s): 0xC
+[ 162.218] [STATUS] t_ms=1009332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1041315870 m4_us=1039121171 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5408 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5085 cc_r=4.8816 cc_tau_ms=7.00
+[ 162.853] 9 PGA
+[ 162.853] L_ALM
+[ 162.853] [ADC1] STATUS alarm(s): 0x4
+[ 163.235] [STATUS] t_ms=1010332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1042347888 m4_us=1040153788 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5363 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8616 cc_tau_ms=7.00
+[ 163.867] [ADC1] STATUS alarm(s): 0x4
+[ 164.247] [STATUS] t_ms=1011332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1043379136 m4_us=1041184419 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5410 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8367 cc_tau_ms=7.00
+[ 164.882] [ADC1] STATUS alarm(s): 0x4
+[ 165.325] [STATUS] t_ms=1012332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1044411150 m4_us=1042217071 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5365 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5017 cc_r=4.9041 cc_tau_ms=7.00
+[ 165.896] ALM
+[ 165.896] [ADC1] STATU
+[ 165.896] S alarm(s): 0x
+[ 166.341] [STATUS] t_ms=1013332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1045442383 m4_us=1043247705 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5425 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8403 cc_tau_ms=7.00
+[ 166.911] [ADC1] STATUS alarm(s): 0xC
+[ 167.355] [STATUS] t_ms=1014332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1046474535 m4_us=1044280360 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5366 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9038 cc_tau_ms=7.00
+[ 167.927] [ADC1] STATUS alarm(s): 0xC
+[ 168.373] [STATUS] t_ms=1015332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1047505689 m4_us=1045310995 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5525 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5056 cc_r=4.9390 cc_tau_ms=7.00
+[ 168.942] [ADC1] STATUS al
+[ 168.942] arm(s): 0x
+[ 169.450] [STATUS] t_ms=1016332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1048537249 m4_us=1046342627 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5481 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5006 cc_r=4.8464 cc_tau_ms=7.00
+[ 169.956] [ADC1] STATU
+[ 169.956] S alarm(s): 0x
+[ 170.463] [STATUS] t_ms=1017332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1049569253 m4_us=1047375256 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5395 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.6480 cc_r=6.2097 cc_tau_ms=7.00
+[ 170.908] ALM
+[ 170.908] [ADC1] STATUS alarm(s): 0
+[ 171.477] [STATUS] t_ms=1018332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1050600538 m4_us=1048405872 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5399 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5054 cc_r=4.9143 cc_tau_ms=7.00
+[ 171.923] [ADC1] STATUS alarm(s): 0x
+[ 172.492] [STATUS] t_ms=1019332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1051632569 m4_us=1049438488 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5383 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5086 cc_r=4.8591 cc_tau_ms=7.00
+[ 172.937] [ADC1] STATUS alarm(s): 0x
+[ 173.568] [STATUS] t_ms=1020332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1052663822 m4_us=1050469075 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5454 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5128 cc_r=4.9283 cc_tau_ms=7.00
+[ 173.949] C9 PGA
+[ 173.949] L_ALM
+[ 173.949] [ADC1] STATUS alarm(s): 0x
+[ 174.582] [STATUS] t_ms=1021332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1053695273 m4_us=1051500707 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5356 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5087 cc_r=4.8389 cc_tau_ms=7.00
+[ 174.965] M
+[ 174.965] [ADC1] STATUS alarm(s): 0x
+[ 175.598] [STATUS] t_ms=1022332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1054727298 m4_us=1052533362 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5323 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5002 cc_r=4.8770 cc_tau_ms=7.00
+[ 175.978] [ADC1] STATUS alarm(s): 0x
+[ 176.675] [STATUS] t_ms=1023332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1055758569 m4_us=1053563993 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5396 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5069 cc_r=4.8976 cc_tau_ms=7.00
+[ 176.994] [ADC1] STATUS alarm(s): 0
+[ 177.691] [STATUS] t_ms=1024332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1056790518 m4_us=1054595667 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=92 loop_us_max=5351 loop_hz=10869 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8647 cc_tau_ms=7.00
+[ 178.009] [ADC1] STATUS alarm(s): 0x
+[ 178.707] [STATUS] t_ms=1025332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=512 rate2=512 prod1=512 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1057821910 m4_us=1055627299 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5354 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.9137 cc_tau_ms=7.00
+[ 179.024] [ADC1] STATUS alarm(s): 0x
+[ 179.719] [STATUS] t_ms=1026332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1058853912 m4_us=1056659935 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5396 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5000 cc_r=4.8381 cc_tau_ms=7.00
+[ 179.974] [ADC1] STATUS alarm(s): 0x
+[ 180.800] [STATUS] t_ms=1027332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1059885235 m4_us=1057690585 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5424 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5101 cc_r=4.8361 cc_tau_ms=7.00
+[ 180.991] M
+[ 180.991] [ADC1] STATUS alar
+[ 180.991] m(s): 0x
+[ 181.816] [STATUS] t_ms=1028332 hwm=6 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=513 rate2=512 prod1=513 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1060917242 m4_us=1058723260 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=94 loop_us_max=5357 loop_hz=10638 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1027 cc_i_tgt=0.1000 cc_u=0.5094 cc_r=4.9123 cc_tau_ms=7.00
+[ 182.005] [ADC1] STATUS alarm(s): 0x
+[ 182.830] [STATUS] t_ms=1029332 hwm=5 cap=256 dropped=0 dropped_total=23170 crc_err=0 crc_err_total=0 rate1=511 rate2=512 prod1=511 prod2=512 dac_err=0 tx_drop=0 hb_ms=0 sma_state=6 m7_us=1061948591 m4_us=1059753932 vdd=5.067 offset=0.5000 aref=3.145 loop_us_avg=93 loop_us_max=5411 loop_hz=10752 cycle_log_ms=1 n_cycle=4 cc=1 cc_hz=1025 cc_i_tgt=0.1000 cc_u=0.5027 cc_r=4.8909 cc_tau_ms=7.00
+[ 183.020] [ADC1] STATUS alarm(s): 0
