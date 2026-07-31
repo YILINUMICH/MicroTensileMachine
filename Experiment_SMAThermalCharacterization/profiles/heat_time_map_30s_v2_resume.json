@@ -1,0 +1,107 @@
+{
+  "name": "heat_time_map_30s_v2_resume",
+  "description": "RESUME of heat_time_map_30s_v2 after sweep_20260731_145838 aborted at 350x200 (condition 11 of 35). Conditions c00-c10 of that run are CLEAN and kept - cool baseline held 4.688-4.703 ohm and 107-108 mA throughout, no clipping. The abort was NOT a sense/contact fault despite the guard message: cool R measured 4.681 ohm, identical to the healthy conditions, so the wire and the sense were both fine. It was the COOL-PHASE LATCH - R_est drifted high, u_ff = i_low*R_est lifted the loop off the 0.5 V floor, current rose past the +-12 mA near band, and both the integral and R_est froze, leaving cool at 0.97 V / 208 mA (0.20 W vs 0.053 W normal). The wire then never cooled, sat ~1.5 mm contracted, and the load baseline pinned. RUN THIS WITH --i-low 0: cool then calls ccRelease() and parks passively at the LDO floor, so the latch cannot occur, and V/I still stream at ~1 kHz so R stays observable. Safe only because the pre-run R seed (firmware, 2026-07-31) makes cc_R_valid true before cycle 1 - the old i_low=0 failure is gated on !cc_R_valid. Healthy regulated cool sat at 0.507 V/107.6 mA vs 0.500 V/~107 mA passive, so c00-c10 remain protocol-comparable. 24 conditions, ~83 min.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 30,
+  "cycles": 5,
+  "conditions": [
+    {
+      "i_ma": 350,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 450,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 550,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 150,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 250,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 350,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 450,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 550,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 150,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 250,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 350,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 450,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 550,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 400
+    }
+  ]
+}

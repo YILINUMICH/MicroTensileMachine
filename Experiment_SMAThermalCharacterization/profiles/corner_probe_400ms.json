@@ -1,0 +1,15 @@
+{
+  "name": "corner_probe_400ms",
+  "description": "RISKY-CORNER PROBE, run BEFORE committing to the full 30 s grid. The four cells with no (or n=1) coverage: 750/850/950 x 400 ms have ZERO clean cycles ever recorded, and 950x300 has exactly one. Ordered by ENERGY ASCENDING (0.97 -> 1.16 -> 1.24 -> 1.55 J at R~4.3 ohm) so the ceiling is met gradually instead of jumping straight to the worst cell. 3 cycles + 1 bootstrap each is enough to see whether the load cell clips (5.000 V) or the laser rails (0 V), which is the only question being asked here - level means are not the goal. Same 30 s cool as the full grid, so whatever survives transfers directly into it. ~10 min. Run with --abort-on-bad-sense; do NOT use --stop-on-fail, we want all four data points including the ones that clip.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 30,
+  "cycles": 3,
+  "conditions": [
+    { "i_ma": 750, "heat_ms": 400 },
+    { "i_ma": 950, "heat_ms": 300 },
+    { "i_ma": 850, "heat_ms": 400 },
+    { "i_ma": 950, "heat_ms": 400 }
+  ]
+}

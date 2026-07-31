@@ -223,7 +223,98 @@
 
 ## TODOs
 
-> ### ▶ NEXT: FIX HIGH-ENERGY CURRENT SENSE, THEN RERUN FULL SPAN @ 30 s COOL (2026-07-30)
+> ### ▶ 30 s-COOL HEAT-TIME MAP — DONE, 28/35 CELLS (2026-07-31)
+>
+> **Dataset: `data/heat_time_map_20260731_all.csv`** — 324 cycles across 36
+> conditions and 5 sweeps, 30 s cool throughout. Regenerate with
+> `data/make_heat_time_map_clean_20260731.py`; envelopes in
+> `heat_time_map_20260731_{envelope,force_envelope}.png`. **This supersedes
+> `heat_time_map_20260730_clean.csv`** — that campaign ran 15 s cool (25 s at two
+> cells) and is not protocol-comparable.
+>
+> **NOTHING IS FILTERED OUT.** This is RNN training data, so deciding which
+> pulses "count" belongs to the training pipeline — a network that only sees
+> clean pulses cannot learn that clipping, sub-threshold drive, or a railed
+> actuator are real machine states. Every cycle carries flags instead:
+> `bootstrap` / `clipped` / `railed` / `cc_pct` / `detect_ok` / `i_low_mA` /
+> `seeded`. The envelope CHART aggregates the trustworthy subset; the CSV keeps
+> everything.
+>
+> **Cross-validates against 2026-07-30 to 0.4–3.4%** at 100 ms (650/750/850/950
+> mA), across a different day and a different cool protocol.
+>
+> **Coverage.** 100 ms row: only 650–950 mA (see the detection caveat below).
+> 200 ms: 350–950. 300 ms: all 9 levels. 400 ms: 150–850.
+> **950×400 is excluded by measurement, not omission** — at the correct 947 mA it
+> pins the laser at the 0 V rail (1228 samples) *and* clips the load cell
+> (5.000 V). Characterized in `sweep_20260731_134414`. The measurable energy
+> ceiling is **~1.24 J (850×400)**, not the ~1 J assumed in the RNN plan below.
+>
+> **STILL OPEN — 7 cells, and the data may already be on disk.** 150/250/350/450/
+> 550×100 and 150/250×200 come back mis-windowed (`detect_ok=0`): the cool phase
+> carries a 0.5 V idle bias → ~107 mA whose noise reaches p95 ~155 mA and p99.9
+> ~200 mA, so a 150–250 mA heat pulse sits INSIDE that band, and at 100 ms there
+> are too few samples to separate them. With 30 s cools there are ~2.5× more
+> noise excursions than the 12–15 s cools of 2026-07-30, so threshold detection
+> returns phantom cycles — **36 rows at 150×100 against 6 commanded**. The same
+> 150 mA level detects cleanly at 400 ms. **The pulses ARE in the raw data**
+> (550×100 shows exactly 6 bursts at a 300 mA threshold) — they are mis-WINDOWED,
+> not missing. Fix: derive heat windows from the **commanded `cccycle` schedule**
+> instead of thresholding the current trace, then re-run the merge. No rig time
+> needed. Do this before spending 25 min re-running them.
+
+> ### ▶ COOL-PHASE LATCH — RUN THE GRID WITH `--i-low 0` (2026-07-31)
+>
+> **`operator_current_sweep.py … --i-low 0` is now the required protocol** for
+> `cccycle` runs. With the default `i_low 100` the first grid attempt
+> (`sweep_20260731_145838`) corrupted itself at condition 12 of 35.
+>
+> **The fault.** `i_low = 100 mA` is **below the reachable floor**: the LDO cannot
+> go under 0.5 V, and 0.5/4.69 = **106.6 mA**. So the loop chases a target it can
+> never reach, sitting permanently 6.6 mA outside it against a `near` band of
+> 12 mA — **5.4 mA of margin against 12.6 mA of sense noise**, so ~40% of cool
+> ticks fall outside the band on noise alone. Both `R_est` adaptation and the
+> integral are gated on `near`. Once `R_est` drifts above ~5.0 Ω, `u_ff =
+> i_low × R_est` exceeds 0.5 V, the loop lifts off the floor, current rises past
+> the band, and **everything freezes** — with `cc_Kp = 0` there is no ungated term
+> left to pull it back. The gating assumes "outside the band = a transient that
+> will come back"; at the floor nothing brings it back.
+>
+> Measured: cool sat at **0.972 V / 208 mA instead of 0.500 V / 108 mA** — 0.20 W
+> vs 0.053 W, ~4× the idle heating. The wire never cooled, sat ~1.5 mm contracted
+> (laser rest 4.58 → 3.85 V), the force baseline climbed and pinned at 5.000 V.
+>
+> **With `--i-low 0`** the cool phase calls `ccRelease()` and parks passively at
+> the LDO floor: no setpoint to miss, no band to exit, no estimator running on a
+> noisy low-current point. Verified over 24 conditions — cool held **0.4998–
+> 0.5009 V / 106.0–107.1 mA / 4.671–4.721 Ω, zero latch events**, tighter than
+> regulated cool ever was. V/I still stream at ~1 kHz during cool
+> (`serviceActuationPhase` non-CC branch), so **R stays observable** as the
+> self-sensing baseline. Safe **only because of the pre-run R seed** — the old
+> i_low=0 failure is gated on `!cc_R_valid`.
+>
+> **Two diagnostic signatures, easy to confuse, both seen today:**
+> | | contact fault | cool-phase latch |
+> |---|---|---|
+> | `R = u/I` | wildly impossible, 1.2–30 Ω | **stable and correct** (4.68 Ω) |
+> | cool `u` | drops *below* the 0.5 V floor | sits *above* the floor |
+>
+> **`--abort-on-bad-sense` misattributes the latch** — it fires on "cool current
+> implies R < 2 Ω" and tells you to reseat the clips, which is wrong when R
+> measures 4.681 Ω. Right verdict, wrong reason. It also **silently PASSES when
+> it has too few cool samples to judge** ("only 23 cool samples — not enough to
+> judge"), which let a corrupted 950×400 condition through earlier the same day.
+> A guard that cannot evaluate should stop, not continue. **TODO: fix both.**
+
+> ### ▶ SUPERSEDED — FIX HIGH-ENERGY CURRENT SENSE, THEN RERUN FULL SPAN @ 30 s COOL (2026-07-30)
+>
+> Done 2026-07-31, see above. The "current sense dies at high energy" diagnosis
+> was **confirmed as an intermittent contact**: it recurred at 950×400
+> (`sweep_20260731_141513`) with `u` dropping below the 0.5 V LDO floor and
+> implied R ranging 1.2–30 Ω, and **reseating the SMA clips fixed it** — the same
+> cell then ran 4/4 cycles on target. Cost of not catching it immediately: four
+> ~2 J overdrive pulses at 1.07–1.10 A. `--abort-on-bad-sense` did not stop it
+> (see the guard TODO above).
 >
 > **Where the heat-time map stands.** Five 2026-07-30 sweeps merged into
 > `data/heat_time_map_20260730_clean.csv` (219 clean cycles; regenerate with
