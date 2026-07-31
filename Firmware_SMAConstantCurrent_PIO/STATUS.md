@@ -41,6 +41,54 @@ pitfall 2), so it never depended on the A0 node. Only the *measured* V/R change.
 Any `src=3` / `src=5` data captured with an earlier build is wrong on both counts
 (2× current-scale error and a double-subtracted shunt drop) — re-take it.
 
+## Pre-run R seed (2026-07-31) — cycle 1 is now a real pulse
+
+`startCycleCC()` now enters **`SMA_CC_SEED`** before the first heat: it averages
+the idle hold the coil is already parked at for `CC_SEED_MS` (100 ms) and seeds
+`cc_R_est` from `u/I`, so cycle 1 runs on feedforward instead of discovering R
+the hard way. Prints `[CC] seed R=4.694 ohm  I=106.5 mA  u=0.500 V  n=98`.
+
+**The problem.** With no valid `R_est` the loop runs the BOOTSTRAP branch — pure
+integral, no feedforward — whose closed-loop rise is `tau = R / CC_KI_BOOT =
+4.7/8 = 590 ms`. A 300–400 ms pulse only climbs ~45% of the way, so the first
+fire of every condition was a ramp, not a measurement. Measured 2026-07-31 before
+the change: **354/750, 389/950, 393/850, 431/950 mA** on cycle 1 against ~100% on
+every later cycle. `operator_current_sweep.py` fires `cycles+1` purely to throw
+this pulse away.
+
+It could not latch during that first heat either: `ccEngage()` starts the
+integral AT the applied idle command, so tick 1 lifts `u` off `u_min`, `railed`
+goes false, `near` is far away, and **no valid latch point exists until the first
+COOL phase** — by which time cycle 1 is already spent.
+
+**Why 100 ms and not one sample.** The sense carries **sd ~12.6 mA** per read,
+which at ~107 mA idle is **~12% on a single reading**, and `R = u/I` passes it
+straight through — a one-sample latch lands anywhere in **3.6–5.8 Ω**. That is
+the real mechanism behind the long-standing "R_est bootstraps from a single ADC
+sample" TODO. ~100 ticks of averaging cuts it to **~1.2%**, well inside the ±12%
+`near` gate. Costs ~5 mJ against ~1.2 J for a fire, and does not heat the wire.
+
+Implemented as a **state, not a blocking wait** — a 100 ms busy-wait in the
+command handler would stall the M7 super-loop, stop servicing USB, and overflow
+the M4 sensor ring. `SMA_CC_SEED` is appended LAST in the enum because
+`[STATUS] sma_state=` prints it as an int.
+
+**Verified on the rig (2026-07-31), two independent runs.** Cycle 1 came back at
+**99.6–99.8%** of command at 750×400, 950×300 and 850×400, and across the full
+35-condition grid at **99.2–101.2%**. Seed values 4.55–4.90 Ω, n = 98–99.
+
+**Consequence worth knowing:** cycle 1 is now a *valid measurement of a different
+initial condition*, not an interchangeable extra sample. It fires into a fully
+relaxed wire and takes a one-time set (`x_base` moves ~+370 µm at 850×400, then
+holds to ~100 µm), which `operator_sweep_report.py` flags as `base-jump`. Keep
+it flagged; do not pool it with cycles 2+.
+
+**It also makes `--i-low 0` viable, which is the fix for the cool-phase latch**
+(see `Experiment_SMAThermalCharacterization/STATUS.md`). The documented i_low=0
+failure — "the bootstrap integral resets every pulse" — is gated on
+`if (!cc_R_valid)`; the seed makes it true before cycle 1, so that path is now
+structurally unreachable. The seed and `i_low 0` only work together.
+
 ## Bring-up ladder — stop at the first failure
 
 1. **Boot** — banner + `[SMA] MCP4728 OK`. `info` shows the CC block with

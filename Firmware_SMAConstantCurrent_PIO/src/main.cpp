@@ -401,6 +401,35 @@ static const float CC_I_MAX_A     = 2.0f;    // hard ceiling on an accepted targ
 // the control rate.
 static const float CC_R_TAU_S     = 0.045f;
 
+// ---- Pre-run R seed (SMA_CC_SEED) ------------------------------------
+// Cycle 1 used to be unusable: with no valid R_est the loop runs the BOOTSTRAP
+// branch (pure integral, no feedforward), whose closed-loop rise is
+// tau = R / CC_KI_BOOT ~= 4.7/8 = 590 ms. A 300-400 ms pulse only climbs ~45%
+// of the way, so the first fire of every condition was a ramp, not a
+// measurement, and had to be discarded (operator_current_sweep.py fires
+// cycles+1 for exactly this reason). Measured 2026-07-31: 354/750, 389/950,
+// 393/850, 431/950 mA on cycle 1 vs 100% on every later cycle.
+//
+// The loop cannot latch R during that first heat either: ccEngage() starts the
+// integral AT the applied idle command, so tick 1 lifts u off u_min, `railed`
+// goes false, and `near` is far away — no valid latch point exists until the
+// first COOL phase parks back at the floor. Hence R only becomes valid after
+// cycle 1 has already been spent.
+//
+// Fix: before the first heat, sit at the idle hold the coil is ALREADY parked
+// at and average u/I for CC_SEED_MS. This is the cool-phase self-sensing
+// baseline used one step earlier, and it is free: at ~0.5 V / ~107 mA it costs
+// ~5 mJ (vs ~1.2 J for a fire) and does not heat the wire.
+//
+// Why 100 ms and not one sample: the current sense carries sd ~12.6 mA per
+// read (see the open-load note below), which at ~107 mA is ~12% on a SINGLE
+// reading — and R = u/I passes that straight through, so a one-sample latch
+// lands anywhere in ~3.6-5.8 ohm. ~100 ticks of averaging cuts it to ~1.2%,
+// comfortably inside the +-12% `near` gate, so cycle 1 starts on target and
+// the running branch adapts from there.
+static const uint32_t CC_SEED_MS    = 100;   // idle-average window
+static const uint16_t CC_SEED_MIN_N = 20;    // reads needed to trust the seed
+
 // Control period. The Uno ran the loop at whatever rate loop() managed
 // (~200 Hz, serial-bound and jittery); here it is scheduled off micros() at a
 // fixed period with the TRUE elapsed dt measured per tick, so the integral is
@@ -471,7 +500,11 @@ enum SmaState {
     SMA_SWEEP_SETTLE,  // sweep / csv      : settle each code, print
     // actuation — ONE heat/cool engine; drive/fire/cycle are presets of it
     SMA_ACT_HEAT,      // hold v_high for t_high (TRIG high)
-    SMA_ACT_COOL       // hold v_idle for t_idle (TRIG low)
+    SMA_ACT_COOL,      // hold v_idle for t_idle (TRIG low)
+    // APPENDED LAST on purpose: `[STATUS] sma_state=` prints this enum as an
+    // int, so inserting anywhere above would silently renumber every state a
+    // host log has ever recorded.
+    SMA_CC_SEED        // CC only: average the idle hold to seed R_est (pre-run)
 };
 static SmaState smaState = SMA_IDLE;
 
@@ -1230,6 +1263,27 @@ static void ccRelease() {
     setLevel(V_IDLE);            // park at a known, safe voltage
 }
 
+// ---- Pre-run R seed ---------------------------------------------------
+// Accumulator for SMA_CC_SEED. Not part of the CC controller state (ccReset()
+// must not clear it — the seed runs immediately AFTER a reset, by design).
+static uint32_t seed_t0;
+static float    seed_i_acc;
+static uint16_t seed_n;
+
+// SEED: average the idle hold for CC_SEED_MS, then hand a trusted R_est to the
+// first heat. Runs at the CC tick cadence WITHOUT engaging the loop — nothing
+// is driven here, we only read the operating point the coil is already sitting
+// at. Non-blocking (a state, not a delay): a 100 ms busy-wait in the command
+// handler would stall the M7 super-loop, stop servicing USB, and overflow the
+// M4 sensor ring — the back-pressure failure documented in the module STATUS.
+static void cycleEnterSeed() {
+    seed_t0    = millis();
+    seed_i_acc = 0.0f;
+    seed_n     = 0;
+    cc_next_us = micros();
+    smaState   = SMA_CC_SEED;
+}
+
 // HEAT: hold the high setpoint for t_high, TRIG high (scope sync). Armed already.
 static void cycleEnterHigh() {
     digitalWrite(TRIG_PIN, HIGH);
@@ -1325,7 +1379,12 @@ static void startCycleCC(float i_high, float i_low,
     Serial.print(F(" n=")); Serial.print(n);
     Serial.print(F(" (0=cont) tau_ms=")); Serial.print(cc_tau_s * 1000.0f, 1);
     Serial.print(F(" wdt_ms=")); Serial.println(wdt_timeout_ms);
-    cycleEnterHigh();
+    // Seed R_est from the idle hold before the first heat, so cycle 1 is a
+    // measurement instead of a CC_KI_BOOT ramp. Requires current to actually be
+    // flowing: disarmed there is none to measure, so fall back to the old
+    // bootstrap path rather than seeding from noise.
+    if (armed) cycleEnterSeed();
+    else       cycleEnterHigh();
 }
 // Watchdog: while cycling, abort to safe if no host `ping` within the
 // timeout. Returns true if it tripped (caller should stop servicing).
@@ -1594,6 +1653,51 @@ static void serviceSma() {
                 }
             }
             return;
+
+        case SMA_CC_SEED: {
+            // Read at the control cadence so the sample count matches the
+            // ~1 kHz assumed by the noise budget above (~100 reads in 100 ms).
+            const uint32_t now_us = micros();
+            if ((int32_t)(now_us - cc_next_us) >= 0) {
+                cc_next_us += CC_PERIOD_US;
+                if ((int32_t)(micros() - cc_next_us) > 0)
+                    cc_next_us = micros() + CC_PERIOD_US;
+                const SmaRead s = readSma(ADC_SAMPLES_CYCLE);
+                // Reject reads below the trust floor rather than averaging them
+                // in: they drag the mean down and inflate R.
+                if (s.i > CC_I_FLOOR_A) { seed_i_acc += s.i; seed_n++; }
+            }
+            if (millis() - seed_t0 < CC_SEED_MS) return;
+
+            // u is the command ALREADY on the DAC (the idle hold), the same
+            // quantity ccEngage() uses for cc_u_cmd — never a nominal constant.
+            const float u_idle = codeToVldo(currentCode);
+            bool  ok = false;
+            float r  = 0.0f;
+            if (seed_n >= CC_SEED_MIN_N && u_idle > 0.0f) {
+                r = u_idle / (seed_i_acc / seed_n);
+                if (r >= CC_R_MIN && r <= CC_R_MAX) {
+                    cc_R_est   = r;
+                    cc_R_valid = true;      // cycle 1 now gets feedforward
+                    ok = true;
+                }
+            }
+            smaTag(); Serial.print(F("[CC] seed "));
+            if (ok) {
+                Serial.print(F("R=")); Serial.print(cc_R_est, 3);
+                Serial.print(F(" ohm  I=")); Serial.print(1000.0f * seed_i_acc / seed_n, 1);
+                Serial.print(F(" mA  u=")); Serial.print(u_idle, 3);
+                Serial.print(F(" V  n=")); Serial.println(seed_n);
+            } else {
+                // Not fatal: fall through with cc_R_valid still false and the
+                // loop bootstraps the old way (cycle 1 is a ramp again).
+                Serial.print(F("FAILED (n=")); Serial.print(seed_n);
+                Serial.println(F(") — armed? idle current below floor? "
+                                 "cycle 1 will ramp, as before this build."));
+            }
+            cycleEnterHigh();
+            return;
+        }
 
         case SMA_ACT_HEAT: {
             if (cycleWatchdogTripped()) return;     // heat-only watchdog → idle-low
