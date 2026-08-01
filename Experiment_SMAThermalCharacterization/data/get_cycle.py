@@ -30,6 +30,22 @@ import pandas as pd
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
+WRAP_S = 2 ** 32 / 1e6      # micros() is 32-bit: rolls over every 4294.97 s
+
+
+def unwrap_us(us):
+    """Undo the 32-bit micros() rollover before ANY arithmetic on hw_us.
+
+    Flagged by the NN-side DATA_COLLECTION_GUIDELINE §4: this module used to do
+    time arithmetic on the raw counter and was wrong across a wrap. Real case:
+    c20_level_550mA_h400ms straddles one, so its apparent span became the full
+    4295 s. Applied PER SRC — the streams interleave in the file, so a global
+    unwrap would read the interleaving as backward jumps."""
+    us = np.asarray(us, dtype=np.float64)
+    if us.size < 2:
+        return us
+    return us + WRAP_S * 1e6 * np.cumsum(np.r_[0, np.diff(us) < -2 ** 31])
+
 K_MV_PER_UM = -0.49779577092171906     # Calibrate_LaserHead
 V0_MV = 2503.7500968693835
 F_MN_PER_V = 1e3 / 10.200865238052671  # Calibrate_LoadCell
@@ -66,7 +82,7 @@ def list_cycles(sweep, level_mA, heat_ms, thresh_frac=1.0):
     path = _capture(sweep, level_mA, heat_ms)
     d = pd.read_csv(path)
     cur = d[d["src"] == SRC["sma_i"]].copy()
-    cur["t"] = cur["hw_us"] / 1e6
+    cur["t"] = unwrap_us(cur["hw_us"].to_numpy()) / 1e6
     return _heat_windows(cur, thresh_frac, level_mA)
 
 
@@ -83,7 +99,9 @@ def get_cycle(sweep, level_mA, heat_ms, cycle=1, pre_s=2.0, post_s=8.0,
         off = float(json.load(open(meta_path)).get("m4_clock_offset_s", 0.0))
 
     d = pd.read_csv(path)
-    d["t"] = d["hw_us"] / 1e6
+    d["t"] = np.nan
+    for _s, grp in d.groupby("src", sort=False):
+        d.loc[grp.index, "t"] = unwrap_us(grp["hw_us"].to_numpy()) / 1e6
     # src=1/2 are M4-stamped: shift ONTO the M7 clock.
     d.loc[d["src"].isin((SRC["laser"], SRC["load"])), "t"] += off
 

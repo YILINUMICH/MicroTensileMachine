@@ -58,6 +58,7 @@ per-cycle numbers to ~0.2%.
 """
 import csv
 import glob
+from datetime import datetime, timedelta
 import json
 import os
 import re
@@ -76,7 +77,14 @@ LASER_RAIL_UM = (0.0 - V0_MV) / K_MV_PER_UM     # +5030 um, the 0 V rail
 LOAD_CLIP_V = 4.999
 PRE_S = 0.40        # baseline window before heat onset
 POST_S = 1.50       # response window past heat end (force lags the current)
-SEARCH_S = 0.50     # matched-filter search radius
+# Matched-filter search radius. Deliberately TIGHT. Measured marker placement
+# error is mean -0.040 s, sd 0.044 s, worst case 0.106 s over 126 cycles, so
+# +-0.15 s covers it with margin. A wider radius is actively harmful: max-mean
+# is biased LATE whenever a pulse has a slow decay tail (the pre-seed bootstrap
+# ramp unwinds its integral over ~300 ms into cool), and at +-0.5 s the filter
+# slid ~150 ms past the true onset onto that tail — which showed up as tail
+# medians BELOW the whole-window mean on ramp pulses, the opposite of physics.
+SEARCH_S = 0.15
 
 # (folder, i_low_mA, seeded, run_type). Provenance travels with every row.
 RUNS = [
@@ -114,14 +122,18 @@ def disp_um(v_series):
 
 
 def schedule_windows(log_path, heat_ms):
-    """Approximate heat starts on the M7 clock, from the firmware's markers."""
+    """Approximate heat starts on the M7 clock, from the firmware's markers.
+
+    Returns (starts_on_m7, heat_host_times, last_host_t, fit)."""
     host, m7, heats = [], [], []
+    last_host = 0.0
     with open(log_path, errors="ignore") as fh:
         for line in fh:
             m = re.match(r"\[\s*([\d.]+)\]", line)
             if not m:
                 continue
             t = float(m.group(1))
+            last_host = max(last_host, t)
             if "[STATUS]" in line:
                 g = re.search(r"m7_us=(\d+)", line)
                 if g:
@@ -130,10 +142,35 @@ def schedule_windows(log_path, heat_ms):
             elif "[ACT] heat" in line:
                 heats.append(t)
     if len(host) < 2 or not heats:
-        return []
+        return [], [], last_host, None
     m7 = unwrap_us(np.asarray(m7) * 1e6) / 1e6      # STATUS m7_us wraps too
     fit = np.polyfit(host, m7, 1)
-    return [float(np.polyval(fit, h)) for h in heats]
+    return ([float(np.polyval(fit, h)) for h in heats], heats, last_host, fit)
+
+
+def tail_median(t, v, t0, t1):
+    """Hot-state estimator, per the NN-side guideline §2: median over the LAST
+    20% of the heat window, never shorter than 20 ms.
+
+    Tail, not whole-window mean: the wire is hottest at pulse end, and on a
+    ramped pulse (the pre-seed bootstrap) the mean sits >15% below the end
+    state. Median, not mean, so a single ADC glitch cannot move it. This also
+    matches the 2026-07-30 `peak_V` convention, keeping campaigns comparable."""
+    lo = t1 - max(0.020, 0.2 * (t1 - t0))
+    m = (t >= lo) & (t <= t1)
+    return (float(np.median(v[m])), int(m.sum())) if m.sum() else (np.nan, 0)
+
+
+def threshold_windows(t, i, level_mA):
+    """Independent threshold detection — kept ONLY as a cross-check against the
+    schedule (guideline §3: detect_ok becomes a consistency flag, never a
+    data-loss flag)."""
+    thr = max(0.5 * level_mA, 250.0) / 1000.0
+    hi = t[i > thr]
+    if hi.size < 2:
+        return []
+    brk = np.where(np.diff(hi) > 0.5)[0]
+    return list(np.r_[hi[0], hi[brk + 1]])
 
 
 def refine(t, i, t_approx, heat_s):
@@ -185,29 +222,77 @@ def analyze_capture(csv_path):
     ld = d[d["src"] == SRC_LOAD]
     t_f, v_f = ld["t"].to_numpy(), ld["value"].to_numpy()
 
+    approx, heat_host, last_host, fit = schedule_windows(log_path, heat_ms)
+    thr_starts = threshold_windows(t_i, v_i, level_mA)
+    # detect_ok is a CONSISTENCY flag (guideline §3): does independent threshold
+    # detection agree with the schedule on the cycle COUNT? It never removes a row.
+    detect_ok = int(len(thr_starts) == len(approx))
+
+    cap_end_utc = None
+    if meta.get("captured_utc"):
+        cap_end_utc = datetime.fromisoformat(meta["captured_utc"])
+
     rows = []
-    for k, t_ap in enumerate(schedule_windows(log_path, heat_ms), 1):
+    for k, t_ap in enumerate(approx, 1):
         t0 = refine(t_i, v_i, t_ap, heat_s)
         row = {
             "level_mA": level_mA, "heat_ms": heat_ms, "cycle": k,
             "bootstrap": int(k == 1), "cool_s": cool_s,
             "i_mA": np.nan, "u_V": np.nan, "R_ohm": np.nan, "cc_pct": np.nan,
+            "v_hot_V": np.nan, "i_hot_mA": np.nan,
+            "r_hot_ohm": np.nan, "p_hot_W": np.nan, "r_base_ohm": np.nan,
+            "t_heat_start_s": np.nan, "t_heat_end_s": np.nan,
+            "t_pulse_utc": "",
             "dx_um": np.nan, "x_base_um": np.nan,
+            "baseline_V": np.nan, "peak_V": np.nan, "rise_V": np.nan,
             "F_base_mN": np.nan, "dF_mN": np.nan,
-            "clipped": 0, "railed": 0, "n_samples": 0,
+            "clipped": 0, "railed": 0, "detect_ok": detect_ok, "n_samples": 0,
         }
         if t0 is not None:
             t1 = t0 + heat_s
+            row["t_heat_start_s"] = round(float(t0), 6)   # unwrapped M7 clock
+            row["t_heat_end_s"] = round(float(t1), 6)
+            if cap_end_utc is not None and fit is not None:
+                # captured_utc is stamped at save_capture, i.e. AFTER the
+                # capture ends, so walk back from the console log's last line.
+                # Systematic ~1 s (the in-run analysis between capture and save)
+                # — good enough for ordering, not for sub-second alignment.
+                host_t = (t0 - fit[1]) / fit[0]
+                row["t_pulse_utc"] = (
+                    cap_end_utc - timedelta(seconds=last_host - host_t)
+                ).isoformat()
+
             hw = (t_i >= t0) & (t_i < t1)
             row["n_samples"] = int(hw.sum())
             if hw.sum():
-                row["i_mA"] = float(1e3 * v_i[hw].mean())
+                row["i_mA"] = float(1e3 * v_i[hw].mean())     # whole-window mean
                 row["cc_pct"] = round(100.0 * row["i_mA"] / level_mA, 1)
             hv = (t_v >= t0) & (t_v < t1)
             if hv.sum():
                 row["u_V"] = float(v_v[hv].mean())
-                if row["i_mA"] and row["i_mA"] == row["i_mA"]:
+                if row["i_mA"] == row["i_mA"]:
                     row["R_ohm"] = row["u_V"] / (row["i_mA"] / 1e3)
+
+            # ---- hot state: tail medians (guideline §1/§2) ------------------
+            v_hot, n_v = tail_median(t_v, v_v, t0, t1)
+            i_hot, n_i = tail_median(t_i, v_i, t0, t1)
+            row["v_hot_V"] = v_hot
+            row["i_hot_mA"] = 1e3 * i_hot if i_hot == i_hot else np.nan
+            if n_v and n_i and i_hot > 0.001:
+                row["r_hot_ohm"] = v_hot / i_hot
+                row["p_hot_W"] = v_hot * i_hot
+
+            # ---- cold/baseline R from the idle hold before this pulse -------
+            # For cycle 1 that is the armed lead-in; for later cycles it is the
+            # tail of the preceding cool. Same window either way.
+            bi = (t_i >= t0 - 1.0) & (t_i < t0 - 0.02)
+            bv = (t_v >= t0 - 1.0) & (t_v < t0 - 0.02)
+            if bi.sum() and bv.sum():
+                i_b = float(np.median(v_i[bi]))
+                v_b = float(np.median(v_v[bv]))
+                if i_b > 0.020:        # only meaningful while idle current flows
+                    row["r_base_ohm"] = v_b / i_b
+
             # laser: baseline before onset, farthest excursion through the tail
             pre = (t_x >= t0 - PRE_S) & (t_x < t0 - 0.02)
             post = (t_x >= t0) & (t_x <= t1 + POST_S)
@@ -221,10 +306,15 @@ def analyze_capture(csv_path):
             pref = (t_f >= t0 - PRE_S) & (t_f < t0 - 0.02)
             postf = (t_f >= t0) & (t_f <= t1 + POST_S)
             if pref.sum() and postf.sum():
-                fb = v_f[pref].mean()
-                pk = v_f[postf].max()
-                row["F_base_mN"] = float(fb * F_MN_PER_V)
-                row["dF_mN"] = float((pk - fb) * F_MN_PER_V)
+                fb = float(v_f[pref].mean())
+                pk = float(v_f[postf].max())
+                # baseline_V/peak_V/rise_V are LOAD-CELL volts, restored so the
+                # 2026-07-30 column set is never narrowed (guideline §7).
+                row["baseline_V"] = fb
+                row["peak_V"] = pk
+                row["rise_V"] = pk - fb
+                row["F_base_mN"] = fb * F_MN_PER_V
+                row["dF_mN"] = (pk - fb) * F_MN_PER_V
                 row["clipped"] = int(pk >= LOAD_CLIP_V)
         rows.append(row)
     return rows
@@ -263,8 +353,17 @@ def main(argv):
     if not allrows:
         return 1
     order = ["level_mA", "heat_ms", "sweep", "run_type", "cycle", "bootstrap",
-             "i_mA", "cc_pct", "u_V", "R_ohm", "dx_um", "x_base_um",
-             "F_base_mN", "dF_mN", "clipped", "railed", "n_samples",
+             # drive, whole-window
+             "i_mA", "cc_pct", "u_V", "R_ohm",
+             # hot state, tail medians — the network's inputs
+             "v_hot_V", "i_hot_mA", "r_hot_ohm", "p_hot_W", "r_base_ohm",
+             # timing, unwrapped
+             "t_heat_start_s", "t_heat_end_s", "t_pulse_utc",
+             # response
+             "dx_um", "x_base_um", "baseline_V", "peak_V", "rise_V",
+             "F_base_mN", "dF_mN",
+             # flags + protocol
+             "clipped", "railed", "detect_ok", "n_samples",
              "cool_s", "i_low_mA", "seeded"]
     allrows.sort(key=lambda r: (r["heat_ms"], r["level_mA"], r["sweep"],
                                 r["cycle"]))
@@ -278,6 +377,58 @@ def main(argv):
           f"railed={sum(r['railed'] for r in allrows)}  "
           f"bootstrap={sum(r['bootstrap'] for r in allrows)}  "
           f"(all RETAINED)")
+
+    # ---- guideline §6: campaign calibration, so a change is detectable ----
+    with open(os.path.join(BASE, MERGED.replace(".csv", "_meta.json")),
+              "w") as fh:
+        json.dump({
+            "campaign": MERGED,
+            "cool_s": 30.0,
+            "laser": {"k_mV_per_um": K_MV_PER_UM, "V0_mV": V0_MV,
+                      "source": "Calibrate_LaserHead 2026-05-27 run09",
+                      "rail_um": LASER_RAIL_UM},
+            "load_cell": {"mN_per_V": F_MN_PER_V, "full_scale_mN": 490.0,
+                          "source": "Calibrate_LoadCell 2026-05-28 run07"},
+            "sma_v_i_bias": {
+                "note": "sma_v and sma_i each read ~+7% high from ADC "
+                        "conversion duty; cancels in R, scales P by ~+14%. "
+                        "NOT corrected in this table — recorded so absolute "
+                        "units stay recoverable and a change is detectable.",
+                "v_scale": 1.07, "i_scale": 1.07, "applied": False},
+            "hot_state": {"estimator": "median over last 20% of heat window, "
+                                       "min 20 ms"},
+        }, fh, indent=2)
+
+    # ---- guideline §8: self-checks. Report loudly, never drop. ----
+    print("\nself-checks:")
+    n_exp = {"map": 6, "probe": 4}
+    bad_n = [(s, lv, h, n) for (s, lv, h, rt), n in
+             {(r["sweep"], r["level_mA"], r["heat_ms"], r["run_type"]):
+              sum(1 for x in allrows if (x["sweep"], x["level_mA"],
+                                         x["heat_ms"]) == (r["sweep"],
+                                         r["level_mA"], r["heat_ms"]))
+              for r in allrows}.items() if n != n_exp[rt]]
+    print(f"  1. windows == commanded cycles : "
+          f"{'OK' if not bad_n else f'{len(bad_n)} MISMATCH {bad_n[:4]}'}")
+
+    off = [r for r in allrows if not r["bootstrap"] and r["i_hot_mA"] == r["i_hot_mA"]
+           and abs(r["i_hot_mA"] - r["level_mA"]) > 0.10 * r["level_mA"]]
+    print(f"  2. i_hot within 10% of command : "
+          f"{'OK' if not off else f'{len(off)} flagged (kept)'}")
+
+    per_sweep_mono = []
+    for s in sorted({r["sweep"] for r in allrows}):
+        ts = [r["t_heat_start_s"] for r in allrows if r["sweep"] == s
+              and r["t_heat_start_s"] == r["t_heat_start_s"]]
+        ts_sorted = sorted(ts)
+        per_sweep_mono.append(ts_sorted == sorted(set(ts_sorted)))
+    print(f"  3. timestamps monotonic (unwrapped) : "
+          f"{'OK' if all(per_sweep_mono) else 'FAIL — check the wrap handling'}")
+
+    rb = [r for r in allrows if r["r_hot_ohm"] == r["r_hot_ohm"]
+          and not (1.0 <= r["r_hot_ohm"] <= 30.0)]
+    print(f"  4. r_hot in 1-30 ohm : "
+          f"{'OK' if not rb else f'{len(rb)} outside (kept, inspect)'}")
     return 0
 
 

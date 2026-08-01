@@ -1,0 +1,24 @@
+{
+  "campaign": "heat_time_map_20260731_all.csv",
+  "cool_s": 30.0,
+  "laser": {
+    "k_mV_per_um": -0.49779577092171906,
+    "V0_mV": 2503.7500968693835,
+    "source": "Calibrate_LaserHead 2026-05-27 run09",
+    "rail_um": 5029.67329801424
+  },
+  "load_cell": {
+    "mN_per_V": 98.03089999362626,
+    "full_scale_mN": 490.0,
+    "source": "Calibrate_LoadCell 2026-05-28 run07"
+  },
+  "sma_v_i_bias": {
+    "note": "sma_v and sma_i each read ~+7% high from ADC conversion duty; cancels in R, scales P by ~+14%. NOT corrected in this table \u2014 recorded so absolute units stay recoverable and a change is detectable.",
+    "v_scale": 1.07,
+    "i_scale": 1.07,
+    "applied": false
+  },
+  "hot_state": {
+    "estimator": "median over last 20% of heat window, min 20 ms"
+  }
+}

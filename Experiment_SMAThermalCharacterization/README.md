@@ -537,6 +537,56 @@ becomes reliable at low SNR. **This is not selection** — the *number* of cycle
 comes from the firmware markers; the filter only locates each one. Recovered
 150×100 at 150.4–154.7 mA across all six cycles.
 
+### Conforms to the NN-side data contract
+
+`../../NN_SelfSensing_Baseline/DATA_COLLECTION_GUIDELINE.md` specifies what the
+per-pulse table must carry so the training repo never has to re-open raw
+captures. `heat_time_map_20260731_all.csv` now satisfies it — **32 columns**:
+
+| group | columns |
+|---|---|
+| identity | `level_mA` `heat_ms` `sweep` `run_type` `cycle` `bootstrap` |
+| drive (whole-window) | `i_mA` `cc_pct` `u_V` `R_ohm` |
+| **hot state (tail medians)** | `v_hot_V` `i_hot_mA` `r_hot_ohm` `p_hot_W` `r_base_ohm` |
+| timing (unwrapped) | `t_heat_start_s` `t_heat_end_s` `t_pulse_utc` |
+| response | `dx_um` `x_base_um` `baseline_V` `peak_V` `rise_V` `F_base_mN` `dF_mN` |
+| flags + protocol | `clipped` `railed` `detect_ok` `n_samples` `cool_s` `i_low_mA` `seeded` |
+
+**Hot state** is the median over the **last 20% of the heat window, min 20 ms** —
+not the whole-window mean. The wire is hottest at pulse end, and on a ramped
+pulse the two differ by far more than the ~15% the guideline warned about: the
+pre-seed bootstrap at 950×400 reads `i_mA` **402 mA** against `i_hot_mA` **535 mA**.
+Both are kept; they answer different questions. `r_hot_ohm`/`p_hot_W` are the
+network's inputs, and the raw `v_hot_V`/`i_hot_mA` pair is kept alongside so
+they can be re-derived and cross-checked.
+
+`baseline_V`/`peak_V`/`rise_V` (load-cell volts) are **restored** — the guideline
+exists because those vanished between 07-30 and 07-31. Never narrow the column
+set; add and deprecate by documenting.
+
+`detect_ok` changed meaning: it is now a **consistency** flag (does independent
+threshold detection agree with the schedule on the cycle count?), never a
+data-loss flag. Windows come from the schedule regardless.
+
+`heat_time_map_20260731_all_meta.json` records the campaign's calibration
+constants and the **uncorrected** ~+7% `sma_v`/`sma_i` conversion-duty bias, so
+absolute units stay recoverable and a calibration change between campaigns is
+detectable rather than silent.
+
+**One deliberate deviation.** The guideline says to write `r_base_ohm` as NaN
+when `i_low_mA = 0`, assuming no idle current flows. On this rig that is not
+true: with `i_low 0` the cool phase calls `ccRelease()` and parks at the **LDO
+floor, which still pushes ~107 mA** — measured 0.4998–0.5009 V / 106.0–107.1 mA
+/ 4.671–4.721 Ω across all 24 conditions. So `r_base_ohm` is computed whenever
+the idle current exceeds 20 mA, which covers both protocols. Writing NaN there
+would discard 144 valid baseline measurements, and the passive baseline is in
+fact the *tighter* of the two (median 4.716 Ω vs 4.702 Ω, 1.1 mV of spread vs 5).
+
+**Self-checks run on every build** (guideline §8) and report loudly without ever
+dropping a row: window count vs commanded, `i_hot` within 10% of command,
+timestamps monotonic after unwrap, `r_hot` inside 1–30 Ω. Current state: all
+pass, with 7 cycles flagged on check 2 (the known CC excursions, kept).
+
 ### Correctness points baked in (do not re-derive them by hand)
 
 - **`hw_us` time base, never host timestamps** (USB-batched, σ 3.4 ms).
