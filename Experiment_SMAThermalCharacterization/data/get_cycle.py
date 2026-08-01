@@ -28,6 +28,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from analyze_raw import schedule_windows, refine, unwrap_us as _unwrap
+
 BASE = os.path.dirname(os.path.abspath(__file__))
 
 WRAP_S = 2 ** 32 / 1e6      # micros() is 32-bit: rolls over every 4294.97 s
@@ -61,33 +63,36 @@ def _capture(sweep, level_mA, heat_ms):
     return hits[0]
 
 
-def _heat_windows(cur, thresh_frac, level_mA):
-    """Heat windows from the current trace. thresh is a FRACTION of the
-    commanded level, not an absolute — the cool phase carries a ~107 mA idle
-    bias whose noise reaches ~200 mA, so a fixed threshold either misses low
-    levels or trips on cool noise (this is the detect_ok=0 problem)."""
-    thr = max(0.5 * level_mA, 250.0) / 1000.0 * thresh_frac
-    hi = cur[cur["value"] > thr]
-    if hi.empty:
-        return []
-    t = hi["t"].to_numpy()
-    brk = np.where(np.diff(t) > 0.5)[0]
-    starts = np.r_[t[0], t[brk + 1]]
-    ends = np.r_[t[brk], t[-1]]
-    return list(zip(starts, ends))
+def _heat_windows(path, t_i, v_i, heat_ms):
+    """Heat windows from the firmware's OWN schedule, then matched-filter
+    refined — the same path analyze_raw.py uses, imported rather than
+    reimplemented so the two can never drift apart.
+
+    This replaces threshold detection, which failed on exactly the cells that
+    matter most at the low end: a 150-250 mA pulse sits inside the ~107 mA idle
+    bias noise band (p95 ~155 mA), so thresholding found 1 window where 6 were
+    commanded and this function used to raise
+    `cycle 3 of 1 detected in c00_level_150mA_h100ms`."""
+    heat_s = heat_ms / 1000.0
+    approx, _, _, _ = schedule_windows(path[:-4] + ".console.log", heat_ms)
+    out = []
+    for t_ap in approx:
+        t0 = refine(t_i, v_i, t_ap, heat_s)
+        if t0 is not None:
+            out.append((t0, t0 + heat_s))
+    return out
 
 
-def list_cycles(sweep, level_mA, heat_ms, thresh_frac=1.0):
-    """Detected (start, end) heat windows on the M7 clock."""
+def list_cycles(sweep, level_mA, heat_ms):
+    """(start, end) heat windows on the unwrapped M7 clock."""
     path = _capture(sweep, level_mA, heat_ms)
     d = pd.read_csv(path)
-    cur = d[d["src"] == SRC["sma_i"]].copy()
-    cur["t"] = unwrap_us(cur["hw_us"].to_numpy()) / 1e6
-    return _heat_windows(cur, thresh_frac, level_mA)
+    cur = d[d["src"] == SRC["sma_i"]]
+    t_i = unwrap_us(cur["hw_us"].to_numpy()) / 1e6
+    return _heat_windows(path, t_i, cur["value"].to_numpy(), heat_ms)
 
 
-def get_cycle(sweep, level_mA, heat_ms, cycle=1, pre_s=2.0, post_s=8.0,
-              thresh_frac=1.0):
+def get_cycle(sweep, level_mA, heat_ms, cycle=1, pre_s=2.0, post_s=8.0):
     """One cycle as a tidy frame. `cycle` is 1-based and matches the `cycle`
     column of heat_time_map_20260731_all.csv. pre_s/post_s extend the window
     before heat onset and after heat end (the force peak LAGS the current by
@@ -106,7 +111,8 @@ def get_cycle(sweep, level_mA, heat_ms, cycle=1, pre_s=2.0, post_s=8.0,
     d.loc[d["src"].isin((SRC["laser"], SRC["load"])), "t"] += off
 
     cur = d[d["src"] == SRC["sma_i"]]
-    wins = _heat_windows(cur, thresh_frac, level_mA)
+    wins = _heat_windows(path, cur["t"].to_numpy(), cur["value"].to_numpy(),
+                         heat_ms)
     if not 1 <= cycle <= len(wins):
         raise IndexError(f"cycle {cycle} of {len(wins)} detected in "
                          f"{os.path.basename(path)}")
