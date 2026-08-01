@@ -79,7 +79,11 @@ INK, INK_MUTED = "#1a1a1a", "#6b7280"
 PRE_S, POST_S = 2.0, 29.0
 GRID_HZ = 400.0
 DETAIL_S = 1.5
-SMOOTH_S = 0.25     # rolling-median window for R outside the heat pulse
+# Rolling-median window for R outside the heat pulse. Measured on the idle
+# phase: 0.25 s -> 4.35%, 0.50 s -> 3.18%, 1.00 s -> 2.33%, 2.00 s -> 1.76%.
+# 1 s is the knee: cool dynamics run over 5-20 s so it costs 5-20% of the
+# timescale, while 2 s starts blunting the fast end for little further gain.
+SMOOTH_S = 1.00
 SMOOTH_HEAT_S = 0.020   # lighter window DURING heat — see condition_trace()
 
 # where each (level, heat) lives; map runs preferred, probe fills 950x400
@@ -120,6 +124,7 @@ def condition_trace(sweep, level_mA, heat_ms, grid):
     if n_cyc < 2:
         return None
     stack = {k: [] for k, _, _ in CHANNELS}
+    r0s = []
     for c in range(2, n_cyc + 1):            # cycle 1 = bootstrap, held out
         try:
             df = get_cycle(sweep, level_mA, heat_ms, cycle=c,
@@ -131,6 +136,7 @@ def condition_trace(sweep, level_mA, heat_ms, grid):
         if pre.empty:
             continue
         r0 = float(np.median(pre.sma_r.dropna())) if pre.sma_r.notna().any() else np.nan
+        r0s.append(r0)
         x0, f0 = pre.laser_mm.mean(), pre.force_mN.mean()
         cols = {
             "dR_pct": 100.0 * (df.sma_r.to_numpy() / r0 - 1.0) if r0 == r0 else None,
@@ -168,6 +174,8 @@ def condition_trace(sweep, level_mA, heat_ms, grid):
     for k, arr in stack.items():
         if arr:
             out[k] = np.nanmedian(np.vstack(arr), axis=0)
+    if out and r0s:
+        out["_r0"] = float(np.nanmedian(r0s))
     return out or None
 
 
@@ -198,9 +206,11 @@ def build(heat_ms, norm, levels):
     fig, axes = plt.subplots(len(CHANNELS), 2, figsize=(13.5, 13.6),
                              gridspec_kw={"width_ratios": [1, 1.35]})
     fig.patch.set_facecolor(SURFACE)
-    fig.subplots_adjust(top=0.895, bottom=0.085, left=0.075, right=0.985,
+    fig.subplots_adjust(top=0.895, bottom=0.085, left=0.075, right=0.945,
                         hspace=0.42, wspace=0.20)
 
+    r0_all = [t["_r0"] for t in traces.values() if "_r0" in t]
+    r0_med = float(np.median(r0_all)) if r0_all else np.nan
     heat_s = heat_ms / 1000.0
     for row, (key, ylab, subtitle) in enumerate(CHANNELS):
         for col, (t_lo, t_hi) in enumerate([(-0.15, DETAIL_S), (-PRE_S, POST_S)]):
@@ -209,6 +219,8 @@ def build(heat_ms, norm, levels):
             ax.axvspan(0, heat_s, color="#f2c9c0", alpha=0.55, lw=0, zorder=0)
             for lv in lv_sorted:
                 y = traces[lv].get(key)
+                if key.startswith("_"):
+                    continue
                 if y is None:
                     continue
                 if norm == "shape" and key != "power_W":
@@ -247,6 +259,21 @@ def build(heat_ms, norm, levels):
             else:
                 ax.set_title("full cycle incl. cooling", loc="left",
                              fontsize=10, color=INK_MUTED, pad=6)
+            if key == "dR_pct" and norm == "abs" and r0_med == r0_med:
+                # Absolute ohms on the right. NOT a second scale -- it is the
+                # same axis relabelled, since R = R0*(1 + dR/R0). Normalizing
+                # does not add noise (R0 is known to 0.38% against 24%
+                # per-sample), so this is purely "read it in ohms if you
+                # prefer"; the percentage keeps levels comparable when R0
+                # drifts between conditions.
+                axr = ax.twinx()
+                axr.set_ylim([r0_med * (1 + v / 100.0) for v in ax.get_ylim()])
+                axr.set_ylabel(f"R  (Ω)   ·   R₀ = {r0_med:.2f} Ω",
+                               fontsize=9.5, color=INK_MUTED)
+                axr.tick_params(colors=INK_MUTED, labelsize=9)
+                for sd in ("top", "left", "bottom"):
+                    axr.spines[sd].set_visible(False)
+                axr.spines["right"].set_color("#c9ced6")
             if row == len(CHANNELS) - 1:
                 ax.set_xlabel("time since heat onset (s)", fontsize=10.5,
                               color=INK)
