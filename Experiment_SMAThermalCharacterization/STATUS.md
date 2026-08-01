@@ -223,6 +223,55 @@
 
 ## TODOs
 
+> ### ▶ NEXT SESSION — RNN DATASET B, THERMAL MEMORY (~2 h)
+>
+> Everything collected so far is **dataset A**: 12–30 s gaps, quasi-independent
+> pulses. That does not need a recurrent model. Dataset B — short gaps, where
+> the coil carries thermal state between pulses — is the RNN's reason to exist
+> and has never been collected.
+>
+> **PHASE 1 first, non-negotiable: `profiles/soak_ladder.json` (~23 min).**
+> The bulk profile cannot be written without its result. At short gaps the
+> binding constraint stops being per-pulse energy and becomes **duty-average
+> power**, `P_avg = E/(t+gap)`:
+>
+> | | 30 s gap (all data so far) | 2 s gap |
+> |---|---|---|
+> | 850×400 (1.24 J) | 0.041 W | **0.52 W** |
+> | 550×200 (0.30 J) | 0.010 W | 0.136 W |
+>
+> So the whole short-gap regime is **5–12× outside anything characterized**.
+> Two energies × six gaps (20→2 s), bursts of 8, low energy fully before high.
+> **Watch three things and stop at the first:** force baseline ratcheting across
+> the burst, stroke decaying pulse-to-pulse, and whether R returns to cold R₀ in
+> the gap. The last one is the point — if R does not recover, the coil is
+> carrying state into the next pulse, which is the regime we want *and* where
+> damage starts.
+>
+> **PHASE 2: generate the bulk profile from what phase 1 measured** —
+> `python data/make_rnn_profile.py --minutes 95 --gaps <safe set> --p-avg-max <W>`,
+> then **`--dry-run` it**. ~68 sequences of 6+1 pulses, stratified by gap,
+> shuffled so slow drift (fatigue, ambient, a degrading contact) cannot
+> correlate with condition. Both caps enforced: 1.24 J per pulse and the
+> measured `P_avg`.
+>
+> **A TOOL LIMIT TO KNOW BEFORE INTERPRETING THIS DATA.** One condition = one
+> training sequence, and **current and pulse width cannot vary inside it** — the
+> sweep calls `h7.disarm()` after every condition, then holds `settle_s`
+> disarmed, so the coil leaves the armed state and R stops being observable
+> across a condition boundary. Thermal memory therefore appears here only as
+> pulse-to-pulse change within a **constant-drive** burst; the network never
+> sees an amplitude change mid-sequence. Lifting this needs the inter-condition
+> disarm suppressed — a tool change, deliberately deferred until after this
+> session so tomorrow carries no code risk.
+>
+> **Enabling fact, checked:** R *is* usable as the between-pulse temperature
+> proxy despite 24% per-sample noise. Averaged over 100 ms it is ~2.4% against a
+> thermal signal of ~14% (4.03 Ω hot → 4.70 Ω cold) — SNR ≈ 6.
+>
+> `settle_s: 30` disarmed between sequences, chosen so every sequence provably
+> starts cold (worst-case recovery measured 12.4 s).
+
 > ### ▶ 30 s-COOL HEAT-TIME MAP — DONE, 28/35 CELLS (2026-07-31)
 >
 > **Dataset: `data/heat_time_map_20260731_all.csv`** — 324 cycles across 36

@@ -64,7 +64,7 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -79,6 +79,14 @@ disp_um = lambda v: (v * 1e3 - V0_MV) / K_UM_PER_MV
 
 # Baseline captured BEFORE the cycle starts, so pulse 1 has a pre-window.
 LEAD_IN_S = 2.0
+
+
+def _hms(sec: float) -> str:
+    """h:mm:ss for a duration; minutes-only under an hour so short runs stay
+    readable at a glance."""
+    sec = max(0, int(sec))
+    h, m, s = sec // 3600, (sec % 3600) // 60, sec % 60
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
 def analyse_level(cap, heat_ms: float):
@@ -309,7 +317,20 @@ def main() -> int:
         for k, cond in enumerate(conditions):
             lvl, heat_ms = cond["i_ma"], cond["heat_ms"]
             cool_s, cycles = cond["cool_s"], cond["cycles"]
-            print(f"--- {lvl:.0f} mA / {heat_ms} ms " + "-" * 40)
+            # Progress + ETA. The remaining estimate is SELF-CORRECTING: it
+            # rescales by how the run is actually pacing against the plan, so
+            # per-condition overhead that the formula does not model (port
+            # retries, analysis time) is absorbed instead of accumulating.
+            elapsed = time.time() - t_start
+            est_done, est_left = sum(per_cond[:k]), sum(per_cond[k:])
+            scale = (elapsed / est_done) if est_done > 30 else 1.0
+            left = est_left * scale
+            eta = datetime.now() + timedelta(seconds=left)
+            print(f"--- [{k + 1}/{len(conditions)}] {lvl:.0f} mA / {heat_ms} ms "
+                  + "-" * 28)
+            print(f"  elapsed {_hms(elapsed)} · remaining ~{_hms(left)} · "
+                  f"ETA {eta:%H:%M:%S}"
+                  + (f" · pacing {scale:.2f}x plan" if est_done > 30 else ""))
             print(f"  cold-start settle {a.settle_s:.0f}s ...", flush=True)
             h7.capture(a.settle_s, ping=False)
 

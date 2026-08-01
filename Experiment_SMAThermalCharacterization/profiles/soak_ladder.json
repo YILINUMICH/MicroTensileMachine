@@ -1,0 +1,26 @@
+{
+  "name": "soak_ladder",
+  "description": "PHASE 1 of the RNN dataset-B session. Finds the safe inter-pulse gap floor, which is the one number the bulk collection profile cannot be written without. Everything measured so far ran 12-30 s gaps, where duty-average power is 0.04-0.09 W; at a 2 s gap the SAME pulse reaches 0.14-0.45 W, 5-12x anything characterized. STATUS is explicit that a soaked coil stops actuating and that the tell is a ratcheting force baseline, and warns against going below ~2 s until this is measured - so this ladder IS that measurement, not a formality. Two energies x six gaps, descending gap so severity rises monotonically, and the LOW energy ladder completes before the high one starts. Watch three things per burst: (1) force baseline ratchet across the 8 pulses, (2) stroke decaying pulse-to-pulse, (3) whether R returns to cold R0 in the gap - if it does not, the coil is carrying state into the next pulse, which is the regime we want but also where damage starts. STOP and drop the last gap if any of the three appears. ~22 min. Each condition is one burst; settle_s 30 s disarmed between them guarantees a cold start (worst-case recovery measured 12.4 s).",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 30,
+  "cool_s": 20,
+  "cycles": 8,
+  "i_low_ma": 0,
+  "abort_on_bad_sense": true,
+  "conditions": [
+    { "i_ma": 550, "heat_ms": 200, "cool_s": 20 },
+    { "i_ma": 550, "heat_ms": 200, "cool_s": 12 },
+    { "i_ma": 550, "heat_ms": 200, "cool_s": 8 },
+    { "i_ma": 550, "heat_ms": 200, "cool_s": 5 },
+    { "i_ma": 550, "heat_ms": 200, "cool_s": 3 },
+    { "i_ma": 550, "heat_ms": 200, "cool_s": 2 },
+
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 20 },
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 12 },
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 8 },
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 5 },
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 3 },
+    { "i_ma": 850, "heat_ms": 300, "cool_s": 2 }
+  ]
+}
