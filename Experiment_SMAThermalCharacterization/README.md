@@ -462,6 +462,123 @@ window, and blinded 33/82 pulses. Longer pulses raise the stakes: re-check the
 laser is mid-window at rest before every session, and treat a CC overshoot as
 a clip-contact symptom, not a firmware bug.
 
+## Standing analysis pipeline — raw → table → charts (2026-07-31)
+
+Once a campaign's raw captures exist, **everything downstream is two scripts and
+no hand steps.** Re-run them any time; they are deterministic and overwrite in
+place, so a fixed bug or a new sweep is one command away from updated outputs.
+
+```
+cd data
+python analyze_raw.py                 # raw captures  -> per-cycle table
+python plot_envelope.py               # per-cycle table -> envelope CSV + charts
+```
+
+| stage | script | reads | writes |
+|---|---|---|---|
+| 1 | `analyze_raw.py` | `sweep_*/c*_level_*.csv` + `.console.log` + `.meta.json` | `sweep_*/cycles.csv`, `heat_time_map_<date>_all.csv` |
+| 2 | `plot_envelope.py` | `heat_time_map_<date>_all.csv` | `*_envelope.csv`, `*_stroke.png`, `*_force.png` |
+| — | `get_cycle.py` | one capture | one cycle's raw time series, on one clock |
+
+### NO DATA SELECTION — the rule the pipeline is built around
+
+**Every commanded cycle produces exactly one row. Nothing is dropped.** Not
+clipped pulses, not railed ones, not sub-threshold ones, not the bootstrap
+cycle. The row count is fixed by the **command** (6 rows for a 5+1 condition),
+never by what a detector happened to find.
+
+This is deliberate: the table is RNN training data, so deciding which pulses
+"count" belongs to the training pipeline. A network that only ever sees clean
+pulses cannot learn that saturation and non-response are real machine states.
+Quality is therefore reported as **columns**, never applied as a filter:
+
+`bootstrap` · `clipped` · `railed` · `cc_pct` · `n_samples` · `i_low_mA` · `seeded`
+
+The charts follow the same rule — **every cycle is drawn as a dot.** Two
+annotations, both non-destructive:
+
+- **hollow marks + dashed segments = at a sensor rail.** There `dx`/`dF` are
+  *lower bounds* (the wire moved at least that far), so they must not be read as
+  exact. They are still plotted, and the dashed ceiling line shows where the
+  instrument ran out — that is what makes those points bend over.
+- **the median line holds out only the first cycle**, which is still drawn as a
+  dot. It fires into a fully relaxed wire and takes a one-time set (~+370 µm at
+  850×400), so it measures a genuinely *different initial condition*; pooling it
+  into a central value would blur two populations.
+
+### How heat windows are found — and why thresholding was wrong
+
+Thresholding the current trace silently corrupts low levels, and did. The cool
+phase carries a 0.5 V idle bias → ~107 mA whose noise reaches **p95 ~155 mA,
+p99.9 ~200 mA**, so a 150–250 mA heat pulse sits *inside* that band; at 100 ms
+there are too few samples to separate them. With 30 s cools there are ~2.5×
+more noise excursions than the 12–15 s cools of 2026-07-30, so detection
+returned **36 phantom cycles at 150×100 against 6 commanded**, and 1–2 at
+350/450/550×100 — which made those cells look "missing" from the envelope when
+they were merely mis-windowed.
+
+`analyze_raw.py` uses the firmware's own markers instead, in two steps:
+
+1. **Approximate** — the console log carries `[ACT] heat n=k/N` per cycle on the
+   host clock, and `[STATUS] … m7_us=` lines pin the host clock to the M7 sample
+   clock. A least-squares fit over ~180 STATUS pairs maps each marker onto
+   `hw_us`. Individual lines are delayed by USB batching (sd 0.21 s, up to 2 s),
+   but the fit averages that out: residual **mean −0.040 s, sd 0.044 s**, worst
+   case 0.106 s over 126 cycles.
+2. **Refine** — a matched filter: slide a `heat_ms`-wide window ±0.5 s around
+   the approximate start and take the position of maximum mean current.
+
+0.1 s of placement error is harmless for a 400 ms pulse and fatal for a 100 ms
+one — a window misplaced by its own width measures the *cool baseline*, which is
+exactly how 350/450/550 mA commands came back reading 109–113 mA. The marker's
+job is only to say which ~1 s of a 30 s cycle to look in; restricting the search
+that way cuts false-alarm opportunities ~30×, so a simple max-mean criterion
+becomes reliable at low SNR. **This is not selection** — the *number* of cycles
+comes from the firmware markers; the filter only locates each one. Recovered
+150×100 at 150.4–154.7 mA across all six cycles.
+
+### Correctness points baked in (do not re-derive them by hand)
+
+- **`hw_us` time base, never host timestamps** (USB-batched, σ 3.4 ms).
+- **32-bit `micros()` unwrap.** `hw_us` rolls over every **4294.97 s (~71.6 min)**
+  and a 2 h campaign straddles it. Hit for real: `c20_level_550mA_h400ms` wrapped
+  mid-record, the host→M7 fit came out with a *negative* slope, and all six
+  cycles returned NaN. Unwrapped **per src** (streams interleave in the file, so
+  a global unwrap sees false backward jumps).
+- **M4/M7 clock offset** read per capture from `meta.json` (`m4_clock_offset_s`,
+  ~2.19 s). src=1/2 are M4-stamped, src=3/4 M7-stamped; untreated, displacement
+  appears to peak *before* the current pulse that causes it.
+- **Force peaks after the current stops** (thermal + mechanical lag), so the
+  response window runs to `heat_end + 1.5 s`.
+- **`railed` is computed from the endpoint**, not trusted from an upstream flag.
+  At 950×400 the laser sat at 0.0010 V for 1228 samples yet came back unflagged;
+  pinned cycles all land on `x_base+dx = 5027.7 µm` to 0.1 µm, and a real
+  measurement does not repeat to that precision.
+- **`src=5` is not emitted by the CC fork** (it streams 3/4 plus its own 6/7), so
+  R is derived as `V/I` — which is also the one quantity immune to the ~+7%
+  conversion-duty bias, since both channels scale together.
+
+### Chart style
+
+Pulse length is **ordinal**, so it gets a single-hue light→dark sequential ramp,
+not categorical hues. The four steps are validated, not eyeballed — adjacent
+OKLab ΔE (×100) for normal / protanope / deuteranope vision:
+
+| pair | normal | protan | deutan |
+|---|---|---|---|
+| 100→200 ms | 19.1 | 19.2 | 19.1 |
+| 200→300 ms | 21.6 | 22.7 | 21.4 |
+| 300→400 ms | 15.0 | 15.5 | 15.0 |
+
+against a ≥15 normal floor and ≥8 CVD target, lightness strictly monotonic.
+The obvious ColorBrewer pick (`9ecae1/4292c6/2171b5/08306b`) **fails** — its
+200→300 pair separates by only 10.0, which is why those two series are hard to
+tell apart by eye in the 2026-07-30 chart. Identity is never color-alone: every
+series is direct-labeled at its right end *and* in the legend.
+
+**Cool time is not encoded.** The whole campaign ran 30 s, so the marker-shape
+split used for the mixed 15/25/30 s data of 2026-07-30 would encode nothing.
+
 ## RNN training ranges — plan as of 2026-07-30 (sweep still incomplete)
 
 Target model: inputs **SMA resistance + electrical power**, output
