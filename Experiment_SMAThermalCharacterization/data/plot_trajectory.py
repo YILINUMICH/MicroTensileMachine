@@ -83,8 +83,7 @@ DETAIL_S = 1.5
 # phase: 0.25 s -> 4.35%, 0.50 s -> 3.18%, 1.00 s -> 2.33%, 2.00 s -> 1.76%.
 # 1 s is the knee: cool dynamics run over 5-20 s so it costs 5-20% of the
 # timescale, while 2 s starts blunting the fast end for little further gain.
-SMOOTH_S = 1.00
-SMOOTH_HEAT_S = 0.020   # lighter window DURING heat — see condition_trace()
+
 
 # where each (level, heat) lives; map runs preferred, probe fills 950x400
 SRC_MAP = {}
@@ -113,6 +112,40 @@ def rolling_median(y, n):
         return y
     s = pd.Series(y)
     return s.rolling(n, center=True, min_periods=1).median().to_numpy()
+
+
+# ─── NO TEMPORAL FILTERING ────────────────────────────────────────────────
+# These panels plot the measurement, not a reconstruction of it. Low-pass
+# filtering was tried and REMOVED: it makes the trace stop reflecting what the
+# rig actually did, which is the same reason nothing is dropped from the
+# per-pulse table.
+#
+# Kept here as a record so it is not re-introduced by accident. Measured on an
+# idealised -13% R dip plus real noise:
+#
+#     filter                    overshoot   idle sd   dip kept
+#     butterworth 4 @1 Hz        +1.077%     1.47%      68%
+#     butterworth 2 @1 Hz        +0.391%     1.44%      66%
+#     bessel 4 @1 Hz             +0.046%     1.38%      63%
+#     gaussian (equivalent)       0.000%     1.32%      61%
+#
+# Two things that cost more than they bought. Butterworth RINGS: the pulse is a
+# step, and an 8th-order-effective filtfilt swings +1.08% ABOVE baseline after
+# it. The true signal is strictly negative there, so that excursion is pure
+# artifact sitting exactly where the cooling curve is read -- it looks like the
+# wire oscillating when it is not. Gaussian has provably zero overshoot (its
+# kernel is strictly positive, so the step response is monotonic) but still
+# costs ~40% of the dip amplitude at the corner needed to quiet the idle.
+#
+# The honest position: R at the ~107 mA idle bias genuinely carries ~24%
+# per-sample noise, and no filter creates information that was not measured.
+# The trace is noisy because the measurement is noisy. If that noise matters
+# for a given question, average over an explicit window and SAY the window --
+# do not bake it into the picture.
+#
+# The one aggregation still applied is the MEDIAN ACROSS THE 5 REPEAT CYCLES,
+# which is declared in the subtitle. That combines independent measurements of
+# the same condition; it does not reshape a single one in time.
 
 
 def condition_trace(sweep, level_mA, heat_ms, grid):
@@ -149,26 +182,6 @@ def condition_trace(sweep, level_mA, heat_ms, grid):
             if y is None:
                 continue
             g = np.interp(grid, t, y, left=np.nan, right=np.nan)
-            if k == "dR_pct":
-                # Smooth ON THE GRID, where the window length is honest. The
-                # raw frame is a mixed-rate union (SMA ~970 Hz interleaved with
-                # laser/load 490 Hz, ~2000 rows/s), so an N-row window there
-                # spans an unpredictable and much shorter time.
-                # HEAT is left raw: 4.8% per sample needs no help, and
-                # smoothing would blunt the transition edge that matters.
-                # Everything else (pre + cool) is the ~107 mA idle bias at 24%
-                # per sample, which is hash without it.
-                # R noise scales as 1/I, so the heat phase is NOT uniformly
-                # clean: 4.8% at 850 mA but ~17% at 150 mA (same absolute sense
-                # noise against a 5.7x smaller signal). A light 20 ms window
-                # brings the low levels to ~6% while costing only 5% of a
-                # 400 ms pulse edge; the idle phases get the full 250 ms.
-                idle = (grid < 0) | (grid > heat_end)
-                sm = g.copy()
-                sm[idle] = rolling_median(g[idle], max(3, int(SMOOTH_S * GRID_HZ)))
-                sm[~idle] = rolling_median(g[~idle],
-                                           max(3, int(SMOOTH_HEAT_S * GRID_HZ)))
-                g = sm
             stack[k].append(g)
     out = {}
     for k, arr in stack.items():
@@ -229,14 +242,12 @@ def build(heat_ms, norm, levels):
                     # low levels into hash around the idle bias (0.05 W idle
                     # against a 0.13 W peak at 150 mA reads as 0.4, not 0).
                     #
-                    # Responses get a 100 ms rolling median FIRST. Dividing by
-                    # a small peak amplifies noise with it -- at 150 mA the
-                    # stroke is 42 um, so raw normalization swings +-0.5 and
-                    # buries the shape being compared. The mechanical bandwidth
-                    # here is ~1 Hz (rise 0.23-0.43 s), so 100 ms removes
-                    # nothing real.
-                    y = rolling_median(y, max(3, int(0.100 * GRID_HZ)))
-                    pk = np.nanmax(np.abs(y))
+                    # The DIVISOR is a robust scale (99.5th percentile), not
+                    # the raw max -- with a noisy channel the max is a noise
+                    # excursion, so scaling by it would shrink the whole trace
+                    # by however bad the worst sample happened to be. The
+                    # plotted data itself is untouched.
+                    pk = np.nanpercentile(np.abs(y), 99.5)
                     if pk > 0:
                         y = y / pk
                 m = (grid >= t_lo) & (grid <= t_hi)
@@ -298,8 +309,9 @@ def build(heat_ms, norm, levels):
     fig.text(0.075, 0.990, f"SMA cycle trajectories — {heat_ms} ms pulse, 30 s cool",
              ha="left", va="top", fontsize=16, weight="semibold", color=INK)
     fig.text(0.075, 0.966,
-             f"{len(lv_sorted)} current levels · median of the 5 non-bootstrap "
-             f"cycles per level · shaded band = heat pulse\n{what}",
+             f"{len(lv_sorted)} current levels · RAW, no temporal filtering · "
+             f"median of the 5 repeat cycles per level · shaded band = heat "
+             f"pulse\n{what}",
              ha="left", va="top", fontsize=10.5, color=INK_MUTED)
 
     out = os.path.join(BASE, f"trajectory_{heat_ms}ms_{norm}.png")
