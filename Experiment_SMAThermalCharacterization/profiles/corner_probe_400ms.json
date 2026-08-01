@@ -6,10 +6,24 @@
   "settle_s": 20,
   "cool_s": 30,
   "cycles": 3,
+  "i_low_ma": 0,
+  "abort_on_bad_sense": true,
   "conditions": [
-    { "i_ma": 750, "heat_ms": 400 },
-    { "i_ma": 950, "heat_ms": 300 },
-    { "i_ma": 850, "heat_ms": 400 },
-    { "i_ma": 950, "heat_ms": 400 }
+    {
+      "i_ma": 750,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 400
+    }
   ]
 }

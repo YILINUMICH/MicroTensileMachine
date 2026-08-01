@@ -462,6 +462,154 @@ window, and blinded 33/82 pulses. Longer pulses raise the stakes: re-check the
 laser is mid-window at rest before every session, and treat a CC overshoot as
 a clip-contact symptom, not a firmware bug.
 
+## Writing a test profile — rules, limits, template
+
+A profile is the *whole* experiment definition: it carries its own port and
+safety settings, so it can drive the rig on its own. Treat it as executable,
+not as configuration.
+
+### The one rule that has already cost us
+
+**`--dry-run` EVERY profile before running it.** A profile carries `port`, so a
+bare "let me just check the syntax" invocation opens COM8 and fires the coil —
+six 150 mA pulses went off that way on 2026-07-30. `--dry-run` prints the full
+plan and never opens the port.
+
+### Put the safety settings IN the profile, not on the command line
+
+These are profile keys, and a profile that carries them cannot be run unsafely
+by someone who forgot a flag:
+
+```json
+"i_low_ma": 0,
+"abort_on_bad_sense": true
+```
+
+- **`i_low_ma: 0` is mandatory** for `cccycle` runs. The default 100 mA sits
+  *below* the reachable floor (0.5 V / 4.69 Ω = 106.6 mA), leaving 5.4 mA of
+  margin against 12.6 mA of sense noise; the loop then latches off the floor
+  and cool runs at 0.97 V / 208 mA instead of 0.50 V / 108 mA — 4× the idle
+  heating, wire never cools, force baseline pins. It destroyed condition 12 of
+  35 on the first attempt. With `0` the cool phase releases and parks passively
+  at the LDO floor, which still carries ~107 mA so R stays observable.
+  **Only safe because of the firmware R seed** — see the CC module STATUS.
+- **`abort_on_bad_sense: true`** always. Note its two known defects: it
+  mis-attributes the cool-phase latch to the clips, and it *passes* when it has
+  too few cool samples to judge.
+
+### Two forms
+
+| form | keys | use when |
+|---|---|---|
+| **grid** | `levels_ma` × `heat_ms` | full factorial sweeps. Both lists must be **ascending** (enforced) — longer pulses are the unexplored regime, walk into it. Executes heat-OUTER / level-inner, so each pulse width replays the familiar current ladder against a known baseline. |
+| **explicit** | `conditions: [{i_ma, heat_ms, cool_s?, cycles?}]` | anything needing per-cell overrides, repeats, a specific order, or a cell omitted. Runs **in profile order** — the profile owns sequencing. This is the shape the RNN collector emits. |
+
+Grid form cannot omit a cell. Since 950×400 must be excluded (below), the
+full-span map is written in explicit form.
+
+### Keys
+
+| key | default | notes |
+|---|---|---|
+| `port` | — | drives the rig; this is why `--dry-run` matters |
+| `max_ma` | 800 | hard guard — a condition above it aborts before opening the port |
+| `settle_s` | 20 | cold-start settle before each condition |
+| `cool_s` | 12 | **an input variable, not bookkeeping** — 850×300 read ~10% larger stroke at 25 s than 15 s. Never mix cool times inside a campaign you intend to compare. |
+| `cycles` | 3 | measured cycles; the tool fires `cycles + 1` |
+| `i_low_ma` | 100 | **set 0** — see above |
+| `abort_on_bad_sense` | false | **set true** |
+| `stop_on_fail` | false | stops on *any* NOTE including merely marginal ones; leave false unless you want a ceiling search |
+
+### The measured envelope — what is actually runnable
+
+At 30 s cool, verified 2026-07-31:
+
+| | limit | evidence |
+|---|---|---|
+| current | **150–950 mA** | CC holds 98–103% across the whole range; LDO rails ~1.1 A |
+| pulse | **100–400 ms** | full grid measured |
+| **energy ceiling** | **~1.24 J** (850×400) | not the ~1 J previously assumed |
+| **950×400** | **excluded — unmeasurable** | pins the laser at the 0 V rail (1228 samples) *and* clips the load cell (5.000 V), at the correct 947 mA |
+| 850×400 | the edge | 1.10 V laser margin, 4.08 V of 5 on the load cell |
+| load cell | 490 mN full scale | clips from ~850 mA at 300–400 ms |
+| laser | 0 V rail | **park the target at the top of its window before a session** — contraction drives the reading down, so parking high buys the full ~9 mm |
+
+Sub-threshold cells (150 mA → 16 µm) are worth keeping: "power in, nothing out"
+is a real machine state the network should see.
+
+### Cycle structure
+
+`cycles + 1` pulses fire. Cycle 1 is flagged `bootstrap`. Since the firmware R
+seed it is a **real full-energy pulse**, not a ramp — but it fires into a fully
+relaxed wire and takes a one-time set (~+370 µm at 850×400, then stable to
+~100 µm). So it is a valid measurement of a *different initial condition*: keep
+it, keep it flagged, do not pool it into per-condition means.
+
+`cycles: 5` therefore yields 5 comparable cycles + 1 first-cycle sample.
+
+### Duration budget
+
+```
+per condition ≈ settle_s + 2.6 s lead-in + (cycles+1) × (heat_ms/1000 + cool_s)
+30 s cool, 5+1 cycles         ≈ 207 s
+35 conditions                 ≈ 121 min
+```
+
+Anything past ~72 min straddles the 32-bit `micros()` wrap. Analysis unwraps it
+now, but split very long campaigns anyway — a mid-run failure costs less.
+
+### Ordering
+
+- **Full sweeps:** level-ascending within each pulse width (grid form does this
+  for you). Thermally gentle, and a fault shows against a known baseline.
+- **Corner probes:** order by **energy ascending**, not current — you meet the
+  ceiling at the cheapest cell that reveals it. `profiles/corner_probe_400ms.json`
+  runs 750×400 → 950×300 → 850×400 → 950×400 for this reason.
+- **RNN collection:** shuffled, in explicit form, so drift cannot correlate with
+  condition.
+
+### Template
+
+```json
+{
+  "name": "my_campaign",
+  "description": "What this measures and WHY, plus anything a future reader needs to not repeat a mistake. This field is copied into the output folder.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 30,
+  "cycles": 5,
+  "i_low_ma": 0,
+  "abort_on_bad_sense": true,
+  "conditions": [
+    { "i_ma": 350, "heat_ms": 200 },
+    { "i_ma": 850, "heat_ms": 400, "cycles": 3 }
+  ]
+}
+```
+
+### Before you run
+
+```
+python operator_current_sweep.py --profile profiles/<name>.json --dry-run
+```
+
+Check the condition count, the total time, and that no cell exceeds the
+envelope above. Then power-cycle USB + EVM and launch **immediately** — do not
+open COM8 with anything else first, including a diagnostic read. Opening and
+closing the port wedges the M7, and only a power cycle recovers it.
+
+In the first ~30 s confirm `force pull: drained NN kB` with **NN > 0** (0.0 kB
+means wedged), `port live`, and `clock align: src=1/2 shifted +2.19 s`.
+
+### After
+
+```
+python data/analyze_raw.py          # add the new sweep folder to RUNS first
+python data/plot_envelope.py
+python data/plot_trajectory.py
+```
+
 ## Standing analysis pipeline — raw → table → charts (2026-07-31)
 
 Once a campaign's raw captures exist, **everything downstream is two scripts and

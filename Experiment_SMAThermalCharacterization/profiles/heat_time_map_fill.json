@@ -6,16 +6,55 @@
   "settle_s": 20,
   "cool_s": 15,
   "cycles": 5,
+  "i_low_ma": 0,
+  "abort_on_bad_sense": true,
   "conditions": [
-    { "i_ma": 750, "heat_ms": 100 },
-    { "i_ma": 850, "heat_ms": 100 },
-    { "i_ma": 750, "heat_ms": 200 },
-    { "i_ma": 750, "heat_ms": 300, "cool_s": 25 },
-    { "i_ma": 850, "heat_ms": 300, "cool_s": 25 },
-    { "i_ma": 950, "heat_ms": 300, "cool_s": 30 },
-    { "i_ma": 650, "heat_ms": 400, "cool_s": 25 },
-    { "i_ma": 750, "heat_ms": 400, "cool_s": 25 },
-    { "i_ma": 850, "heat_ms": 400, "cool_s": 30 },
-    { "i_ma": 950, "heat_ms": 400, "cool_s": 30 }
+    {
+      "i_ma": 750,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 300,
+      "cool_s": 25
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 300,
+      "cool_s": 25
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 300,
+      "cool_s": 30
+    },
+    {
+      "i_ma": 650,
+      "heat_ms": 400,
+      "cool_s": 25
+    },
+    {
+      "i_ma": 750,
+      "heat_ms": 400,
+      "cool_s": 25
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 400,
+      "cool_s": 30
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 400,
+      "cool_s": 30
+    }
   ]
 }
