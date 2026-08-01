@@ -539,9 +539,15 @@ comes from the firmware markers; the filter only locates each one. Recovered
 
 ### Conforms to the NN-side data contract
 
-`../../NN_SelfSensing_Baseline/DATA_COLLECTION_GUIDELINE.md` specifies what the
-per-pulse table must carry so the training repo never has to re-open raw
-captures. `heat_time_map_20260731_all.csv` now satisfies it — **32 columns**:
+The contract lives in the **NN repo and only there** —
+`NN_SelfSensing_Baseline/DATA_COLLECTION_GUIDELINE.md` (sibling checkout;
+`../../NN_SelfSensing_Baseline/` from this module). It is deliberately NOT
+copied here: it is owned by the consumer, and a duplicate would drift silently
+the first time they revise it. Read it at the source.
+
+It specifies what the per-pulse table must carry so the training repo never has
+to re-open raw captures. `heat_time_map_20260731_all.csv` now satisfies it —
+**32 columns**:
 
 | group | columns |
 |---|---|
