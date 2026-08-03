@@ -73,7 +73,8 @@ from matplotlib import cm, colors
 
 from get_cycle import get_cycle, list_cycles
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
 SURFACE = "#fafafa"
 INK, INK_MUTED = "#1a1a1a", "#6b7280"
 PRE_S, POST_S = 2.0, 29.0
@@ -314,7 +315,7 @@ def build(heat_ms, norm, levels):
              f"pulse\n{what}",
              ha="left", va="top", fontsize=10.5, color=INK_MUTED)
 
-    out = os.path.join(BASE, f"trajectory_{heat_ms}ms_{norm}.png")
+    out = os.path.join(DERIVED, f"trajectory_{heat_ms}ms_{norm}.png")
     fig.savefig(out, dpi=140, facecolor=SURFACE)
     plt.close(fig)
     print(f"  -> {os.path.basename(out)}  ({len(lv_sorted)} levels)")

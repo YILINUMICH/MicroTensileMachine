@@ -21,7 +21,7 @@ PLAN §5 decisions baked in:
   * the Zaber stage is AUXILIARY — a failure WARNS but never stops the SMA
     run; only the H7 sensor hub is critical.
 
-Output (per session): data/console_<timestamp>/
+Output (per session): data/raw/console_<timestamp>/
     h7.csv  stage.csv  status.csv  events.csv  meta.json  session.log
 
 Exit codes: 0 ok / 1 user-aborted / 2 system error (critical health, no streams).

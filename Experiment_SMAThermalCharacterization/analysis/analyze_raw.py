@@ -67,7 +67,12 @@ import sys
 import numpy as np
 import pandas as pd
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+RAW = os.path.join(_HERE, "..", "data", "raw")           # capture folders, as the rig wrote them
+DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
+# Per-sweep cycles.csv stays INSIDE its capture folder (under RAW): it is
+# per-capture provenance, and operator_sweep_report.py takes that folder as its
+# only argument. Only the MERGED cross-campaign table lands in DERIVED.
 
 SRC_LASER, SRC_LOAD, SRC_V, SRC_I = 1, 2, 3, 4
 K_MV_PER_UM = -0.49779577092171906      # Calibrate_LaserHead
@@ -322,7 +327,7 @@ def analyze_capture(csv_path):
 
 def analyze_sweep(folder, i_low, seeded, run_type):
     out = []
-    pat = os.path.join(BASE, folder, "c*_level_*mA_h*ms.csv")
+    pat = os.path.join(RAW, folder, "c*_level_*mA_h*ms.csv")
     for f in sorted(glob.glob(pat)):
         if f.endswith("_report.csv"):
             continue
@@ -332,7 +337,7 @@ def analyze_sweep(folder, i_low, seeded, run_type):
             out.append(r)
     if out:
         cols = list(out[0].keys())
-        with open(os.path.join(BASE, folder, "cycles.csv"), "w", newline="") as fh:
+        with open(os.path.join(RAW, folder, "cycles.csv"), "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=cols)
             w.writeheader()
             w.writerows(out)
@@ -346,7 +351,7 @@ def main(argv):
     for folder, i_low, seeded, run_type in RUNS:
         if want and folder not in want:
             continue
-        if not os.path.isdir(os.path.join(BASE, folder)):
+        if not os.path.isdir(os.path.join(RAW, folder)):
             print(f"  {folder:26s} MISSING — skipped")
             continue
         allrows += analyze_sweep(folder, i_low, seeded, run_type)
@@ -367,7 +372,7 @@ def main(argv):
              "cool_s", "i_low_mA", "seeded"]
     allrows.sort(key=lambda r: (r["heat_ms"], r["level_mA"], r["sweep"],
                                 r["cycle"]))
-    with open(os.path.join(BASE, MERGED), "w", newline="") as fh:
+    with open(os.path.join(DERIVED, MERGED), "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=order, extrasaction="ignore")
         w.writeheader()
         w.writerows(allrows)
@@ -379,7 +384,7 @@ def main(argv):
           f"(all RETAINED)")
 
     # ---- guideline §6: campaign calibration, so a change is detectable ----
-    with open(os.path.join(BASE, MERGED.replace(".csv", "_meta.json")),
+    with open(os.path.join(DERIVED, MERGED.replace(".csv", "_meta.json")),
               "w") as fh:
         json.dump({
             "campaign": MERGED,

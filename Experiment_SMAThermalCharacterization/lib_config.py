@@ -298,7 +298,7 @@ class CalibrationConfig:
 class RunConfig:
     operator: str = ""
     notes: str = ""
-    output_dir: str = "data"             # relative to the module dir
+    output_dir: str = "data/raw"         # relative to the module dir; RAW captures only
 
 
 # ---------------------------------------------------------------------------

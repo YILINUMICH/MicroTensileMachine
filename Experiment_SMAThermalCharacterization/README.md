@@ -104,7 +104,7 @@ readouts/plots → run the staleness monitor → auto-`disarm` on a critical
 stall. **The MOSFET is armed only around an actuation** and `DISARM` is
 always live.
 
-Output: `data/console_<session_id>/` with continuous `h7.csv` /
+Output: `data/raw/console_<session_id>/` with continuous `h7.csv` /
 `stage.csv` / `status.csv` (no `lcr.csv`), the **`video/`** dir
 (`frames.csv` + `cycle_NN/*.jpg` + `snapshots/*.jpg`), plus **`events.csv`**
 (`host_timestamp_s, monotonic_s, kind, detail`; `kind` ∈
@@ -265,7 +265,7 @@ reference sample below. Full write-up in the next section.
 
 ## Known signal artifacts — diagnose with `console_20260713_122906`
 
-**`data/console_20260713_122906/` is the reference diagnostic sample.** It is a
+**`data/raw/console_20260713_122906_laserfix/` is the reference diagnostic sample.** It is a
 ~19 s recording with **the laser aimed at a rigid, immovable block** — no
 actuation, stage held, nothing mechanically able to move. So anything that shows
 up in it is **instrumentation, not SMA physics**, by construction. Re-run the
@@ -430,7 +430,7 @@ aligns live — see STATUS for the bug this killed).
 ```
 python operator_current_sweep.py --profile profiles/heat_time_map.json --dry-run
 python operator_current_sweep.py --profile profiles/heat_time_map.json
-python operator_sweep_report.py  data/sweep_<stamp>          # ALWAYS, right after
+python operator_sweep_report.py  data/raw/sweep_<stamp>          # ALWAYS, right after
 ```
 
 - **Profiles** (`profiles/*.json`) win over CLI flags and are copied into the
@@ -447,7 +447,7 @@ python operator_sweep_report.py  data/sweep_<stamp>          # ALWAYS, right aft
   clip contact), physically-impossible current sense, load clip, baseline
   jumps, missing pulses.
 
-**Reference dataset: `data/sweep_full_150-950mA/`** — two sessions merged and
+**Reference dataset: `data/raw/sweep_full_150-950mA/`** — two sessions merged and
 uniformly re-analysed (`make_summary_and_curve.py` / `make_timeline.py` in the
 folder). 100 ms pulses, 12 s cool: monotonic, superlinear, 21 → 864 µm and
 2 → 29 mN across 156–939 mA achieved; the 650 mA cross-day repeat agrees to
@@ -455,7 +455,7 @@ folder). 100 ms pulses, 12 s cool: monotonic, superlinear, 21 → 864 µm and
 not any sensor. Judge actuation on DISPLACEMENT (signed mean) — the fixture is
 compliant, so the coil moves rather than loading.
 
-**Cautionary dataset: `data/sweep_20260730_031337/`** — the first heat-time
+**Cautionary dataset: `data/raw/sweep_20260730_031337/`** — the first heat-time
 map attempt. The 100 ms row is clean; the FIRST 200 ms cell (150 mA commanded,
 301 mA achieved) shifted the coil ~5 mm, took the laser target out of its
 window, and blinded 33/82 pulses. Longer pulses raise the stakes: re-check the
@@ -605,9 +605,9 @@ means wedged), `port live`, and `clock align: src=1/2 shifted +2.19 s`.
 ### After
 
 ```
-python data/analyze_raw.py          # add the new sweep folder to RUNS first
-python data/plot_envelope.py
-python data/plot_trajectory.py
+python analysis/analyze_raw.py          # add the new sweep folder to RUNS first
+python analysis/plot_envelope.py
+python analysis/plot_trajectory.py
 ```
 
 ## Standing analysis pipeline — raw → table → charts (2026-07-31)
@@ -617,16 +617,67 @@ no hand steps.** Re-run them any time; they are deterministic and overwrite in
 place, so a fixed bug or a new sweep is one command away from updated outputs.
 
 ```
-cd data
+cd analysis
 python analyze_raw.py                 # raw captures  -> per-cycle table
 python plot_envelope.py               # per-cycle table -> envelope CSV + charts
+python plot_trajectory.py             # per-cycle traces, overlaid by current
+python plot_energy.py                 # -> energy_collapse.html   (interactive)
+python plot_selfsensing.py            # -> self_sensing.html      (interactive)
+python plot_transition.py             # -> transition_<heat>ms.html (interactive)
+python plot_r_bias.py                 # -> r_bias_artifact.html   (interactive)
 ```
+
+**Every path below is relative to the module root.** The scripts resolve
+`../data/raw` and `../data/derived` off their own location, so they work from any
+CWD — `cd analysis` is a convenience, not a requirement.
 
 | stage | script | reads | writes |
 |---|---|---|---|
-| 1 | `analyze_raw.py` | `sweep_*/c*_level_*.csv` + `.console.log` + `.meta.json` | `sweep_*/cycles.csv`, `heat_time_map_<date>_all.csv` |
-| 2 | `plot_envelope.py` | `heat_time_map_<date>_all.csv` | `*_envelope.csv`, `*_stroke.png`, `*_force.png` |
+| 1 | `analyze_raw.py` | `data/raw/sweep_*/c*_level_*.csv` + `.console.log` + `.meta.json` | `data/raw/sweep_*/cycles.csv`, `data/derived/heat_time_map_<date>_all.csv` |
+| 2 | `plot_envelope.py` | `data/derived/heat_time_map_<date>_all.csv` | `data/derived/*_envelope.csv`, `*_stroke.png`, `*_force.png` |
+| 2 | `plot_trajectory.py` | per-cycle table + raw captures | `data/derived/trajectory_<heat>ms_<norm>.png` |
+| 2 | `plot_energy.py` | per-cycle table + `energy_table.py` | `data/derived/energy_collapse.html` |
+| 2 | `plot_selfsensing.py` | per-cycle table + `energy_table.py` | `data/derived/self_sensing.html` |
+| 2 | `plot_transition.py` | per-cycle table + raw captures | `data/derived/transition_<heat>ms.html` |
+| 2 | `plot_r_bias.py` | per-cycle table + raw captures | `data/derived/r_bias_artifact.html` + `r_bias_points.csv` (cache) |
 | — | `get_cycle.py` | one capture | one cycle's raw time series, on one clock |
+| — | `energy_table.py` | per-cycle table + raw captures | `data/derived/*_all_energy.csv` (cached ∫P dt) |
+| — | `plot_style.py` | — | shared chart chrome for the HTML figures |
+
+**`cycles.csv` is the one derived file that stays under `data/raw/`** — it is
+per-capture provenance, written next to its source, and `operator_sweep_report.py`
+takes that sweep folder as its only argument. Only the merged, cross-campaign
+tables land in `data/derived/`.
+
+### The two interactive figures (2026-08-02)
+
+Self-contained HTML — plotly.js is **inlined**, so they open with no internet
+and can be emailed as one file (~4.8 MB). Zoom, pan, click-legend to isolate a
+pulse length, per-point hover, and a **table view** under each chart. Both read
+the same per-cycle table the PNG charts do.
+
+- **`energy_collapse.html`** — *does the wire respond to delivered energy?*
+  Stroke and force from all four pulse lengths collapse onto one curve against
+  **E = ∫P dt** (R² 0.992); against power alone they do not (R² 0.707). This is
+  the measurement behind using **P·t as an RNN input**. Residual panel shows
+  what energy leaves unexplained: a monotone +6.9 % (100 ms) → −3.1 % (400 ms)
+  ladder — short pulses are slightly more effective per joule.
+- **`self_sensing.html`** — *how much can resistance tell you?* R is **linear in
+  delivered energy** (−0.379 Ω/J, R² 0.928, no pulse-length dependence) but a
+  **non-linear and weaker predictor of stroke** (straight line R² 0.882 vs 0.955
+  for the best curve; residual sd 458 µm against energy's 336 µm). R and E carry
+  different information — feed the network both.
+
+**Energy is integrated, not `p_hot_W × heat_ms`.** `p_hot_W` is a tail median
+(the power at pulse *end*), so the product under-reads delivered energy by 1.7 %
+at 100 ms but 4.9 % at 400 ms — a duration-dependent bias in the one chart whose
+question is whether duration matters. `energy_table.py` integrates ∫P dt per
+cycle and caches it; delete `*_all_energy.csv` to rebuild (~1 min).
+
+**These charts obey the no-selection rule below.** Every cycle is drawn; hollow
+marks are rail-limited cycles (lower bounds). The `usable` flag governs only
+what the **fits** are computed from — a regression over lower bounds is biased
+toward them. The residual panels show fitted cycles only, and say so.
 
 ### NO DATA SELECTION — the rule the pipeline is built around
 
@@ -806,8 +857,14 @@ at the threshold region.
 
 ## Files
 
-Files carry a role prefix: **`operator_`** = a human launches it directly;
-**`lib_`** = imported internals, never run on their own.
+Four buckets, and the boundary between them is the point: **module root** = the
+live rig code, **`analysis/`** = the standing pipeline, **`diagnostics/`** = closed
+one-off investigations, **`data/`** = split into what the rig wrote and what the
+pipeline computed.
+
+At the module root files carry a role prefix: **`operator_`** = a human launches it
+directly; **`lib_`** = imported internals, never run on their own. That rule governs
+the root only — inside `analysis/` the filename names the pipeline stage instead.
 
 ```
 Experiment_SMAThermalCharacterization/
@@ -820,9 +877,6 @@ Experiment_SMAThermalCharacterization/
 ├── operator_current_sweep.py   condition sweeps (current × pulse length); --profile / --dry-run
 ├── operator_sweep_report.py    post-sweep analysis + health report (run after EVERY sweep)
 ├── operator_pulse_capture.py   plain single-pulse capture tool
-├── operator_noise_psd.py       ┐ CC current-sense noise diagnostics
-├── operator_noise_isense.py    ┘ (see the 2026-07-28 investigation in STATUS)
-├── operator_sweep_adcavg.py    ADC_SAMPLES_CYCLE averaging sweep (rate-vs-noise)
 ├── profiles/                   JSON test profiles (grid + explicit-conditions forms)
 │
 ├── lib_h7_session.py           shared H7 drive/capture plumbing: port revival, calibration
@@ -832,9 +886,50 @@ Experiment_SMAThermalCharacterization/
 ├── lib_h7_commands.py          firmware command builders (single source of truth)
 ├── lib_recording_core.py       RecordingCore — UI-agnostic continuous recorder/control
 ├── lib_camera.py               adaptive-FPS camera capture (threaded or spawn subprocess)
-└── lib_analysis.py             loaders, calibration, clock-alignment, segmentation,
-                                fitting/filtering — the shared core the notebook imports
+├── lib_analysis.py             loaders, calibration, clock-alignment, segmentation,
+│                               fitting/filtering — the shared core the notebook imports
+│
+├── analysis/                   THE STANDING PIPELINE — raw → table → charts
+│   ├── analyze_raw.py          stage 1: raw captures -> per-cycle table
+│   ├── plot_envelope.py        stage 2: table -> envelope CSV + stroke/force PNGs
+│   ├── plot_trajectory.py      stage 2: per-cycle traces, overlaid by current (PNG)
+│   ├── plot_energy.py          FIGURE A -> energy_collapse.html
+│   ├── plot_selfsensing.py     FIGURE B -> self_sensing.html
+│   ├── plot_transition.py      FIGURE C -> transition_<heat>ms.html
+│   ├── plot_r_bias.py          FIGURE D -> r_bias_artifact.html
+│   ├── energy_table.py         imported: per-cycle table + TRUE ∫P dt (not p_hot·t)
+│   ├── get_cycle.py            imported: one cycle's raw series, on one clock
+│   ├── plot_style.py           imported: shared chart chrome + validated palette
+│   └── make_rnn_profile.py     generates ../profiles/rnn_datasetB_<stamp>.json
+│
+├── diagnostics/                ONE-OFF INVESTIGATIONS — closed, kept for the write-ups
+│   ├── operator_noise_psd.py   ┐ 2026-07-28 CC current-sense noise investigation
+│   ├── operator_noise_isense.py┘ (conclusions in STATUS — do not re-derive)
+│   ├── operator_sweep_adcavg.py  ADC_SAMPLES_CYCLE averaging sweep (rate-vs-noise)
+│   └── make_heat_time_map_clean.py  SUPERSEDED 2026-07-30 merge+clean pipeline;
+│                               its exclusion rules are what NO DATA SELECTION rejects
+│
+└── data/
+    ├── raw/                    WHAT THE RIG WROTE. Never hand-edited.
+    │   ├── console_*  (7)      console sessions
+    │   ├── sweep_*    (17)     condition sweeps  (+ their per-sweep cycles.csv)
+    │   ├── pulse_*    (6)      single-pulse captures
+    │   ├── isense_*   (6)      CC current-sense captures   [diagnostic campaign]
+    │   ├── noise_*    (2)      quiet-baseline PSD captures [diagnostic campaign]
+    │   └── logs/               sweep console transcripts
+    └── derived/                WHAT THE PIPELINE COMPUTED. All regenerable.
+        ├── heat_time_map_<date>_all.csv          per-cycle table (the label table)
+        ├── heat_time_map_<date>_all_energy.csv   ∫P dt cache
+        ├── heat_time_map_<date>_all_envelope.csv per-(level, heat) aggregates
+        ├── *_stroke.png / *_force.png / trajectory_*.png
+        └── energy_collapse.html / self_sensing.html / transition_*.html /
+            r_bias_artifact.html
 ```
+
+**Everything in `data/derived/` is committed**, HTML figures included, so analysed
+results are available on any machine by clone alone. The module's whole ignore set
+is machine-local: `.claude/`, `__pycache__/`, and `zaber_config.json` (regenerated
+per host on every `ZaberStage.connect()`).
 
 The former CLI plotters (`analyze_sma.py`, `sma_plots.py`) and the legacy
 OPEN→SHORT→RAW recorder (`sma_recorder.py` / `session.py` / `operator_io.py`)

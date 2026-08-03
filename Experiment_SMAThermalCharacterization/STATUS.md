@@ -8,6 +8,93 @@
 | **Owner** | Yilin |
 | **Quick test (no hardware)** | `python -c "import config, workers, recording_core, sma_console, analyze_sma"` then run the analyzer on a synthetic console session (see README). GUI: `QT_QPA_PLATFORM=offscreen` + `run_gui(..., _build_only=True)`. |
 
+## 2026-08-03 — module reorganized into four buckets
+
+Main code, one-off diagnostics, raw data and derived data are now separated. The
+module root had grown to 15 flat `.py` files with three closed investigations
+carrying the same `operator_` prefix as the primary entry point, and `data/` had
+become a code directory holding the entire 12-script analysis pipeline interleaved
+with 38 capture folders and 21 loose result files.
+
+| bucket | holds |
+|---|---|
+| module root | `operator_console.py` + 4 standing operator tools + 7 `lib_*` |
+| `analysis/` | the standing raw → table → charts pipeline (11 scripts) |
+| `diagnostics/` | closed one-off investigations + the superseded 07-30 merge script |
+| `data/raw/` | 38 capture folders — what the rig wrote, never hand-edited |
+| `data/derived/` | merged tables + figures — what the pipeline computed |
+
+**Capture folder names did not change**, and every script reaches them by name
+joined onto a path constant, so `analyze_raw.py`'s `RUNS` list and
+`plot_trajectory.py`'s `SRC_MAP` were untouched. The single `BASE` in each script
+became `RAW` and/or `DERIVED` resolved off `__file__`, so the pipeline runs from any
+CWD. **Verified byte-identical**: stage 1 regenerates `heat_time_map_20260731_all.csv`
+and all five per-sweep `cycles.csv` with zero content change (git reports `R100`),
+and the superseded `make_heat_time_map_clean.py` reproduces its 07-30 outputs.
+
+Three things that had to move with it, easy to miss:
+
+- **`lib_analysis.latest_session()`** globs `console_*` to auto-pick a session when
+  the notebook is run without `--session`. It now points at `data/raw/`; left alone
+  it would have silently reported "no session found".
+- **Five raw writers** decide where new captures land: `config.yaml` `output_dir`,
+  `lib_config.RunConfig.output_dir`, `operator_current_sweep.py`,
+  `operator_pulse_capture.py`, and the two diagnostics' `--outdir`. All now resolve
+  to `data/raw/`.
+- **`operator_sweep_adcavg.py`** reached the firmware project via
+  `Path(__file__).parents[1]`, which pointed at the repo root only while the script
+  sat at the module root. Moving it into `diagnostics/` broke that by one level; it
+  now derives `FW` from the module dir explicitly.
+
+`data/derived/` is committed in full, HTML figures included, so analysed results
+travel with a clone. The module's entire ignore set stays machine-local: `.claude/`,
+`__pycache__/`, `zaber_config.json`.
+
+## Analysis findings
+
+- **Delivered energy E = ∫P dt is the state variable, not power** (2026-08-02,
+  n=176 usable cycles, 250–950 mA × 100–400 ms). Stroke and force collapse onto
+  one curve against E (R² 0.992) and do not against power (R² 0.707). R is
+  linear in E (−0.379 Ω/J, R² 0.928) but a weaker, non-linear predictor of
+  stroke (residual sd 458 µm vs energy's 336 µm). Evidence for the RNN's P·t
+  input; see `data/derived/energy_collapse.html` + `data/derived/self_sensing.html`.
+- **Open caveat:** `r_base_ohm` is sampled at the ~107 mA idle bias while
+  `r_hot_ohm` is at drive current, so ΔR between them mixes two bias points —
+  it shows as a non-physical −4 % intercept at E→0. Slopes are unaffected.
+  Absolute R is the better axis and the better predictor; prefer it over ΔR/R₀.
+- **The high-energy end is instrument-limited.** 950 mA · 400 ms clips the load
+  cell and rails the laser on every cycle, so nothing above ~1.2 J is measured.
+  Those cycles are drawn hollow, never dropped.
+
+### BLOCKER — thermal hysteresis is not measurable from this data (2026-08-02)
+
+At pulse end the drive drops from 250–950 mA to the ~107 mA idle bias, and
+**R = V/I jumps +9 to +14 % within ~50 ms** (e.g. 850 mA/400 ms: 4.058 → 4.534 Ω).
+That cannot be physical — cooling constants are 5–20 s and the stroke is still at
+maximum at that instant. It is consistent with a voltage offset,
+`R_meas = R_true + V_off/I`, which inflates R more at low current.
+
+`V_off` estimates from two independent routes agree in magnitude but not tightly:
+**33 ± 19 mV** from the pulse-end step (temperature is continuous there, so the
+step solves for it) and **23 mV, R² 0.57** from R at pulse *onset* vs 1/I across
+the 8 levels (the wire is still at ambient in the first 4–20 ms). The implied
+correction at the idle bias is 0.21–0.30 Ω ± ~0.15 Ω, against a total heating
+excursion of only **0.64 Ω**.
+
+**Consequence:** the heating and cooling branches cannot be put on a common R
+axis to better than ~25–30 % of the signal, so the classic stroke-vs-temperature
+hysteresis loop cannot be extracted. A naive loop looks huge — cool-vs-heat
+stroke gap of 81–83 % of peak, suspiciously constant across very different
+conditions — but that is the offset, not the wire. **Do not plot it as
+hysteresis.** (The mechanical force-vs-stroke loop is clean but nearly
+single-valued, 3–6 % of peak, so it is not a substitute.)
+
+**To unblock:** sense R at a CONSTANT current on both branches — hold a fixed
+sense bias through the cool phase, or use `Firmware_SMAConstantCurrent_PIO`
+(closed-loop CC, streams `R_est` as src=7). Separately, a room-temperature
+current sweep at fixed temperature would pin `V_off` properly and retroactively
+correct every existing capture.
+
 ## Entry points
 
 - **`operator_current_sweep.py`** — condition sweeps (current × pulse length),
@@ -249,7 +336,7 @@
 > damage starts.
 >
 > **PHASE 2: generate the bulk profile from what phase 1 measured** —
-> `python data/make_rnn_profile.py --minutes 95 --gaps <safe set> --p-avg-max <W>`,
+> `python analysis/make_rnn_profile.py --minutes 95 --gaps <safe set> --p-avg-max <W>`,
 > then **`--dry-run` it**. ~68 sequences of 6+1 pulses, stratified by gap,
 > shuffled so slow drift (fatigue, ambient, a degrading contact) cannot
 > correlate with condition. Both caps enforced: 1.24 J per pulse and the
@@ -274,10 +361,12 @@
 
 > ### ▶ 30 s-COOL HEAT-TIME MAP — DONE, 28/35 CELLS (2026-07-31)
 >
-> **Dataset: `data/heat_time_map_20260731_all.csv`** — 324 cycles across 36
+> **Dataset: `data/derived/heat_time_map_20260731_all.csv`** — 324 cycles across 36
 > conditions and 5 sweeps, 30 s cool throughout. Regenerate with
-> `data/make_heat_time_map_clean_20260731.py`; envelopes in
-> `heat_time_map_20260731_{envelope,force_envelope}.png`. **This supersedes
+> `analysis/analyze_raw.py` (the one-off `make_heat_time_map_clean_20260731.py`
+> named here previously was deleted when that pipeline replaced it); envelopes
+> via `analysis/plot_envelope.py` in
+> `data/derived/heat_time_map_20260731_all_{stroke,force}.png`. **This supersedes
 > `heat_time_map_20260730_clean.csv`** — that campaign ran 15 s cool (25 s at two
 > cells) and is not protocol-comparable.
 >
@@ -366,8 +455,8 @@
 > (see the guard TODO above).
 >
 > **Where the heat-time map stands.** Five 2026-07-30 sweeps merged into
-> `data/heat_time_map_20260730_clean.csv` (219 clean cycles; regenerate with
-> `data/make_heat_time_map_clean.py`, envelopes in
+> `data/derived/heat_time_map_20260730_clean.csv` (219 clean cycles; regenerate with
+> `diagnostics/make_heat_time_map_clean.py`, envelopes in
 > `heat_time_map_20260730_{envelope,force_envelope}.png`). Coverage:
 > 100/200/300 ms rows complete over 150–950 mA (950×300 is n=1, needs one
 > confirming retry); **400 ms row missing above 650 mA**. Cycles were dropped
@@ -438,7 +527,7 @@
 
 > ### ▶ REFERENCE DATASET + ACTUATION CURVE — FULL SPAN 150–950 mA (2026-07-30)
 >
-> **`data/sweep_full_150-950mA/`** — the 2026-07-29 (150–650) and 2026-07-30
+> **`data/raw/sweep_full_150-950mA/`** — the 2026-07-29 (150–650) and 2026-07-30
 > (650–950) sweeps merged, every level re-analysed from raw through one
 > identical clock-aligned path (`summary_combined.csv`,
 > `fig_actuation_150-950mA.png`; per-file `_YYYYMMDD` suffixes give
@@ -478,7 +567,7 @@
 > (98.2%)** with `R_est` at 4.68 Ω. The failing sweep held 769–817 mA (140–148%)
 > with `R_est` stranded at 6.27 Ω. Cool-phase noise fell 71.53 → 14.96 mA sd,
 > kurtosis 4.57 → 3.11, samples >mean+100 mA 12.91% → 0.00%.
-> `data/isense_20260728_233618_sma-connected-cccycle`.
+> `data/raw/isense_20260728_233618_sma-connected-cccycle`.
 >
 > **Chain:** intermittent clip contact → multimodal current readings → the
 > `R_est` bootstrap latches `u/I` from ONE bad sample → feedforward overshoots
@@ -629,7 +718,7 @@
 - [ ] **Bench-verify the baseline phase** (`measure_baseline`): confirm the arm→`drive` at `probe_v` streams src=3/4/5 for the window (idle current, no heating), the cold-R / laser-rest / load-rest means are sane, auto-disarm fires, and the load-saturation guard trips when the LCA-9PC ZERO pot is deliberately off. Then decide whether `baseline.auto_on_start` should default true.
 - [ ] **Verify H7 channel rates** — confirm `[STATUS]` shows no drops with all 5 src streaming during a `drive`.
 - [ ] **FIRMWARE BUG: laser/load V-field zero-glitch** (`Firmware_SMASensorHub_PIO`) — ~every 32nd ADC1 frame emits `voltage_V==0` despite a valid `raw_code` (and skips the paired ADC2/load sample). Raw codes are correct, so it's in the M4 voltage path / ADC1↔ADC2 interleave, not the ADC read. Currently masked host-side by the `H7Worker` glitch filter; fix at the source on the bench (suspect the `r1.status & 0x80` ADC2-piggyback branch around `main.cpp:1198-1214`).
-- [ ] **LASER 65.8 Hz TONE — ACCEPTED, not fatal; do not chase unless it changes** (found 2026-07-13; reference sample `data/console_20260713_122906` = laser on an **immovable block**; diagnose with the laser view (`lib_analysis`; notebook port TODO); full write-up in README). The laser's apparent ±1.4 µm "noise" is a coherent **65.77 Hz / 1.72 µm** ripple carrying **74%** of the channel's variance. **It is instrumental, not mechanical:** it survives an immovable target, and it sits at the *same* 65.77 Hz (to 0.008%) in the actuation session `console_20260713_115921` despite a completely different mass/stiffness — a real resonance would have shifted. Load/ADC2 is clean at that frequency. **Why we accept it:** 66 Hz is an order of magnitude above our DC–few-Hz signal band and is stationary, so averaging over a fire (6.6 cycles) or a cool (197 cycles) suppresses it, and a notch recovers σ 1.29 → 0.31 µm in post. It costs raw plot resolution, not correctness. **If it bites us:** (1) feed ADC1 a DC voltage with the IL-030 disconnected — tone survives ⇒ ADC/wiring, tone vanishes ⇒ IL-030; (2) resolve the alias (could really be 335/466 Hz) — but that needs the read-path fix below, not just a rate constant; (3) re-open immediately if the tone ever drifts, grows, or gains a low-frequency sibling.
+- [ ] **LASER 65.8 Hz TONE — ACCEPTED, not fatal; do not chase unless it changes** (found 2026-07-13; reference sample `data/raw/console_20260713_122906_laserfix` = laser on an **immovable block**; diagnose with the laser view (`lib_analysis`; notebook port TODO); full write-up in README). The laser's apparent ±1.4 µm "noise" is a coherent **65.77 Hz / 1.72 µm** ripple carrying **74%** of the channel's variance. **It is instrumental, not mechanical:** it survives an immovable target, and it sits at the *same* 65.77 Hz (to 0.008%) in the actuation session `console_20260713_115921` despite a completely different mass/stiffness — a real resonance would have shifted. Load/ADC2 is clean at that frequency. **Why we accept it:** 66 Hz is an order of magnitude above our DC–few-Hz signal band and is stationary, so averaging over a fire (6.6 cycles) or a cool (197 cycles) suppresses it, and a notch recovers σ 1.29 → 0.31 µm in post. It costs raw plot resolution, not correctness. **If it bites us:** (1) feed ADC1 a DC voltage with the IL-030 disconnected — tone survives ⇒ ADC/wiring, tone vanishes ⇒ IL-030; (2) resolve the alias (could really be 335/466 Hz) — but that needs the read-path fix below, not just a rate constant; (3) re-open immediately if the tone ever drifts, grows, or gains a low-frequency sibling.
 - [x] ~~**SMA resistance transition unresolvable**~~ — **WRONG, corrected 2026-07-13.** The transition IS resolved: **ΔR/R₀ = −3.13% ± 0.54% during the fire (t = −5.8)**, recovering to baseline by the end of the 3 s cool. It only looked unresolvable because the metric took `max()` over the fire window, which on a ±6% single-sample noise floor returns the largest *noise* excursion — always positive — and hid a real effect that is *negative*. The right estimator is the window **mean**, averaged across cycles (`lib_analysis`; transition-view notebook port TODO). The `cycles` view now reports `dR_fire_pct` (mean), not `dR_peak_pct` (max).
 - [ ] **`cool_ms` is far too short.** The force cooling fit gives **τ_F ≳ 6 s** against a `cool_ms` of only **3 s**, so the coil never returns to baseline before the next fire — this is the cause of the ratcheting force baseline across the run, and it means the 10 cycles are **not independent**. Raise `cool_ms` to ≥ 3–5 × τ (~20–30 s) for clean cycles, or accept and model the accumulation. τ itself is only a **lower bound** until the cool window exceeds it.
 - [ ] **SMA `sma_v`/`sma_i` read +7% HIGH; power/energy ~15% high** (found 2026-07-13 on the bench, `Firmware_SMARateTest_PIO` runs 0-7). The H7's on-chip ADC reads high **in proportion to its conversion duty** — `V = 0.01508 × duty% + 2.988`, R² = 0.9996 across 8 runs with the DAC code held fixed. Production (`CYCLE_LOG_MS=10`, `ADC_SAMPLES=64` → 14% duty) therefore inflates V and I by ~7%, and **power by ~15%** (P = V·I squares it). **What this does and does not affect:** `sma_r` is **EXACTLY immune** (both channels scale together, R = V/I cancels — R sat at 21.4 Ω while V drifted +33%), so **every resistance result stands**; laser/load are unaffected (ADS1263 + external REF7050). Only the **absolute** power/energy numbers on the dashboard move (2.18 W → ~1.9 W; 6.5 J → ~5.6 J) — the **fire-vs-idle ratio is unchanged**, so "the idle probe delivers more heat than all ten fires" still holds. **Partly fixed 2026-07-13:** the `portenta_m7_rate1k_n4` port (above) drops the in-cycle duty 14% → 12%, which removes most of it — pending the bench run that confirms V/I come back down. **Still open:** `ADC_VREF_V = 3.145` is itself ~5% off (true ≈ 2.99 V), a *standing* mis-calibration independent of duty. Fix it by reading the STM32's internal **VREFINT** and self-correcting, rather than trusting a hard-coded constant — that would also confirm the droop mechanism outright (it is currently inferred from behaviour; Vref was never measured directly). **All existing sessions' V/I/power are affected; all R results are not.**

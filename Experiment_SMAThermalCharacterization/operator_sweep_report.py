@@ -4,8 +4,8 @@
 Run it on a sweep folder the moment a run ends (or mid-run on the partial
 data — every capture is saved before it is analysed):
 
-    python operator_sweep_report.py data/sweep_20260730_031337
-    python operator_sweep_report.py data/sweep_full_150-950mA --timeline
+    python operator_sweep_report.py data/raw/sweep_20260730_031337
+    python operator_sweep_report.py data/raw/sweep_full_150-950mA --timeline
 
 It re-analyses EVERY capture from raw through the same clock-aligned path the
 live sweep uses, so its numbers are the reference — never trust a stale
@@ -143,7 +143,7 @@ def analyse_condition(csv_path: Path, meta: dict) -> dict:
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("folder", help="sweep folder (data/sweep_*)")
+    p.add_argument("folder", help="sweep folder (data/raw/sweep_*)")
     p.add_argument("--timeline", action="store_true",
                    help="also render fig1-style whole-run strips (slow)")
     a = p.parse_args()

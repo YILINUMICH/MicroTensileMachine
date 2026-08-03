@@ -49,7 +49,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
 HEATS = [100, 200, 300, 400]
 # Validated sequential ramp — see the COLOR note above before changing these.
 RAMP = {100: "#6baed6", 200: "#2171b5", 300: "#08306b", 400: "#041229"}
@@ -161,7 +162,7 @@ def chart(d, env, ycol_pt, ycol_med, ylabel, title, subtitle, out,
 
 
 def main(argv):
-    src = argv[0] if argv else os.path.join(BASE, "heat_time_map_20260731_all.csv")
+    src = argv[0] if argv else os.path.join(DERIVED, "heat_time_map_20260731_all.csv")
     stem = src[:-4]
     d = pd.read_csv(src)
     env = aggregate(d)

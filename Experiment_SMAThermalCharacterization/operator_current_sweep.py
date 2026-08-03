@@ -23,7 +23,7 @@ USAGE
         --heat-ms 100,200,300,400 --cycles 5 --cool-s 15 --max-ma 1000
 
     # afterwards, ALWAYS:
-    python operator_sweep_report.py data/sweep_<stamp>
+    python operator_sweep_report.py data/raw/sweep_<stamp>
 
 PROFILES (profiles/*.json) — the profile WINS over CLI flags for what it
     specifies, and a copy is saved into the output folder. Two forms:
@@ -293,7 +293,8 @@ def main() -> int:
         return 0
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out = Path(a.out) if a.out else Path(__file__).parent / "data" / f"sweep_{stamp}"
+    out = (Path(a.out) if a.out
+           else Path(__file__).parent / "data" / "raw" / f"sweep_{stamp}")
     out.mkdir(parents=True, exist_ok=True)
     if profile:                     # provenance: the profile rides with the data
         (out / "profile.json").write_text(

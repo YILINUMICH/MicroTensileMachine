@@ -13,7 +13,15 @@ pyyaml>=6.0           # config.yaml
 numpy>=1.24
 matplotlib>=3.7       # analyze_sma.py dashboards (Agg, headless)
 plotly>=5.20          # sma_explore.ipynb interactive notebook (zoom/pan + PNG export)
+                      #   also analysis/plot_energy.py + plot_selfsensing.py, which
+                      #   write self-contained .html figures (plotly.js inlined,
+                      #   so they open offline).
 nbformat>=4.2.0       # required by plotly for inline notebook rendering
+kaleido==0.2.1        # OPTIONAL — static PNG export of the plotly figures
+                      #   (fig.write_image). Only needed to render an .html
+                      #   figure to an image without opening a browser; the
+                      #   plots themselves do not import it. Pinned to 0.2.1
+                      #   because 1.x expects a separate Chrome install.
 readchar>=4.0         # operator_io keypress prompts (legacy recorder)
 pyqtgraph>=0.13       # sma_console.py live plots (GUI mode only)
 PySide6>=6.5          # GUI Qt binding for sma_console.py (PyQt5 also works;

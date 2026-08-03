@@ -30,7 +30,8 @@ import pandas as pd
 
 from analyze_raw import schedule_windows, refine, unwrap_us as _unwrap
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+RAW = os.path.join(_HERE, "..", "data", "raw")      # capture folders, as the rig wrote them
 
 WRAP_S = 2 ** 32 / 1e6      # micros() is 32-bit: rolls over every 4294.97 s
 
@@ -56,7 +57,7 @@ SRC = {"laser": 1, "load": 2, "sma_v": 3, "sma_i": 4, "sma_r": 5,
 
 
 def _capture(sweep, level_mA, heat_ms):
-    pat = os.path.join(BASE, sweep, f"c*_level_{int(level_mA)}mA_h{int(heat_ms)}ms.csv")
+    pat = os.path.join(RAW, sweep, f"c*_level_{int(level_mA)}mA_h{int(heat_ms)}ms.csv")
     hits = [f for f in glob.glob(pat) if not f.endswith("_report.csv")]
     if not hits:
         raise FileNotFoundError(f"no capture for {level_mA} mA / {heat_ms} ms in {sweep}")

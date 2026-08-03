@@ -335,7 +335,7 @@ def measurement_sane(cap: Capture, windows, v_idle: float = 0.5,
             f"physically impossible for this wire (~4.2-4.8 ohm). The current "
             f"sense is corrupted; the data is NOT usable. Power-cycle USB + EVM, "
             f"reseat the SMA clips, and re-run. "
-            f"See data/sweep_20260728_215606/README.md.")
+            f"See data/raw/sweep_20260728_215606/README.md.")
     return True, f"{100*frac:.2f}% impossible cool samples (limit {100*max_frac:.0f}%)"
 
 

@@ -193,12 +193,12 @@ def load_m4_to_m7_offset_us(sess: Path) -> float:
 
 
 def latest_session(base: Optional[Path] = None) -> Optional[Path]:
-    """Newest data/console_* session that actually HAS data (h7.csv beyond a
+    """Newest data/raw/console_* session that actually HAS data (h7.csv beyond a
     header) — skips empty sessions (e.g. opened then closed without recording).
     Names are timestamped, so name-sort is chronological. Falls back to the
     newest session even if empty."""
     if base is None:
-        base = Path(__file__).resolve().parent / "data"
+        base = Path(__file__).resolve().parent / "data" / "raw"
     cands = sorted(p for p in base.glob("console_*") if p.is_dir())
     for p in reversed(cands):
         h7 = p / "h7.csv"
@@ -214,7 +214,7 @@ def resolve_session(arg: Optional[str]) -> Path:
         return Path(arg)
     s = latest_session()
     if s is None:
-        print("ERROR: no --session given and no data/console_* session found",
+        print("ERROR: no --session given and no data/raw/console_* session found",
               file=sys.stderr)
         sys.exit(2)
     log.info("no --session given — using latest: %s", s.name)

@@ -204,4 +204,5 @@ calibration:
 run:
   operator: "" # filled into meta.json
   notes: "" # free-form, also in meta.json
-  output_dir: data # relative to sma_recorder.py (or absolute)
+  output_dir: data/raw # relative to the module dir (or absolute). RAW captures
+  # only — the analysis pipeline writes its tables/figures to data/derived/.

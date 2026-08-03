@@ -8,7 +8,7 @@ want an automated ceiling search.
 
     python operator_pulse_capture.py --port COM8 --ma 300
     python operator_pulse_capture.py --port COM8 --ma 300 --cool-s 3 --cycles 5
-    python operator_pulse_capture.py --replot data/pulse_20260729_001500
+    python operator_pulse_capture.py --replot data/raw/pulse_20260729_001500
 
 WHY --i-low DEFAULTS TO 100 AND NOT 0
     Electrically these are the same thing. 100 mA is BELOW the reachable floor
@@ -214,7 +214,8 @@ def main():
                         "0 disengages the loop and breaks the bootstrap — see "
                         "the module docstring.")
     p.add_argument("--settle-s", type=float, default=15.0)
-    p.add_argument("--outdir", default="data")
+    p.add_argument("--outdir",
+                   default=str(Path(__file__).resolve().parent / "data" / "raw"))
     p.add_argument("--replot", metavar="DIR",
                    help="re-analyse and re-plot an existing capture")
     a = p.parse_args()

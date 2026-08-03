@@ -38,7 +38,7 @@ USAGE
 -----
     python operator_sweep_adcavg.py --port COM8
     python operator_sweep_adcavg.py --port COM8 --n 4,16,64,256 --secs 20
-    python operator_sweep_adcavg.py --analyse data/adcavg_20260729_101500
+    python operator_sweep_adcavg.py --analyse data/raw/adcavg_20260729_101500
 """
 from __future__ import annotations
 
@@ -54,9 +54,15 @@ from pathlib import Path
 
 import numpy as np
 
-from lib_h7_session import H7, SRC_LASER, SRC_SMA_I, SRC_SMA_V, save_capture
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib_h7_session import (H7, SRC_LASER, SRC_SMA_I,  # noqa: E402
+                            SRC_SMA_V, save_capture)
 
-FW = (Path(__file__).resolve().parents[1] / "Firmware_SMAConstantCurrent_PIO")
+_MODULE = Path(__file__).resolve().parent.parent   # Experiment_SMAThermalCharacterization/
+RAW = _MODULE / "data" / "raw"
+# parents[2] because this script lives one level down in diagnostics/ — the
+# firmware project is a SIBLING OF THE MODULE, at the repo root.
+FW = (_MODULE.parent / "Firmware_SMAConstantCurrent_PIO")
 ENV = "portenta_m7"
 GATE_BAND_MA = 12.0
 UNO_SD_MA, UNO_HZ = 0.90, 197.0
@@ -184,7 +190,7 @@ def main():
     ap.add_argument("--secs", type=float, default=20.0)
     ap.add_argument("--volts", type=float, default=0.5,
                     help="static LDO command; 0.5 = the idle floor (~155 mA)")
-    ap.add_argument("--outdir", default="data")
+    ap.add_argument("--outdir", default=str(RAW))
     ap.add_argument("--analyse", metavar="DIR",
                     help="re-report an existing sweep directory")
     args = ap.parse_args()

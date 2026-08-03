@@ -20,7 +20,7 @@ The H7 front end is ~12x the Uno, flat in current and identical in CC vs voltage
 mode. An earlier version of this file claimed 144 mA/read, 5981x the
 quantisation floor, 57x the Uno, and "cannot be fixed in the control code" —
 ALL WRONG. That figure came from the sweep's cool phase, whose distribution is
-multimodal rather than Gaussian (see data/sweep_20260728_215606/README.md), and
+multimodal rather than Gaussian (see data/raw/sweep_20260728_215606/README.md), and
 I generalised a contaminated condition to the hardware. The correction matters:
 at 15.6 mA sd, ADC_SAMPLES_CYCLE=64 gives 3.9 mA at 383 Hz — 3-sigma inside the
 gate and twice the Uno's rate. Averaging IS a viable fix.
@@ -58,7 +58,7 @@ Run each condition, physically changing the rig between them:
     python operator_noise_isense.py --port COM8 --label sma-connected    --volts 0.5
     python operator_noise_isense.py --port COM8 --label sma-higher       --volts 1.0
 
-    python operator_noise_isense.py --compare data/isense_*
+    python operator_noise_isense.py --compare data/raw/isense_*
 
 The laser (src=1, on the ADS1263 — a different converter entirely) is recorded
 throughout as a CONTROL. If it changes between conditions, the rig's ambient
@@ -76,7 +76,11 @@ from pathlib import Path
 
 import numpy as np
 
-from lib_h7_session import H7, SRC_LASER, SRC_SMA_V, SRC_SMA_I, save_capture
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib_h7_session import (H7, SRC_LASER, SRC_SMA_V, SRC_SMA_I,  # noqa: E402
+                            save_capture)
+
+RAW = Path(__file__).resolve().parent.parent / "data" / "raw"
 
 # Firmware constants — Firmware_SMAConstantCurrent_PIO/src/main.cpp.
 # If any of these change there, they must change here.
@@ -302,7 +306,7 @@ def main():
     ap.add_argument("--ma-high", type=float, default=550.0,
                     help="--mode cccycle only: the heat target, i.e. the sweep "
                          "level being reproduced")
-    ap.add_argument("--outdir", default="data")
+    ap.add_argument("--outdir", default=str(RAW))
     ap.add_argument("--compare", nargs="+", metavar="DIR")
     args = ap.parse_args()
 
