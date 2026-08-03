@@ -14,6 +14,8 @@ The system is split into **firmware** (PlatformIO, Arduino Portenta H7 dual-core
 - **One master `README.md` per module** + a short `STATUS.md` status header. Do not scatter Plan/Memo/Notes files. Per-module TODOs live in each `STATUS.md`; cross-cutting TODOs live in the root README's **Cross-cutting TODO** section.
 - Every module carries a **status label**: Stable / WIP / To-Test / Diagnostic / Archived. "To-Test" means it builds but has not been bench-verified end-to-end — treat its output skeptically.
 - Datasheets and operator memos live under `docs/` only. No per-module duplicates.
+- **Session data under `*/data/` IS tracked on purpose** — committed so results are available on every machine. Do not propose gitignoring captures or analysed results. Only machine-local files are ignored: `__pycache__/`, `.venv/`, `.pio/`, `zaber_config.json`.
+- **Raw captures stay separate from derived results** where a module's `data/` has outgrown a flat folder: `data/raw/` = what the instrument wrote (never hand-edited), `data/derived/` = what analysis computed, and analysis code lives *outside* `data/`. Currently only `Experiment_SMAThermalCharacterization/` is organized this way; V3, SpringSmokeTest and both `Calibrate_*` still have flat `data/` folders and that is fine — convert one only when it starts mixing code, captures, and outputs.
 
 ## Firmware (PlatformIO)
 
@@ -64,13 +66,55 @@ Common entry points:
 ```
 python Experiment_SMACharacterizationV3/sma_console.py      # SMA characterization console (primary; --headless for scripted runs)
 python Experiment_SMACharacterizationV3/analyze_sma.py --session data/<id>   # offline de-embed + plot
+
+# SMA THERMAL module — capture, then the standing analysis pipeline
+python Experiment_SMAThermalCharacterization/operator_console.py       # primary entry (--headless for scripted runs)
+python Experiment_SMAThermalCharacterization/operator_current_sweep.py --dry-run --profile profiles/<p>.json
+python Experiment_SMAThermalCharacterization/operator_sweep_report.py data/raw/sweep_<stamp>   # after EVERY sweep
+cd Experiment_SMAThermalCharacterization/analysis && python analyze_raw.py && python plot_envelope.py
+#   (the analysis/ scripts resolve ../data/raw and ../data/derived off __file__, so any CWD works)
+
 python Calibrate_LaserHead/run_calibration.py     # laser calibration sweep (Zaber)
 python Calibrate_LoadCell/run_calibration.py      # load-cell dead-weight calibration
 python Driver_KeysightLCR/test_lcr_meter.py --quick      # LCR connection smoke test
 python <module>/portenta_reader.py                # H7 serial-stream sanity check
 ```
 
-`Experiment_SMAThermalCharacterization/` is a fork of V3 adding an SMA-thermal focus (adaptive-FPS camera, LCR removed). Its files carry role prefixes: **`operator_`** (run directly — `operator_console.py`, `operator_explore.ipynb`) and **`lib_`** (imported internals — `lib_recording_core.py`, `lib_workers.py`, `lib_camera.py`, `lib_config.py`, `lib_h7_commands.py`, `lib_analysis.py`). The former CLI plotters (`analyze_sma.py`/`sma_plots.py`) and legacy recorder (`sma_recorder.py`/`session.py`/`operator_io.py`/`run_experiment.py`) were removed here (they remain in V3 and git history). Entry point: `operator_console.py`; offline analysis: `operator_explore.ipynb` (Plotly, imports `lib_analysis.py`).
+### `Experiment_SMAThermalCharacterization/` — four-bucket layout (reorganized 2026-08-03)
+
+A fork of V3 adding an SMA-thermal focus (adaptive-FPS camera, LCR removed). **The bucket a file sits in tells you how to treat it** — check this before proposing changes:
+
+```
+module root/     LIVE RIG CODE. Role prefixes apply HERE ONLY:
+                 operator_ = run directly (operator_console.py PRIMARY entry,
+                 operator_explore.ipynb, operator_current_sweep.py,
+                 operator_sweep_report.py, operator_pulse_capture.py)
+                 lib_      = imported internals, never run alone (7 files)
+analysis/        THE STANDING PIPELINE. No prefixes — the filename names the
+                 stage. analyze_raw.py (stage 1) -> plot_envelope.py /
+                 plot_energy.py / plot_selfsensing.py / plot_transition.py /
+                 plot_r_bias.py / plot_trajectory.py (stage 2);
+                 energy_table.py / get_cycle.py / plot_style.py are imported.
+diagnostics/     CLOSED one-off investigations, kept for their write-ups.
+                 Do NOT extend these or re-derive their conclusions — read the
+                 STATUS entry instead. make_heat_time_map_clean.py here is
+                 SUPERSEDED and its exclusion rules are what the live pipeline
+                 deliberately rejects (see NO DATA SELECTION below).
+data/raw/        What the RIG wrote. Never hand-edit. Capture folders keep
+                 their original names (console_* sweep_* pulse_* isense_* noise_*).
+data/derived/    What the PIPELINE computed. Regenerable, but committed so
+                 analysed results travel with a clone.
+```
+
+**Path constants, not CWD.** Every script in `analysis/` and `diagnostics/` that touches data resolves `RAW` and/or `DERIVED` off its own `__file__` (`../data/raw`, `../data/derived`), so they run from any working directory. (`plot_style.py` touches no paths; `make_rnn_profile.py` writes `../profiles`.) If you add a script there, follow that pattern — do not use bare relative paths.
+
+**`cycles.csv` is the one derived file that stays under `data/raw/`**, next to the capture it came from: it is per-capture provenance and `operator_sweep_report.py` takes that sweep folder as its only argument. Only merged, cross-campaign tables go to `data/derived/`.
+
+**NO DATA SELECTION.** `analyze_raw.py` emits exactly one row per commanded cycle — nothing dropped, thresholded, or averaged away. Quality is reported as *columns* (`clipped` / `railed` / `cc_pct` / `bootstrap`). This table is RNN training data; deciding which pulses "count" belongs to the training pipeline, not here. Do not add filtering to the pipeline.
+
+**Five raw writers** decide where new captures land — keep them pointed at `data/raw/`: `config.yaml` `run.output_dir`, `lib_config.RunConfig.output_dir`, `operator_current_sweep.py`, `operator_pulse_capture.py`, and the two diagnostics' `--outdir`. `lib_analysis.latest_session()` globs `data/raw/console_*` to auto-pick a session for the notebook.
+
+The former CLI plotters (`analyze_sma.py`/`sma_plots.py`) and legacy recorder (`sma_recorder.py`/`session.py`/`operator_io.py`/`run_experiment.py`) were removed here (they remain in V3 and git history).
 
 ### Recorder architecture (`Experiment_SMACharacterizationV3/`)
 
