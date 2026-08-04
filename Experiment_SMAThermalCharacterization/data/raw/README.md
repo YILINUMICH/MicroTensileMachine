@@ -1,0 +1,311 @@
+# `data/raw/` — capture format and how to read it
+
+Everything in this folder is **what the rig wrote**. Never hand-edit it.
+Derived results belong in `../derived/` (the one exception is `cycles.csv`,
+which `analysis/analyze_raw.py` writes *inside* each sweep folder as
+per-capture provenance).
+
+This file documents the on-disk format of a capture so it can be read from
+scratch — including the **voltage → µm and voltage → mN conversions**, which
+are the two things a raw file cannot tell you about itself.
+
+Folder prefixes: `console_*` (console sessions), `sweep_*` (condition sweeps),
+`pulse_*` (single-pulse captures), `isense_*` / `noise_*` (diagnostics).
+
+---
+
+## 1. A capture is THREE files, not one
+
+Each sweep condition writes a sibling trio:
+
+```
+sweep_20260731_155129/
+  c23_level_850mA_h400ms.csv           # the samples
+  c23_level_850mA_h400ms.meta.json     # clock offset, protocol, capture time
+  c23_level_850mA_h400ms.console.log   # firmware markers = the pulse schedule
+```
+
+The CSV **cannot be interpreted alone**: the M4↔M7 clock offset lives in
+`meta.json` and the heat-pulse schedule lives in `console.log`. The filename
+carries the commanded condition (`c<NN>_level_<mA>mA_h<ms>ms`).
+
+`meta.json` for the worked example used throughout this document:
+
+```json
+{ "seq": 23, "level_mA": 850.0, "heat_ms": 400, "cool_s": 30.0,
+  "cycles": 5, "m4_clock_offset_s": 2.194649,
+  "captured_utc": "2026-07-31T21:16:09.075059+00:00" }
+```
+
+`cycles: 5` means **6 pulses** — the bootstrap cycle plus five. `captured_utc`
+is stamped at *save* time, i.e. after the capture ended.
+
+Console sessions (`console_*/`) instead write continuous `h7.csv` / `stage.csv`
+/ `status.csv` / `events.csv` + `video/`; `h7.csv` uses the same row format
+described below.
+
+## 2. Row format
+
+Long/tidy — one row per sample per stream, **all streams interleaved in one
+file in arrival order**:
+
+```
+src,hw_us,value,raw_code,seq
+2,596675075,1.77055000,2970490,2389117
+1,596676082,4.65150400,1997805871,2389126
+```
+
+| column | meaning |
+|---|---|
+| `src` | stream id — the demux key (§3) |
+| `hw_us` | firmware `micros()` timestamp, µs. **32-bit: wraps every 4294.97 s** |
+| `value` | physical value — **units depend on `src`** (§3) |
+| `raw_code` | pre-conversion code: ADC code for `src=1/2`, DAC code for `src=3/6`, always `0` for `src=4/7` |
+| `seq` | **per-`src`** sample counter. A step ≠ 1 means samples were dropped in transport |
+
+There is deliberately **no host timestamp column**. Host stamps are USB-batched
+(σ 3.4 ms) and useless as a time base; `hw_us` is the firmware clock.
+
+Written verbatim by `lib_h7_session.save_capture()` (`lib_h7_session.py:352`) —
+**no host-side filtering of any kind is applied**, unlike the console path
+(`lib_workers.py:432`).
+
+## 3. The streams
+
+Measured on `c23_level_850mA_h400ms.csv` (560 588 rows, 19 MB, 190 s):
+
+| `src` | channel | `value` unit | rate | stamped by |
+|---|---|---|---|---|
+| `1` | laser displacement (Keyence IL-030 → ADC1) | **volts** | 496 Hz read / **400 SPS real** | **M4** |
+| `2` | load cell (LCA-9PC → ADC2) | **volts** | 496 Hz read / **400 SPS real** | **M4** |
+| `3` | SMA voltage | **volts** | 981 Hz | M7 |
+| `4` | SMA current | **amps** (not mA, not volts) | 981 Hz | M7 |
+| `5` | SMA resistance | ohms | — | M7 |
+| `6` | CC command `u` | volts | 15 Hz | M7 |
+| `7` | CC `R_est` | ohms | 15 Hz | M7 |
+| `0xF0+` | state-machine events | — | — | M7 |
+
+`src=5` is emitted by the production firmware but **not** by the constant-current
+fork, which streams `3/4` plus its own `6/7` — so on `cccycle` captures (all the
+2026-07-31 sweeps) resistance must be derived as `src3 / src4`.
+
+## 4. Voltage → physical units
+
+Raw `value` for `src=1/2` is **volts at the ADC**. The calibration constants are
+*not* in the capture; they live in the calibration modules and are copied into
+`config.yaml` (`calibration:`) and `analysis/analyze_raw.py`.
+
+### 4.1 Laser → micrometres
+
+Source: `Calibrate_LaserHead/calibration.json` (2026-05-27 run09, bare EVM,
+R² = 0.9999980).
+
+```
+k_mV_per_um = -0.49779577092171906
+V0_mV       =  2503.7500968693835
+
+displacement_um = (V_mV - V0_mV) / k_mV_per_um
+                = (value_volts * 1000 - 2503.7501) / -0.497795771
+```
+
+- **`k` is negative** — voltage *falls* as displacement rises. During a heat
+  pulse the laser voltage drops, which is why `dx_um` comes out positive; that
+  positive number is the contraction stroke.
+- Scale: **1 mV = 2.009 µm**, so µm-level work needs mV-level noise.
+- **Analog window ≈ 10.04 mm**: 0 V → **+5029.7 µm**, 5 V → **−5014.6 µm**.
+  The IL-030 head senses 25 mm but the amplifier maps only ~10 mm onto 0–5 V,
+  so **the 0 V rail is a scaling limit, not the sensor's range** — do not
+  "fix" it by rescaling, that invalidates `k`/`V0`.
+- **Railed** = the excursion endpoint reaches within 30 µm of +5029.7 µm.
+  `analyze_raw.py` recomputes this from the endpoint rather than trusting any
+  upstream flag; at 950 mA × 400 ms the laser sat at 0.0010 V for 1228 samples
+  and came back unflagged. A railed `dx_um` is a **lower bound**, not a
+  measurement.
+
+**Legacy constants `k = -0.1171 mV/µm`, `V0 = 566.957 mV` are INVALID here** —
+they came through a since-removed Waveshare HAT with a ~4.4× attenuator.
+
+### 4.2 Load cell → millinewtons
+
+Source: `Calibrate_LoadCell/calibration.json` (2026-05-28 run07, 116 points,
+R² = 0.99986).
+
+```
+sensitivity_mV_per_mN = 10.200865238052671
+V0_mV                 = -34.185523054186675
+
+force_mN = (V_mV - V0_mV) / sensitivity_mV_per_mN
+         = (value_volts * 1000 + 34.1855) / 10.200865238
+```
+
+- Scale: **1 V = 98.0309 mN**. The offset term contributes a constant
+  **+3.351 mN**.
+- Full scale 490 mN ≈ 4.964 V; `analyze_raw.py` treats **≥ 4.999 V as
+  `clipped`**, where `dF_mN` becomes a lower bound.
+- **Known uncertainty: ±~5 mN of fwd/rev hysteresis** (`hysteresis_mN_equivalent`
+  in the JSON) — mechanical, from the spring/fixture, not the amplifier.
+  Propagate it on any absolute force number.
+
+**A discrepancy to know about.** The pipeline (`analysis/analyze_raw.py` and
+`analysis/get_cycle.py`) uses `F_MN_PER_V = 1e3 / 10.200865238` and computes
+force as `V * F_MN_PER_V`, i.e. it **omits the −34.19 mV offset**:
+
+- `dF_mN` (the per-pulse force *rise*) is a difference, so the offset **cancels
+  exactly** — that column is correct.
+- `F_base_mN` (absolute baseline force) therefore reads **3.35 mN low**.
+
+Use the full form above whenever you need absolute force.
+
+### 4.3 SMA electrical
+
+`src=3` is volts and `src=4` is **amps**, both measured, so:
+
+```
+R_ohm   = src3 / src4          # guard: only where src4 > 0.02 A
+power_W = src3 * src4          # true V*I, NOT I^2*R or V^2/R
+```
+
+- Divide/multiply **after** averaging, never average per-sample ratios: R
+  carries ~24% per-sample noise, which only falls to ~2.4% averaged over 100 ms
+  (≈98 samples).
+- **`src=3` and `src=4` each read ~+7% high** from ADC conversion duty. The
+  ratio cancels it exactly, so **R is immune**; **power is ~+14% high**. This is
+  *not* corrected in the captures or in `heat_time_map_*.csv` — it is recorded
+  in `../derived/heat_time_map_20260731_all_meta.json` with `"applied": false`
+  so absolute units stay recoverable and a calibration change is detectable.
+- Energy is `∫ P dt` over the heat window (`analysis/energy_table.py`), **not**
+  `p_hot_W × heat_ms` — the latter under-reads by 1.7% at 100 ms and 4.9% at
+  400 ms, a duration-dependent bias.
+
+## 5. Six things that will bite you
+
+1. **Unwrap `hw_us` per `src`.** It is a 32-bit µs counter (wraps at 4294.97 s
+   ≈ 71.6 min) and a 2 h campaign straddles it. Unwrap *per stream*: each is
+   monotonic on its own, but they interleave in the file, so a global unwrap
+   sees false backward jumps. `c20_level_550mA_h400ms` in
+   `sweep_20260731_144243` wraps mid-record. (`analyze_raw.unwrap_us`.)
+2. **Apply `m4_clock_offset_s` to `src=1/2` only.** Laser and load are stamped
+   by the M4, the SMA channels by the M7, and **M7 runs ~2.19 s ahead**. Joined
+   untreated, the displacement peak lands *before* the current pulse that caused
+   it. Effect preceding cause = you skipped this step.
+3. **`value` units differ per stream.** `src=4` is amps. Treating it as volts
+   silently yields 1000× wrong currents.
+4. **~19% of `src=1/2` rows are zero-order-hold duplicates.** The stream is
+   *read* at 496 Hz but the ADC converts at 400 SPS, so ~19% of rows repeat the
+   previous `raw_code`. **Effective rate 400 Hz, Nyquist 200 Hz.** Detect with
+   `np.diff(raw_code) == 0` and decimate to changed-code samples if you need the
+   true rate; averaging over duplicates is harmless.
+5. **`seq` gaps mean dropped samples.** Per-`src` counter; check
+   `np.diff(seq) == 1` before trusting continuity. (`c23`: zero gaps on every
+   stream.)
+6. **Nothing is filtered.** Sweep captures are written verbatim. In particular,
+   some firmware builds emit a `value == 0` sample with a *non-zero* `raw_code`
+   on ~every 32nd ADC1 frame; the console path drops these
+   (`lib_workers.py:432`), the sweep path does not. Check for them —
+   `c23` happens to have none, but on a console session removing 1.2% of such
+   rows cut laser σ from 162 mV to 0.83 mV.
+
+**Laser artifacts worth knowing** (they are instrument, not motion): a ~3.3 µm
+step coincident with each fire is drive EMI feedthrough, and the idle "noise" is
+mostly a coherent **65.8 Hz instrumental tone** (~74% of variance), which is
+above the 400 Hz stream's usable band but will alias if you decimate without
+averaging first.
+
+## 6. Finding the heat pulses — do not threshold the current
+
+The cool phase carries a 0.5 V idle bias → ~107 mA whose noise reaches p95
+~155 mA and p99.9 ~200 mA, so a 150–250 mA heat pulse sits **inside** that band.
+Thresholding returned **36 phantom cycles at 150 mA × 100 ms against 6
+commanded**. Instead, windows come from the firmware's own markers, in the
+`console.log`:
+
+```
+[   0.125] [SMA] [ACT] heat n=1/6 I=850.0mA ms=400        <- one per cycle, host clock
+[   1.078] [STATUS] ... m7_us=602558659 ...               <- pins host clock to M7 clock
+```
+
+1. Least-squares fit `host_t → m7_us` over the `[STATUS]` pairs, evaluate at
+   each `[ACT] heat` marker (residual mean −0.040 s, sd 0.044 s).
+2. Refine with a matched filter: slide a `heat_ms`-wide window ±0.15 s around
+   that estimate and take the position of maximum mean current.
+
+This is implemented in `analysis/analyze_raw.py` (`schedule_windows` + `refine`)
+and `analysis/get_cycle.py`. **Use them rather than re-deriving.**
+
+## 7. Minimal reader
+
+```python
+import json, numpy as np, pandas as pd
+
+stem = "sweep_20260731_155129/c23_level_850mA_h400ms"
+K_MV_PER_UM, V0_MV = -0.49779577092171906, 2503.7500968693835
+SENS_MV_PER_MN, F_V0_MV = 10.200865238052671, -34.185523054186675
+
+def unwrap_us(us):                      # 32-bit micros() rollover
+    us = np.asarray(us, dtype=np.float64)
+    return us + 2**32 * np.cumsum(np.r_[0, np.diff(us) < -2**31])
+
+d = pd.read_csv(stem + ".csv")
+meta = json.load(open(stem + ".meta.json"))
+
+d["t"] = np.nan                          # unwrap PER STREAM
+for s, g in d.groupby("src", sort=False):
+    d.loc[g.index, "t"] = unwrap_us(g["hw_us"].to_numpy()) / 1e6
+d.loc[d["src"].isin((1, 2)), "t"] += meta["m4_clock_offset_s"]   # onto the M7 clock
+
+laser = d[d["src"] == 1]
+load  = d[d["src"] == 2]
+sma_v = d[d["src"] == 3]
+sma_i = d[d["src"] == 4]                 # AMPS
+
+disp_um  = (laser["value"] * 1e3 - V0_MV) / K_MV_PER_UM
+force_mN = (load["value"] * 1e3 - F_V0_MV) / SENS_MV_PER_MN
+```
+
+For per-cycle work, skip all of the above:
+
+```python
+import sys; sys.path.insert(0, "../../analysis")
+from get_cycle import get_cycle
+df = get_cycle("sweep_20260731_155129", 850, 400, cycle=1)
+# -> t_s laser load sma_v sma_i cc_u cc_r_est laser_mm force_mN power_W sma_r phase
+#    already unwrapped, clock-aligned, converted, and phase-labelled
+#    (phase ∈ pre/heat/cool, t_s rebased so heat onset is t=0)
+```
+
+## 8. Cross-check what you built
+
+Every sweep folder carries `cycles.csv` (written by `analysis/analyze_raw.py`)
+with one row per commanded cycle. Re-derive its numbers and compare — a mismatch
+means a step above was missed. For `sweep_20260731_155129`, 850 mA × 400 ms:
+
+| cycle | bootstrap | `i_hot_mA` | `r_hot_ohm` | `p_hot_W` | `r_base_ohm` | `dx_um` | `dF_mN` |
+|---|---|---|---|---|---|---|---|
+| 1 | 1 | 847.4 | 4.034 | 2.897 | 4.659 | 6143.7 | 193.5 |
+| 2 | 0 | 850.9 | 4.028 | 2.916 | 4.704 | 6479.1 | 202.4 |
+| 3 | 0 | 852.1 | 4.033 | 2.928 | 4.708 | 6788.4 | 216.0 |
+| 4 | 0 | 849.9 | 4.052 | 2.927 | 4.728 | 6513.5 | 205.6 |
+| 5 | 0 | 849.5 | 4.023 | 2.903 | 4.686 | 6890.7 | 218.3 |
+| 6 | 0 | 851.7 | 4.090 | 2.966 | 4.707 | 6373.9 | 201.0 |
+
+Hot-state values are the **median over the last 20% of the heat window (min
+20 ms)**, not the whole-window mean — the wire is hottest at pulse end, and on a
+ramped bootstrap pulse the two differ by >15%.
+
+Sanity bands for this coil: `r_hot` ≈ 4.0–4.1 Ω, `r_base` ≈ 4.66–4.73 Ω
+(≈14% cold→hot swing), idle current ~107 mA at the 0.5 V LDO floor.
+
+## 9. Rules this folder is governed by
+
+- **NO DATA SELECTION.** `analyze_raw.py` emits exactly one row per *commanded*
+  cycle — nothing dropped, thresholded, or averaged away. Quality is reported as
+  columns (`clipped` / `railed` / `cc_pct` / `bootstrap` / `detect_ok`). This is
+  RNN training data; deciding which pulses "count" belongs to the training
+  pipeline.
+- **Raw stays raw.** Analysis code lives in `../../analysis/`, outputs in
+  `../derived/`. The only derived file under `data/raw/` is each sweep's
+  `cycles.csv`.
+- Captures are **committed on purpose** so results travel with a clone.
+
+See `../../README.md` for the module map and `../../STATUS.md` for per-campaign
+history.

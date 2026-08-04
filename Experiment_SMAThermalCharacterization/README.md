@@ -68,6 +68,12 @@ raw to one `*_h7.csv` per phase (with `src`/`channel` columns). For
 `src=4/5` the `value` column carries **amps / ohms** (firmware-computed),
 not volts.
 
+**On-disk capture format —** [`data/raw/README.md`](data/raw/README.md) is the
+reference for reading a capture from scratch: column/stream semantics, the
+`hw_us` unwrap and M4↔M7 clock offset, the laser **volts → µm** and load cell
+**volts → mN** conversions with their constants and rails, and a verified
+reader snippet.
+
 ## Run a session — `operator_console.py` (primary entry point)
 
 ```sh
