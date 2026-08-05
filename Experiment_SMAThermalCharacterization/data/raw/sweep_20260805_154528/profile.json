@@ -1,0 +1,27 @@
+{
+  "name": "extremes_200mA_500ms_shortwire",
+  "description": "Two EXTREMES off the edges of heat_time_map_30s_shortwire, on the same Dynalloy coil fitted 2026-08-05 (0.08 in, 10 mm solid, cold-stretched to 40 mm). Same protocol as the parent map -- 30 s cool, 5+1 cycles, 20 s cold-start settle -- so cells drop straight into the same table. 12 conditions, ~44 min. LOW EDGE, 200 mA x 100/200/300/400 ms: the parent map floored its ladder at 250 mA because v_idle=0.5 V at DAC code 0 puts the idle current at v_idle/R, and 150 mA would have sat on it. That floor was computed against the profile's ESTIMATED 3.5 ohm; the run measured R0 = 4.01 ohm at the idle bias, so the true floor is 0.5/4.01 = 125 mA and 200 mA clears it by 1.6x -- essentially the same margin 250 mA had against the estimate (1.7x). This row asks where actuation actually starts: at 250 mA / 400 ms the delivered energy is only 0.096 J and the stroke is already down in the baseline, so 200 mA is a threshold probe, and a near-zero stroke here is the RESULT, not a failed cell. HIGH EDGE, 250-950 mA x 500 ms: extends the heat axis one step past the parent map's 400 ms. Energy scales straight off the measured per-level power: 0.12 J at 250 mA up to 1.68 J at 950 mA. That top cell is ~35% past the ~1.24 J saturation cap seen on the long wire and 25% past the 400 ms cell that already saturates stroke, so it is deliberately into the regime where more energy stops buying stroke and starts only buying temperature. TWO RANGE WARNINGS CARRIED FORWARD FROM THE 2026-08-05 RUN. (1) LOAD CELL: cold baseline sat at 3.23 V of 5 V, leaving 1.77 V = ~18 gf of headroom, and 850/950 mA at 400 ms RAILED -- after which the amp latches below its own baseline for ~2 s, so the whole cycle's force is lost, not just the clipped span. At 500 ms expect the rail from ~750 mA up. The parent profile already asked for a cold baseline of ~1.8-2.0 V; setting it there before this run recovers ~13 gf and is what makes the top of the 500 ms row measurable. Unset, the row still yields resistance, power and stroke. (2) LASER: fine, but watch it. Baseline 4.66 V with 5.29 mm used and 4.06 mm left to the 0 V rail at 950 mA / 400 ms; if 500 ms is still climbing rather than saturated, the top cell can approach that rail. GUARD unchanged at r_min_ohm 1.6 = ~40% of the measured 4.01 ohm, passing the 125 mA idle bias with room. ORDER is gentlest-first and walks INTO the unexplored regime, never out of it: the whole 200 mA row first (ascending heat), then the 500 ms row ascending in current, so the longest pulse at the highest current is the last thing the wire sees.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 30,
+  "cycles": 5,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "conditions": [
+    { "i_ma": 200, "heat_ms": 100 },
+    { "i_ma": 200, "heat_ms": 200 },
+    { "i_ma": 200, "heat_ms": 300 },
+    { "i_ma": 200, "heat_ms": 400 },
+    { "i_ma": 250, "heat_ms": 500 },
+    { "i_ma": 350, "heat_ms": 500 },
+    { "i_ma": 450, "heat_ms": 500 },
+    { "i_ma": 550, "heat_ms": 500 },
+    { "i_ma": 650, "heat_ms": 500 },
+    { "i_ma": 750, "heat_ms": 500 },
+    { "i_ma": 850, "heat_ms": 500 },
+    { "i_ma": 950, "heat_ms": 500 }
+  ]
+}
