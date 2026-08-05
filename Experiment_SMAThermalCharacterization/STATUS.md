@@ -50,6 +50,63 @@ Three things that had to move with it, easy to miss:
 travel with a clone. The module's entire ignore set stays machine-local: `.claude/`,
 `__pycache__/`, `zaber_config.json`.
 
+## 2026-08-05 — Dynalloy short-wire campaign: 44 cells + a sweep-agnostic plotter
+
+New coil fitted (0.08 in, 10 mm solid, cold-stretched to 40 mm). Three captures,
+all committed under `data/raw/`:
+
+| capture | grid | profile |
+|---|---|---|
+| `sweep_20260805_105318` | 8 levels (250–950 mA) × 100/200/300/400 ms, 32 cells | `heat_time_map_30s_shortwire` |
+| `sweep_20260805_154528` | 200 mA × 100–400 ms **+** 250–950 mA × 500 ms, 12 cells | `extremes_200mA_500ms_shortwire` |
+| `sweep_20260804_213705` | aborted on condition 1 — stale `r_min` guard, see below | — |
+
+**The cold-resistance guard has to track the wire.** `r_min_ohm` is ~45 % of the
+wire's cold R, not a constant. The 1.8 Ω coil's idle bias alone draws
+`v_idle/R = 0.5/1.8 = 278 mA`, which the long wire's 2.0 guard read as
+"impossible" and used to kill `sweep_20260804_213705` on its first condition.
+Default is now 1.6 (the Dynalloy coil at ~3.5 Ω estimated / **4.01 Ω measured**),
+and the abort message now names a stale guard as a cause alongside a corrupted
+sense. Prefer `r_min_ohm` in the profile so it rides with the data.
+
+**200 mA is the actuation floor, and it is a real floor.** The parent map stopped
+at 250 mA because `v_idle` at DAC code 0 sets an idle current of `v_idle/R`; that
+floor was computed against the *estimated* 3.5 Ω, but the measured 4.01 Ω puts it
+at 125 mA, so 200 mA clears it by 1.6×. The row runs, and the answer is that
+200 mA barely actuates: 20–40 µm of stroke and 0.1–0.3 gf, with the cool phase
+dominated by drift rather than any SMA relaxation. Recorded as a result, not a
+failed cell.
+
+**500 ms has not saturated the stroke.** 950 mA × 500 ms delivers ~1.68 J — ~35 %
+past the ~1.24 J cap seen on the long wire — and still buys travel: 7.6 mm
+against 5.3 mm at 400 ms. The laser survived it with ~2.2 mm to spare (min
+1.11 V of a 0–5 V window).
+
+**The load cell is preload-limited, not range-limited.** Cold baseline sat at
+3.23 V of 5 V, leaving only 1.77 V ≈ 18 gf of headroom against the cell's own
+50.3 gf full scale. Force rails at 850/950 mA × 400 ms and 750/850/950 mA ×
+500 ms. Two things make this worse than ordinary clipping: the amp does **not**
+recover cleanly — it latches ~0.2 V *below* its own baseline for ~2 s after
+coming off the rail, so the whole cycle's force is lost, not just the clipped
+span. `heat_time_map_30s_shortwire.json` had already specified a cold baseline of
+1.8–2.0 V; it was not set there. **Deliberately not corrected mid-campaign:**
+preload changes the wire's mechanical operating point, so re-setting it would
+break comparability with the 44 cells already captured. Re-set it as its own
+step, record it, and re-run the affected cells. Resistance, power and stroke are
+valid on every railed cell.
+
+**`analysis/plot_drive_trajectory.py`** (new) — 4 channels × 2 time scales, the
+same conventions as `plot_trajectory.py` (Blues ordinal ramp + colorbar, median
+over the non-bootstrap repeats, no temporal filtering) with three differences:
+it discovers a sweep's grid off the capture filenames instead of a hardcoded
+`SRC_MAP`, so a fresh run plots with no code edit; mechanical channels are in
+**mm and grams-force** rather than µm/mN; and it detects amplifier rails on the
+raw 0–5 V channels, drawing a railed series **dotted with an in-panel note**
+rather than dropping it — the plot-side equivalent of the pipeline's `railed`
+column. `--by heat` transposes the colour axis onto pulse length for
+single-current rows; `--by auto` (default) emits by-level figures and falls back
+to by-heat only for cells those cannot show.
+
 ## Analysis findings
 
 - **Delivered energy E = ∫P dt is the state variable, not power** (2026-08-02,
