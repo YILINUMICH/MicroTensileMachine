@@ -1,0 +1,48 @@
+{
+  "name": "n7_ladder",
+  "description": "Steep-region thickening: 500 ms row, 50 mA steps, 950 mA excluded unattended (asset protection). Trainable.",
+  "protocol": "structured characterization block, repeated cycles per condition",
+  "port": "COM8",
+  "max_ma": 1000,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "settle_s": 40.0,
+  "cycles": 5,
+  "conditions": [
+    {
+      "i_ma": 550.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 600.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 650.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 700.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 750.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 800.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 850.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 900.0,
+      "heat_ms": 500
+    }
+  ],
+  "cool_s": 30.0
+}

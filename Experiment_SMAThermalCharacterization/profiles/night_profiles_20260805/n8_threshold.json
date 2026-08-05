@@ -1,0 +1,40 @@
+{
+  "name": "n8_threshold",
+  "description": "Near-threshold floor: long low-current pulses. DELIBERATELY BELOW the 9.1 envelope (200-250 mA fails the 50 um floor on this coil) and kept per 9.4 \u2014 the network should see non-response as a real machine state. Flagged by its own low stroke, never filtered here.",
+  "protocol": "structured characterization block, repeated cycles per condition",
+  "port": "COM8",
+  "max_ma": 1000,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "settle_s": 40.0,
+  "cycles": 5,
+  "conditions": [
+    {
+      "i_ma": 200.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 200.0,
+      "heat_ms": 650
+    },
+    {
+      "i_ma": 200.0,
+      "heat_ms": 800
+    },
+    {
+      "i_ma": 250.0,
+      "heat_ms": 500
+    },
+    {
+      "i_ma": 250.0,
+      "heat_ms": 650
+    },
+    {
+      "i_ma": 250.0,
+      "heat_ms": 800
+    }
+  ],
+  "cool_s": 30.0
+}

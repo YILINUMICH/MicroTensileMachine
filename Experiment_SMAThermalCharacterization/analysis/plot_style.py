@@ -24,10 +24,35 @@ SHAPE, so no pair is ever separated by hue alone.
 
 # ordinal ramp: 100 -> 400 ms, light -> dark
 RAMP = ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]
-SYMBOL = ["circle", "square", "diamond", "triangle-up"]
+SYMBOL = ["circle", "square", "diamond", "triangle-up", "x", "star"]
 HEATS = [100, 200, 300, 400]
 COLOR = dict(zip(HEATS, RAMP))
 SHAPE = dict(zip(HEATS, SYMBOL))
+
+
+def check_heats(d, who):
+    """Warn LOUDLY if the data carries a heat time this palette cannot draw.
+
+    `HEATS` is a constant, and the plotters loop over it (`for h in ps.HEATS`)
+    rather than over the data — so any other heat time is silently skipped, with
+    no error and no gap in the output. That is how the 2026-08-05 Dynalloy
+    campaign's whole 500 ms row (48 cycles, 8 of 44 conditions) vanished from
+    plot_envelope.py while it printed "none excluded", violating the module's
+    NO DATA SELECTION rule. plot_envelope.py now derives its heat list from the
+    table; these two pages are still pinned to the 07-31 campaign, so this
+    guard exists to make the failure impossible to miss if that changes.
+
+    Returns the uncovered heat times (empty when all are drawable).
+    """
+    import sys
+    present = sorted(int(h) for h in d.heat_ms.unique())
+    missing = [h for h in present if h not in COLOR]
+    if missing:
+        print(f"  !! {who}: heat times {missing} are NOT in the palette and "
+              f"WILL BE DROPPED from every panel. Extend HEATS/RAMP (and "
+              f"re-run validate_palette.py) or derive the ramp from the data "
+              f"as plot_envelope.py does.", file=sys.stderr)
+    return missing
 
 SURFACE = "#fcfcfb"
 PLANE = "#f9f9f7"

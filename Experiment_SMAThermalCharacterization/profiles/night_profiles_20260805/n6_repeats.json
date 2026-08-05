@@ -1,0 +1,48 @@
+{
+  "name": "n6_repeats",
+  "description": "Cross-session probe cells: exact repeats of parent-map conditions, so session-to-session transfer can be measured against the 07-31 and 08-05 campaigns. Role pre-registered: TEST-ONLY.",
+  "protocol": "structured characterization block, repeated cycles per condition",
+  "port": "COM8",
+  "max_ma": 1000,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "settle_s": 40.0,
+  "cycles": 5,
+  "conditions": [
+    {
+      "i_ma": 450.0,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 750.0,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 650.0,
+      "heat_ms": 100
+    },
+    {
+      "i_ma": 550.0,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 350.0,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 850.0,
+      "heat_ms": 200
+    },
+    {
+      "i_ma": 250.0,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 650.0,
+      "heat_ms": 400
+    }
+  ],
+  "cool_s": 30.0
+}

@@ -1,0 +1,429 @@
+{
+  "name": "n2b_shuffle_test",
+  "description": "OOD duty TEST set, half B of 2 \u2014 same protocol as n1, different seed, so the SEQUENCE is unseen. Role pre-registered: TEST-ONLY, never in train or validation.",
+  "protocol": "guideline 9.2 randomized excitation: continuous LHS draws inside the 08-05 envelope, ONE pulse per condition, cool_s randomized per condition",
+  "port": "COM8",
+  "max_ma": 1000,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "settle_s": 2.0,
+  "cycles": 0,
+  "conditions": [
+    {
+      "i_ma": 620.0,
+      "heat_ms": 165,
+      "cool_s": 21.2
+    },
+    {
+      "i_ma": 285.0,
+      "heat_ms": 370,
+      "cool_s": 39.5
+    },
+    {
+      "i_ma": 445.0,
+      "heat_ms": 325,
+      "cool_s": 15.7
+    },
+    {
+      "i_ma": 280.0,
+      "heat_ms": 380,
+      "cool_s": 28.2
+    },
+    {
+      "i_ma": 515.0,
+      "heat_ms": 145,
+      "cool_s": 44.8
+    },
+    {
+      "i_ma": 885.0,
+      "heat_ms": 410,
+      "cool_s": 34.1
+    },
+    {
+      "i_ma": 680.0,
+      "heat_ms": 260,
+      "cool_s": 42.3
+    },
+    {
+      "i_ma": 760.0,
+      "heat_ms": 285,
+      "cool_s": 21.3
+    },
+    {
+      "i_ma": 535.0,
+      "heat_ms": 155,
+      "cool_s": 44.3
+    },
+    {
+      "i_ma": 630.0,
+      "heat_ms": 190,
+      "cool_s": 31.5
+    },
+    {
+      "i_ma": 480.0,
+      "heat_ms": 275,
+      "cool_s": 15.6
+    },
+    {
+      "i_ma": 405.0,
+      "heat_ms": 150,
+      "cool_s": 28.7
+    },
+    {
+      "i_ma": 810.0,
+      "heat_ms": 230,
+      "cool_s": 25.7
+    },
+    {
+      "i_ma": 415.0,
+      "heat_ms": 415,
+      "cool_s": 35.4
+    },
+    {
+      "i_ma": 755.0,
+      "heat_ms": 235,
+      "cool_s": 39.9
+    },
+    {
+      "i_ma": 655.0,
+      "heat_ms": 495,
+      "cool_s": 28.0
+    },
+    {
+      "i_ma": 670.0,
+      "heat_ms": 105,
+      "cool_s": 29.4
+    },
+    {
+      "i_ma": 520.0,
+      "heat_ms": 440,
+      "cool_s": 36.9
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 315,
+      "cool_s": 20.5
+    },
+    {
+      "i_ma": 800.0,
+      "heat_ms": 340,
+      "cool_s": 24.4
+    },
+    {
+      "i_ma": 735.0,
+      "heat_ms": 380,
+      "cool_s": 37.8
+    },
+    {
+      "i_ma": 670.0,
+      "heat_ms": 440,
+      "cool_s": 40.2
+    },
+    {
+      "i_ma": 705.0,
+      "heat_ms": 125,
+      "cool_s": 15.5
+    },
+    {
+      "i_ma": 265.0,
+      "heat_ms": 495,
+      "cool_s": 38.9
+    },
+    {
+      "i_ma": 580.0,
+      "heat_ms": 345,
+      "cool_s": 18.6
+    },
+    {
+      "i_ma": 740.0,
+      "heat_ms": 320,
+      "cool_s": 22.0
+    },
+    {
+      "i_ma": 455.0,
+      "heat_ms": 460,
+      "cool_s": 41.2
+    },
+    {
+      "i_ma": 855.0,
+      "heat_ms": 400,
+      "cool_s": 36.5
+    },
+    {
+      "i_ma": 365.0,
+      "heat_ms": 350,
+      "cool_s": 21.9
+    },
+    {
+      "i_ma": 635.0,
+      "heat_ms": 155,
+      "cool_s": 31.9
+    },
+    {
+      "i_ma": 610.0,
+      "heat_ms": 335,
+      "cool_s": 42.1
+    },
+    {
+      "i_ma": 570.0,
+      "heat_ms": 185,
+      "cool_s": 21.5
+    },
+    {
+      "i_ma": 345.0,
+      "heat_ms": 230,
+      "cool_s": 32.9
+    },
+    {
+      "i_ma": 765.0,
+      "heat_ms": 305,
+      "cool_s": 41.1
+    },
+    {
+      "i_ma": 300.0,
+      "heat_ms": 370,
+      "cool_s": 19.8
+    },
+    {
+      "i_ma": 900.0,
+      "heat_ms": 270,
+      "cool_s": 35.1
+    },
+    {
+      "i_ma": 395.0,
+      "heat_ms": 430,
+      "cool_s": 17.8
+    },
+    {
+      "i_ma": 505.0,
+      "heat_ms": 240,
+      "cool_s": 15.5
+    },
+    {
+      "i_ma": 380.0,
+      "heat_ms": 475,
+      "cool_s": 30.3
+    },
+    {
+      "i_ma": 645.0,
+      "heat_ms": 430,
+      "cool_s": 23.8
+    },
+    {
+      "i_ma": 325.0,
+      "heat_ms": 465,
+      "cool_s": 29.6
+    },
+    {
+      "i_ma": 600.0,
+      "heat_ms": 135,
+      "cool_s": 16.8
+    },
+    {
+      "i_ma": 255.0,
+      "heat_ms": 415,
+      "cool_s": 25.3
+    },
+    {
+      "i_ma": 470.0,
+      "heat_ms": 300,
+      "cool_s": 32.7
+    },
+    {
+      "i_ma": 315.0,
+      "heat_ms": 490,
+      "cool_s": 44.0
+    },
+    {
+      "i_ma": 385.0,
+      "heat_ms": 420,
+      "cool_s": 23.3
+    },
+    {
+      "i_ma": 365.0,
+      "heat_ms": 340,
+      "cool_s": 17.9
+    },
+    {
+      "i_ma": 515.0,
+      "heat_ms": 145,
+      "cool_s": 44.8
+    },
+    {
+      "i_ma": 845.0,
+      "heat_ms": 475,
+      "cool_s": 37.3
+    },
+    {
+      "i_ma": 885.0,
+      "heat_ms": 410,
+      "cool_s": 34.1
+    },
+    {
+      "i_ma": 725.0,
+      "heat_ms": 260,
+      "cool_s": 24.3
+    },
+    {
+      "i_ma": 800.0,
+      "heat_ms": 340,
+      "cool_s": 24.4
+    },
+    {
+      "i_ma": 695.0,
+      "heat_ms": 165,
+      "cool_s": 20.0
+    },
+    {
+      "i_ma": 535.0,
+      "heat_ms": 155,
+      "cool_s": 44.3
+    },
+    {
+      "i_ma": 540.0,
+      "heat_ms": 370,
+      "cool_s": 38.3
+    },
+    {
+      "i_ma": 445.0,
+      "heat_ms": 325,
+      "cool_s": 15.7
+    },
+    {
+      "i_ma": 830.0,
+      "heat_ms": 390,
+      "cool_s": 43.4
+    },
+    {
+      "i_ma": 285.0,
+      "heat_ms": 370,
+      "cool_s": 39.5
+    },
+    {
+      "i_ma": 815.0,
+      "heat_ms": 375,
+      "cool_s": 26.2
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 315,
+      "cool_s": 20.5
+    },
+    {
+      "i_ma": 835.0,
+      "heat_ms": 210,
+      "cool_s": 33.5
+    },
+    {
+      "i_ma": 875.0,
+      "heat_ms": 370,
+      "cool_s": 28.1
+    },
+    {
+      "i_ma": 795.0,
+      "heat_ms": 170,
+      "cool_s": 22.7
+    },
+    {
+      "i_ma": 865.0,
+      "heat_ms": 355,
+      "cool_s": 30.9
+    },
+    {
+      "i_ma": 430.0,
+      "heat_ms": 325,
+      "cool_s": 15.4
+    },
+    {
+      "i_ma": 490.0,
+      "heat_ms": 365,
+      "cool_s": 31.1
+    },
+    {
+      "i_ma": 710.0,
+      "heat_ms": 425,
+      "cool_s": 24.2
+    },
+    {
+      "i_ma": 555.0,
+      "heat_ms": 115,
+      "cool_s": 14.0
+    },
+    {
+      "i_ma": 560.0,
+      "heat_ms": 135,
+      "cool_s": 43.0
+    },
+    {
+      "i_ma": 295.0,
+      "heat_ms": 395,
+      "cool_s": 27.3
+    },
+    {
+      "i_ma": 345.0,
+      "heat_ms": 465,
+      "cool_s": 18.6
+    },
+    {
+      "i_ma": 485.0,
+      "heat_ms": 250,
+      "cool_s": 24.9
+    },
+    {
+      "i_ma": 435.0,
+      "heat_ms": 490,
+      "cool_s": 35.8
+    },
+    {
+      "i_ma": 780.0,
+      "heat_ms": 220,
+      "cool_s": 19.6
+    },
+    {
+      "i_ma": 595.0,
+      "heat_ms": 350,
+      "cool_s": 34.6
+    }
+  ],
+  "seed": 20260808,
+  "envelope": {
+    "source": "sweep_20260805_105318 + sweep_20260805_154528 (Dynalloy short wire fitted 2026-08-05)",
+    "rule": "guideline 9.1: median |dx| >= max(50 um, 3*sigma), not railed, cc within 10%",
+    "i_ma": [
+      250.0,
+      900.0
+    ],
+    "heat_ms_max": 500,
+    "heat_ms_min_vs_i_ma": [
+      [
+        250.0,
+        400.0
+      ],
+      [
+        350.0,
+        200.0
+      ],
+      [
+        450.0,
+        100.0
+      ],
+      [
+        900.0,
+        100.0
+      ]
+    ],
+    "excluded_overnight": "950 mA (asset protection, unattended)",
+    "rejected_cells": [
+      "200x100",
+      "200x200",
+      "200x300",
+      "200x400",
+      "250x100",
+      "250x200",
+      "250x300",
+      "350x100"
+    ]
+  }
+}

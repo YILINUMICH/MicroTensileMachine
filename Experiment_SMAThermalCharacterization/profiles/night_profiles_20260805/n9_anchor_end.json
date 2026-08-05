@@ -1,0 +1,24 @@
+{
+  "name": "n9_anchor_end",
+  "description": "Overnight drift bracket, end of night. The SAME two conditions run at n0/n3/n9; compare dx and r_base across the three to measure drift and fatigue directly. Excluded from training (measurement, not data).",
+  "protocol": "structured characterization block, repeated cycles per condition",
+  "port": "COM8",
+  "max_ma": 1000,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "settle_s": 40.0,
+  "cycles": 5,
+  "conditions": [
+    {
+      "i_ma": 650.0,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 450.0,
+      "heat_ms": 400
+    }
+  ],
+  "cool_s": 30.0
+}

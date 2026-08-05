@@ -91,15 +91,50 @@ POST_S = 1.50       # response window past heat end (force lags the current)
 # medians BELOW the whole-window mean on ramp pulses, the opposite of physics.
 SEARCH_S = 0.15
 
-# (folder, i_low_mA, seeded, run_type). Provenance travels with every row.
-RUNS = [
-    ("sweep_20260731_134414", 100, 0, "probe"),
-    ("sweep_20260731_141513", 100, 1, "probe"),
-    ("sweep_20260731_144243", 100, 1, "probe"),
-    ("sweep_20260731_145838", 100, 1, "map"),
-    ("sweep_20260731_155129",   0, 1, "map"),
-]
-MERGED = "heat_time_map_20260731_all.csv"
+# csv.writer defaults to CRLF. The committed tables are LF (written on the
+# Windows rig, where git normalised them on commit), so regenerating on macOS
+# rewrote all 261 lines with IDENTICAL field values — pure line-ending churn
+# that buries a real content change in a whole-file diff. Pin LF so stage 1 is
+# byte-reproducible on either host, which is the property STATUS claims for it.
+LF = "\n"
+
+# ═══ CAMPAIGNS ═══════════════════════════════════════════════════════════════
+# One entry per WIRE + protocol. Guideline §7: "data with different protocols is
+# trained separately, so it must be identifiable" — a different coil is the
+# biggest protocol change there is, so each campaign gets its OWN merged table
+# instead of pooling into one. Pooling was also actively unsafe: MERGED used to
+# be a single hardcoded filename written unconditionally, so
+# `analyze_raw.py <one-folder>` rewrote the whole 07-31 table with just that
+# folder's rows.
+#
+# runs = (folder, i_low_mA, seeded, run_type). Provenance travels with every row.
+# run_type also declares the EXPECTED cycles per condition for self-check §8.1.
+CYCLES_EXPECTED = {"map": 6, "probe": 4, "extremes": 6, "random": 1}
+
+CAMPAIGNS = {
+    "20260731": {
+        "merged": "heat_time_map_20260731_all.csv",
+        "cool_s": 30.0,
+        "wire": "long coil, ~4.2-4.8 ohm cold",
+        "runs": [
+            ("sweep_20260731_134414", 100, 0, "probe"),
+            ("sweep_20260731_141513", 100, 1, "probe"),
+            ("sweep_20260731_144243", 100, 1, "probe"),
+            ("sweep_20260731_145838", 100, 1, "map"),
+            ("sweep_20260731_155129",   0, 1, "map"),
+        ],
+    },
+    "20260805_dynalloy": {
+        "merged": "heat_time_map_20260805_dynalloy_all.csv",
+        "cool_s": 30.0,
+        "wire": "Dynalloy 0.08 in, 10 mm solid, cold-stretched to 40 mm, "
+                "R0 = 4.01 ohm measured at the idle bias; fitted 2026-08-05",
+        "runs": [
+            ("sweep_20260805_105318", 0, 1, "map"),
+            ("sweep_20260805_154528", 0, 1, "extremes"),
+        ],
+    },
+}
 
 
 WRAP_S = 2 ** 32 / 1e6          # micros() is 32-bit: rolls over every 4294.97 s
@@ -338,7 +373,7 @@ def analyze_sweep(folder, i_low, seeded, run_type):
     if out:
         cols = list(out[0].keys())
         with open(os.path.join(RAW, folder, "cycles.csv"), "w", newline="") as fh:
-            w = csv.DictWriter(fh, fieldnames=cols)
+            w = csv.DictWriter(fh, fieldnames=cols, lineterminator=LF)
             w.writeheader()
             w.writerows(out)
     print(f"  {folder:26s} {len(out):4d} cycles")
@@ -346,9 +381,28 @@ def analyze_sweep(folder, i_low, seeded, run_type):
 
 
 def main(argv):
+    """Stage 1 over every campaign. With folder arguments, only those folders
+    are re-analysed and only the campaigns they belong to are rewritten — a
+    campaign that contributes no rows is left untouched rather than truncated."""
     want = set(argv) if argv else None
+    if want:
+        known = {f for c in CAMPAIGNS.values() for f, *_ in c["runs"]}
+        unknown = want - known
+        if unknown:
+            print(f"  NOT IN ANY CAMPAIGN: {', '.join(sorted(unknown))}")
+            print("  Add it to CAMPAIGNS in analyze_raw.py first — a folder "
+                  "with no campaign has no merged table to belong to.")
+            return 2
+    rc = 0
+    for name, camp in CAMPAIGNS.items():
+        if run_campaign(name, camp, want) != 0:
+            rc = 1
+    return rc
+
+
+def run_campaign(name, camp, want):
     allrows = []
-    for folder, i_low, seeded, run_type in RUNS:
+    for folder, i_low, seeded, run_type in camp["runs"]:
         if want and folder not in want:
             continue
         if not os.path.isdir(os.path.join(RAW, folder)):
@@ -356,7 +410,9 @@ def main(argv):
             continue
         allrows += analyze_sweep(folder, i_low, seeded, run_type)
     if not allrows:
-        return 1
+        return 0 if want else 1
+    MERGED = camp["merged"]
+    print(f"\ncampaign {name} — {camp['wire']}")
     order = ["level_mA", "heat_ms", "sweep", "run_type", "cycle", "bootstrap",
              # drive, whole-window
              "i_mA", "cc_pct", "u_V", "R_ohm",
@@ -373,7 +429,8 @@ def main(argv):
     allrows.sort(key=lambda r: (r["heat_ms"], r["level_mA"], r["sweep"],
                                 r["cycle"]))
     with open(os.path.join(DERIVED, MERGED), "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=order, extrasaction="ignore")
+        w = csv.DictWriter(fh, fieldnames=order, extrasaction="ignore",
+                           lineterminator=LF)
         w.writeheader()
         w.writerows(allrows)
     n_cond = len({(r["level_mA"], r["heat_ms"]) for r in allrows})
@@ -388,7 +445,8 @@ def main(argv):
               "w") as fh:
         json.dump({
             "campaign": MERGED,
-            "cool_s": 30.0,
+            "wire": camp["wire"],
+            "cool_s": camp["cool_s"],
             "laser": {"k_mV_per_um": K_MV_PER_UM, "V0_mV": V0_MV,
                       "source": "Calibrate_LaserHead 2026-05-27 run09",
                       "rail_um": LASER_RAIL_UM},
@@ -406,7 +464,7 @@ def main(argv):
 
     # ---- guideline §8: self-checks. Report loudly, never drop. ----
     print("\nself-checks:")
-    n_exp = {"map": 6, "probe": 4}
+    n_exp = CYCLES_EXPECTED
     bad_n = [(s, lv, h, n) for (s, lv, h, rt), n in
              {(r["sweep"], r["level_mA"], r["heat_ms"], r["run_type"]):
               sum(1 for x in allrows if (x["sweep"], x["level_mA"],

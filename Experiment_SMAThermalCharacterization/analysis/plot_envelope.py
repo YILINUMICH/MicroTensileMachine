@@ -51,9 +51,20 @@ import matplotlib.pyplot as plt
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
-HEATS = [100, 200, 300, 400]
-# Validated sequential ramp — see the COLOR note above before changing these.
-RAMP = {100: "#6baed6", 200: "#2171b5", 300: "#08306b", 400: "#041229"}
+# HEAT TIMES COME FROM THE DATA, never from a constant. A hardcoded
+# `HEATS = [100, 200, 300, 400]` silently dropped every cycle at any other heat
+# time: the 2026-08-05 Dynalloy campaign added a 500 ms row, and `aggregate()`
+# iterating the constant discarded all 48 of its cycles — 8 of 44 conditions —
+# while this script printed "none excluded". That is exactly the data selection
+# the module's NO DATA SELECTION rule forbids, so the heat list is now derived
+# from the table and the ramp is built to fit it.
+#
+# Validated sequential ramp anchors — see the COLOR note above before changing.
+# Sampling these at N points reproduces the four VALIDATED colours exactly when
+# N == 4. A longer ramp keeps the single hue and stays monotone in lightness by
+# construction, but has NOT been through validate_palette.py — re-run it before
+# treating a 5+-step ramp as verified.
+RAMP_ANCHORS = ["#6baed6", "#2171b5", "#08306b", "#041229"]
 SURFACE = "#fafafa"
 INK, INK_MUTED = "#1a1a1a", "#6b7280"
 K_MV_PER_UM = -0.49779577092171906
@@ -61,9 +72,36 @@ V0_MV = 2503.7500968693835
 LASER_RAIL_UM = (0.0 - V0_MV) / K_MV_PER_UM
 
 
+def heats_of(d):
+    """The heat times actually present, ascending. Ordinal, so order matters."""
+    return sorted(int(h) for h in d.heat_ms.unique())
+
+
+def build_ramp(heats):
+    """Map each heat time onto the sequential ramp, light -> dark.
+
+    Linear interpolation along RAMP_ANCHORS: with four heats the sample points
+    land exactly on the anchors, so existing figures are unchanged.
+    """
+    def _rgb(hx):
+        return [int(hx[i:i + 2], 16) for i in (1, 3, 5)]
+
+    anchors = [_rgb(c) for c in RAMP_ANCHORS]
+    n = len(heats)
+    out = {}
+    for k, h in enumerate(heats):
+        t = 0.0 if n == 1 else k / (n - 1) * (len(anchors) - 1)
+        lo = min(int(t), len(anchors) - 2)
+        f = t - lo
+        rgb = [round(anchors[lo][j] + f * (anchors[lo + 1][j] - anchors[lo][j]))
+               for j in range(3)]
+        out[h] = "#{:02x}{:02x}{:02x}".format(*rgb)
+    return out
+
+
 def aggregate(d):
     rows = []
-    for h in HEATS:
+    for h in heats_of(d):
         for lv in sorted(d.level_mA.unique()):
             s = d[(d.heat_ms == h) & (d.level_mA == lv)]
             if s.empty:
@@ -83,15 +121,27 @@ def aggregate(d):
                 "n_railed": int(s.railed.sum()),
                 # majority of cycles at a rail -> the median is a LOWER BOUND,
                 # drawn hollow with a dashed approach so the line never asserts
-                # a measurement the instrument could not make
+                # a measurement the instrument could not make.
+                #
+                # SATURATION IS PER CHANNEL. `railed` is the LASER leaving its
+                # window, which bounds dx; `clipped` is the LOAD CELL at 5 V,
+                # which bounds dF. They are not interchangeable: the 08-05
+                # Dynalloy campaign railed the laser 0 times and clipped force
+                # 28 times, so a combined flag drew the whole top of the STROKE
+                # chart as "lower bounds, not measurements" when every one of
+                # those displacements is exact. Keep `saturated` as the union
+                # for backward compatibility with anything reading the CSV.
                 "saturated": int(((s.clipped == 1) | (s.railed == 1)).sum() * 2 > len(s)),
+                "saturated_dx": int((s.railed == 1).sum() * 2 > len(s)),
+                "saturated_dF": int((s.clipped == 1).sum() * 2 > len(s)),
                 "cool_s": float(s.cool_s.median()),
             })
     return pd.DataFrame(rows)
 
 
 def chart(d, env, ycol_pt, ycol_med, ylabel, title, subtitle, out,
-          ceiling=None, ceiling_label=None):
+          ceiling=None, ceiling_label=None, satcol="railed",
+          satcol_med="saturated_dx"):
     fig, ax = plt.subplots(figsize=(11, 7))
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
@@ -102,12 +152,13 @@ def chart(d, env, ycol_pt, ycol_med, ylabel, title, subtitle, out,
                     xytext=(0, 6), textcoords="offset points",
                     va="bottom", ha="left", fontsize=10, color=INK_MUTED)
 
-    for h in HEATS:
-        c = RAMP[h]
+    ramp = build_ramp(heats_of(d))
+    for h in heats_of(d):
+        c = ramp[h]
         pts = d[d.heat_ms == h]
         if pts.empty:
             continue
-        sat = (pts.clipped == 1) | (pts.railed == 1)
+        sat = pts[satcol] == 1          # the rail that bounds THIS channel
         # every cycle is drawn; hollow = at a sensor rail, so a lower bound
         ax.scatter(pts.level_mA[~sat], pts[ycol_pt][~sat], s=26, color=c,
                    alpha=0.38, linewidths=0, zorder=2)
@@ -115,7 +166,8 @@ def chart(d, env, ycol_pt, ycol_med, ylabel, title, subtitle, out,
                    facecolors="none", edgecolors=c, linewidths=1.3, zorder=2)
 
         e = env[env.heat_ms == h].sort_values("level_mA")
-        xs, ys, sat_m = e.level_mA.to_numpy(), e[ycol_med].to_numpy(), e.saturated.to_numpy()
+        xs, ys = e.level_mA.to_numpy(), e[ycol_med].to_numpy()
+        sat_m = e[satcol_med].to_numpy()
         for k in range(len(xs) - 1):        # dash any segment reaching a rail
             style = "--" if (sat_m[k] or sat_m[k + 1]) else "-"
             ax.plot(xs[k:k + 2], ys[k:k + 2], style, color=c, lw=2.0, zorder=3)
@@ -170,23 +222,33 @@ def main(argv):
     print(f"  -> {os.path.basename(stem)}_envelope.csv "
           f"({len(env)} conditions, {len(d)} cycles, none excluded)")
 
-    n_sat = int(((d.clipped == 1) | (d.railed == 1)).sum())
     cool = d.cool_s.median()
-    sub = (f"{len(d)} cycles over {len(env)} conditions, {cool:.0f} s cool throughout"
-           f" — every cycle plotted, none removed\n"
-           f"line = median, first-cycle set held out · hollow + dashed = at a "
-           f"sensor rail ({n_sat} cycles): lower bounds, not measurements")
+    cools = sorted(d.cool_s.unique())
+    cool_txt = (f"{cool:.0f} s cool throughout" if len(cools) == 1
+                else f"cool {min(cools):.0f}-{max(cools):.0f} s")
+
+    def sub_for(n_sat, rail):
+        """Each chart names ITS OWN rail and count — a shared subtitle
+        attributed force clipping to the laser and vice versa."""
+        return (f"{len(d)} cycles over {len(env)} conditions, {cool_txt}"
+                f" — every cycle plotted, none removed\n"
+                f"line = median, first-cycle set held out · hollow + dashed = "
+                f"{rail} ({n_sat} cycles): lower bounds, not measurements")
 
     ceil_um = LASER_RAIL_UM - float(d.x_base_um.median())
     chart(d, env, "dx_um", "dx_um_median", "contraction stroke  Δx  (µm)",
-          "SMA actuation envelope — stroke vs current and pulse length", sub,
+          "SMA actuation envelope — stroke vs current and pulse length",
+          sub_for(int((d.railed == 1).sum()), "laser out of window"),
           stem + "_stroke.png",
           ceiling=ceil_um,
-          ceiling_label="laser 0 V rail — stroke available from typical rest")
+          ceiling_label="laser 0 V rail — stroke available from typical rest",
+          satcol="railed", satcol_med="saturated_dx")
     chart(d, env, "dF_mN", "dF_mN_median", "force rise  ΔF  (mN)",
-          "SMA actuation envelope — force vs current and pulse length", sub,
+          "SMA actuation envelope — force vs current and pulse length",
+          sub_for(int((d.clipped == 1).sum()), "load cell at the 5 V rail"),
           stem + "_force.png",
-          ceiling=490.0, ceiling_label="load cell full scale (490 mN)")
+          ceiling=490.0, ceiling_label="load cell full scale (490 mN)",
+          satcol="clipped", satcol_med="saturated_dF")
     return 0
 
 

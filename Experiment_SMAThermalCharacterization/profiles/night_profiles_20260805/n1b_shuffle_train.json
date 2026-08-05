@@ -1,0 +1,1054 @@
+{
+  "name": "n1b_shuffle_train",
+  "description": "TRAINABLE randomized excitation, half B of 2. One pulse per condition so every pulse follows a DIFFERENT predecessor; cool_s randomized so thermal history is not inferable from the command. Role pre-registered: TRAINABLE.",
+  "protocol": "guideline 9.2 randomized excitation: continuous LHS draws inside the 08-05 envelope, ONE pulse per condition, cool_s randomized per condition",
+  "port": "COM8",
+  "max_ma": 1000,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "settle_s": 2.0,
+  "cycles": 0,
+  "conditions": [
+    {
+      "i_ma": 335.0,
+      "heat_ms": 240,
+      "cool_s": 31.9
+    },
+    {
+      "i_ma": 865.0,
+      "heat_ms": 165,
+      "cool_s": 36.2
+    },
+    {
+      "i_ma": 730.0,
+      "heat_ms": 500,
+      "cool_s": 27.1
+    },
+    {
+      "i_ma": 810.0,
+      "heat_ms": 300,
+      "cool_s": 35.9
+    },
+    {
+      "i_ma": 470.0,
+      "heat_ms": 465,
+      "cool_s": 20.5
+    },
+    {
+      "i_ma": 680.0,
+      "heat_ms": 300,
+      "cool_s": 19.9
+    },
+    {
+      "i_ma": 360.0,
+      "heat_ms": 320,
+      "cool_s": 39.5
+    },
+    {
+      "i_ma": 760.0,
+      "heat_ms": 170,
+      "cool_s": 17.6
+    },
+    {
+      "i_ma": 755.0,
+      "heat_ms": 185,
+      "cool_s": 24.2
+    },
+    {
+      "i_ma": 455.0,
+      "heat_ms": 165,
+      "cool_s": 29.3
+    },
+    {
+      "i_ma": 815.0,
+      "heat_ms": 115,
+      "cool_s": 44.9
+    },
+    {
+      "i_ma": 545.0,
+      "heat_ms": 370,
+      "cool_s": 28.6
+    },
+    {
+      "i_ma": 755.0,
+      "heat_ms": 120,
+      "cool_s": 16.8
+    },
+    {
+      "i_ma": 305.0,
+      "heat_ms": 350,
+      "cool_s": 33.6
+    },
+    {
+      "i_ma": 765.0,
+      "heat_ms": 410,
+      "cool_s": 34.3
+    },
+    {
+      "i_ma": 400.0,
+      "heat_ms": 430,
+      "cool_s": 39.8
+    },
+    {
+      "i_ma": 605.0,
+      "heat_ms": 105,
+      "cool_s": 17.3
+    },
+    {
+      "i_ma": 715.0,
+      "heat_ms": 290,
+      "cool_s": 34.2
+    },
+    {
+      "i_ma": 820.0,
+      "heat_ms": 235,
+      "cool_s": 37.4
+    },
+    {
+      "i_ma": 270.0,
+      "heat_ms": 420,
+      "cool_s": 43.0
+    },
+    {
+      "i_ma": 700.0,
+      "heat_ms": 350,
+      "cool_s": 30.5
+    },
+    {
+      "i_ma": 745.0,
+      "heat_ms": 230,
+      "cool_s": 26.9
+    },
+    {
+      "i_ma": 405.0,
+      "heat_ms": 460,
+      "cool_s": 16.3
+    },
+    {
+      "i_ma": 635.0,
+      "heat_ms": 225,
+      "cool_s": 21.2
+    },
+    {
+      "i_ma": 585.0,
+      "heat_ms": 365,
+      "cool_s": 26.8
+    },
+    {
+      "i_ma": 825.0,
+      "heat_ms": 450,
+      "cool_s": 29.4
+    },
+    {
+      "i_ma": 475.0,
+      "heat_ms": 160,
+      "cool_s": 39.3
+    },
+    {
+      "i_ma": 525.0,
+      "heat_ms": 200,
+      "cool_s": 30.8
+    },
+    {
+      "i_ma": 645.0,
+      "heat_ms": 440,
+      "cool_s": 22.4
+    },
+    {
+      "i_ma": 845.0,
+      "heat_ms": 245,
+      "cool_s": 21.9
+    },
+    {
+      "i_ma": 840.0,
+      "heat_ms": 355,
+      "cool_s": 32.6
+    },
+    {
+      "i_ma": 295.0,
+      "heat_ms": 325,
+      "cool_s": 30.1
+    },
+    {
+      "i_ma": 615.0,
+      "heat_ms": 190,
+      "cool_s": 35.0
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 280,
+      "cool_s": 33.4
+    },
+    {
+      "i_ma": 260.0,
+      "heat_ms": 420,
+      "cool_s": 30.3
+    },
+    {
+      "i_ma": 665.0,
+      "heat_ms": 400,
+      "cool_s": 22.3
+    },
+    {
+      "i_ma": 745.0,
+      "heat_ms": 295,
+      "cool_s": 21.3
+    },
+    {
+      "i_ma": 630.0,
+      "heat_ms": 145,
+      "cool_s": 37.5
+    },
+    {
+      "i_ma": 325.0,
+      "heat_ms": 325,
+      "cool_s": 41.9
+    },
+    {
+      "i_ma": 280.0,
+      "heat_ms": 435,
+      "cool_s": 36.2
+    },
+    {
+      "i_ma": 395.0,
+      "heat_ms": 465,
+      "cool_s": 43.0
+    },
+    {
+      "i_ma": 340.0,
+      "heat_ms": 240,
+      "cool_s": 42.4
+    },
+    {
+      "i_ma": 655.0,
+      "heat_ms": 340,
+      "cool_s": 44.7
+    },
+    {
+      "i_ma": 805.0,
+      "heat_ms": 375,
+      "cool_s": 41.1
+    },
+    {
+      "i_ma": 660.0,
+      "heat_ms": 325,
+      "cool_s": 44.2
+    },
+    {
+      "i_ma": 355.0,
+      "heat_ms": 220,
+      "cool_s": 33.6
+    },
+    {
+      "i_ma": 280.0,
+      "heat_ms": 480,
+      "cool_s": 22.7
+    },
+    {
+      "i_ma": 485.0,
+      "heat_ms": 150,
+      "cool_s": 38.3
+    },
+    {
+      "i_ma": 440.0,
+      "heat_ms": 370,
+      "cool_s": 27.9
+    },
+    {
+      "i_ma": 525.0,
+      "heat_ms": 115,
+      "cool_s": 36.9
+    },
+    {
+      "i_ma": 345.0,
+      "heat_ms": 290,
+      "cool_s": 20.4
+    },
+    {
+      "i_ma": 790.0,
+      "heat_ms": 140,
+      "cool_s": 26.7
+    },
+    {
+      "i_ma": 445.0,
+      "heat_ms": 115,
+      "cool_s": 40.3
+    },
+    {
+      "i_ma": 595.0,
+      "heat_ms": 155,
+      "cool_s": 17.5
+    },
+    {
+      "i_ma": 825.0,
+      "heat_ms": 350,
+      "cool_s": 37.0
+    },
+    {
+      "i_ma": 340.0,
+      "heat_ms": 485,
+      "cool_s": 16.3
+    },
+    {
+      "i_ma": 555.0,
+      "heat_ms": 370,
+      "cool_s": 41.4
+    },
+    {
+      "i_ma": 255.0,
+      "heat_ms": 440,
+      "cool_s": 38.8
+    },
+    {
+      "i_ma": 690.0,
+      "heat_ms": 205,
+      "cool_s": 25.9
+    },
+    {
+      "i_ma": 765.0,
+      "heat_ms": 195,
+      "cool_s": 31.4
+    },
+    {
+      "i_ma": 355.0,
+      "heat_ms": 415,
+      "cool_s": 31.6
+    },
+    {
+      "i_ma": 565.0,
+      "heat_ms": 360,
+      "cool_s": 18.6
+    },
+    {
+      "i_ma": 495.0,
+      "heat_ms": 335,
+      "cool_s": 28.3
+    },
+    {
+      "i_ma": 775.0,
+      "heat_ms": 410,
+      "cool_s": 33.0
+    },
+    {
+      "i_ma": 390.0,
+      "heat_ms": 480,
+      "cool_s": 44.4
+    },
+    {
+      "i_ma": 530.0,
+      "heat_ms": 260,
+      "cool_s": 21.3
+    },
+    {
+      "i_ma": 860.0,
+      "heat_ms": 180,
+      "cool_s": 35.4
+    },
+    {
+      "i_ma": 545.0,
+      "heat_ms": 395,
+      "cool_s": 21.6
+    },
+    {
+      "i_ma": 490.0,
+      "heat_ms": 315,
+      "cool_s": 16.3
+    },
+    {
+      "i_ma": 535.0,
+      "heat_ms": 320,
+      "cool_s": 25.6
+    },
+    {
+      "i_ma": 370.0,
+      "heat_ms": 430,
+      "cool_s": 37.8
+    },
+    {
+      "i_ma": 640.0,
+      "heat_ms": 415,
+      "cool_s": 21.7
+    },
+    {
+      "i_ma": 730.0,
+      "heat_ms": 420,
+      "cool_s": 43.6
+    },
+    {
+      "i_ma": 260.0,
+      "heat_ms": 490,
+      "cool_s": 19.2
+    },
+    {
+      "i_ma": 780.0,
+      "heat_ms": 155,
+      "cool_s": 40.2
+    },
+    {
+      "i_ma": 870.0,
+      "heat_ms": 390,
+      "cool_s": 40.9
+    },
+    {
+      "i_ma": 510.0,
+      "heat_ms": 220,
+      "cool_s": 29.9
+    },
+    {
+      "i_ma": 800.0,
+      "heat_ms": 215,
+      "cool_s": 23.8
+    },
+    {
+      "i_ma": 875.0,
+      "heat_ms": 330,
+      "cool_s": 29.5
+    },
+    {
+      "i_ma": 450.0,
+      "heat_ms": 100,
+      "cool_s": 41.2
+    },
+    {
+      "i_ma": 695.0,
+      "heat_ms": 325,
+      "cool_s": 20.9
+    },
+    {
+      "i_ma": 410.0,
+      "heat_ms": 450,
+      "cool_s": 23.0
+    },
+    {
+      "i_ma": 840.0,
+      "heat_ms": 200,
+      "cool_s": 42.3
+    },
+    {
+      "i_ma": 800.0,
+      "heat_ms": 120,
+      "cool_s": 20.6
+    },
+    {
+      "i_ma": 520.0,
+      "heat_ms": 130,
+      "cool_s": 24.6
+    },
+    {
+      "i_ma": 390.0,
+      "heat_ms": 195,
+      "cool_s": 35.7
+    },
+    {
+      "i_ma": 310.0,
+      "heat_ms": 415,
+      "cool_s": 17.3
+    },
+    {
+      "i_ma": 460.0,
+      "heat_ms": 400,
+      "cool_s": 32.3
+    },
+    {
+      "i_ma": 425.0,
+      "heat_ms": 455,
+      "cool_s": 40.6
+    },
+    {
+      "i_ma": 855.0,
+      "heat_ms": 490,
+      "cool_s": 32.3
+    },
+    {
+      "i_ma": 350.0,
+      "heat_ms": 450,
+      "cool_s": 40.6
+    },
+    {
+      "i_ma": 580.0,
+      "heat_ms": 270,
+      "cool_s": 17.2
+    },
+    {
+      "i_ma": 665.0,
+      "heat_ms": 230,
+      "cool_s": 17.8
+    },
+    {
+      "i_ma": 715.0,
+      "heat_ms": 495,
+      "cool_s": 32.7
+    },
+    {
+      "i_ma": 705.0,
+      "heat_ms": 490,
+      "cool_s": 25.8
+    },
+    {
+      "i_ma": 865.0,
+      "heat_ms": 360,
+      "cool_s": 35.1
+    },
+    {
+      "i_ma": 895.0,
+      "heat_ms": 485,
+      "cool_s": 43.7
+    },
+    {
+      "i_ma": 615.0,
+      "heat_ms": 380,
+      "cool_s": 31.5
+    },
+    {
+      "i_ma": 480.0,
+      "heat_ms": 300,
+      "cool_s": 24.9
+    },
+    {
+      "i_ma": 365.0,
+      "heat_ms": 385,
+      "cool_s": 18.6
+    },
+    {
+      "i_ma": 850.0,
+      "heat_ms": 335,
+      "cool_s": 38.0
+    },
+    {
+      "i_ma": 255.0,
+      "heat_ms": 450,
+      "cool_s": 36.7
+    },
+    {
+      "i_ma": 885.0,
+      "heat_ms": 190,
+      "cool_s": 24.4
+    },
+    {
+      "i_ma": 630.0,
+      "heat_ms": 290,
+      "cool_s": 29.6
+    },
+    {
+      "i_ma": 590.0,
+      "heat_ms": 400,
+      "cool_s": 23.2
+    },
+    {
+      "i_ma": 735.0,
+      "heat_ms": 285,
+      "cool_s": 38.9
+    },
+    {
+      "i_ma": 535.0,
+      "heat_ms": 105,
+      "cool_s": 27.6
+    },
+    {
+      "i_ma": 500.0,
+      "heat_ms": 355,
+      "cool_s": 23.7
+    },
+    {
+      "i_ma": 435.0,
+      "heat_ms": 155,
+      "cool_s": 30.4
+    },
+    {
+      "i_ma": 420.0,
+      "heat_ms": 435,
+      "cool_s": 35.6
+    },
+    {
+      "i_ma": 300.0,
+      "heat_ms": 485,
+      "cool_s": 23.1
+    },
+    {
+      "i_ma": 270.0,
+      "heat_ms": 420,
+      "cool_s": 27.1
+    },
+    {
+      "i_ma": 610.0,
+      "heat_ms": 445,
+      "cool_s": 28.0
+    },
+    {
+      "i_ma": 675.0,
+      "heat_ms": 415,
+      "cool_s": 22.7
+    },
+    {
+      "i_ma": 410.0,
+      "heat_ms": 465,
+      "cool_s": 16.4
+    },
+    {
+      "i_ma": 555.0,
+      "heat_ms": 380,
+      "cool_s": 25.2
+    },
+    {
+      "i_ma": 320.0,
+      "heat_ms": 455,
+      "cool_s": 29.0
+    },
+    {
+      "i_ma": 380.0,
+      "heat_ms": 420,
+      "cool_s": 33.9
+    },
+    {
+      "i_ma": 375.0,
+      "heat_ms": 235,
+      "cool_s": 19.9
+    },
+    {
+      "i_ma": 485.0,
+      "heat_ms": 345,
+      "cool_s": 38.1
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 380,
+      "cool_s": 41.9
+    },
+    {
+      "i_ma": 830.0,
+      "heat_ms": 275,
+      "cool_s": 22.8
+    },
+    {
+      "i_ma": 615.0,
+      "heat_ms": 190,
+      "cool_s": 35.0
+    },
+    {
+      "i_ma": 795.0,
+      "heat_ms": 310,
+      "cool_s": 32.1
+    },
+    {
+      "i_ma": 825.0,
+      "heat_ms": 350,
+      "cool_s": 37.0
+    },
+    {
+      "i_ma": 565.0,
+      "heat_ms": 405,
+      "cool_s": 22.5
+    },
+    {
+      "i_ma": 335.0,
+      "heat_ms": 240,
+      "cool_s": 31.9
+    },
+    {
+      "i_ma": 625.0,
+      "heat_ms": 285,
+      "cool_s": 18.3
+    },
+    {
+      "i_ma": 305.0,
+      "heat_ms": 350,
+      "cool_s": 33.6
+    },
+    {
+      "i_ma": 725.0,
+      "heat_ms": 240,
+      "cool_s": 33.2
+    },
+    {
+      "i_ma": 825.0,
+      "heat_ms": 450,
+      "cool_s": 29.4
+    },
+    {
+      "i_ma": 900.0,
+      "heat_ms": 280,
+      "cool_s": 24.9
+    },
+    {
+      "i_ma": 660.0,
+      "heat_ms": 325,
+      "cool_s": 44.2
+    },
+    {
+      "i_ma": 695.0,
+      "heat_ms": 200,
+      "cool_s": 42.6
+    },
+    {
+      "i_ma": 440.0,
+      "heat_ms": 370,
+      "cool_s": 27.9
+    },
+    {
+      "i_ma": 570.0,
+      "heat_ms": 470,
+      "cool_s": 25.5
+    },
+    {
+      "i_ma": 765.0,
+      "heat_ms": 410,
+      "cool_s": 34.3
+    },
+    {
+      "i_ma": 570.0,
+      "heat_ms": 430,
+      "cool_s": 42.2
+    },
+    {
+      "i_ma": 475.0,
+      "heat_ms": 160,
+      "cool_s": 39.3
+    },
+    {
+      "i_ma": 685.0,
+      "heat_ms": 460,
+      "cool_s": 24.3
+    },
+    {
+      "i_ma": 745.0,
+      "heat_ms": 230,
+      "cool_s": 26.9
+    },
+    {
+      "i_ma": 290.0,
+      "heat_ms": 415,
+      "cool_s": 14.2
+    },
+    {
+      "i_ma": 635.0,
+      "heat_ms": 225,
+      "cool_s": 21.2
+    },
+    {
+      "i_ma": 375.0,
+      "heat_ms": 180,
+      "cool_s": 28.2
+    },
+    {
+      "i_ma": 690.0,
+      "heat_ms": 205,
+      "cool_s": 25.9
+    },
+    {
+      "i_ma": 465.0,
+      "heat_ms": 240,
+      "cool_s": 34.5
+    },
+    {
+      "i_ma": 455.0,
+      "heat_ms": 165,
+      "cool_s": 29.3
+    },
+    {
+      "i_ma": 585.0,
+      "heat_ms": 235,
+      "cool_s": 26.5
+    },
+    {
+      "i_ma": 395.0,
+      "heat_ms": 465,
+      "cool_s": 43.0
+    },
+    {
+      "i_ma": 890.0,
+      "heat_ms": 485,
+      "cool_s": 33.8
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 280,
+      "cool_s": 33.4
+    },
+    {
+      "i_ma": 490.0,
+      "heat_ms": 265,
+      "cool_s": 24.0
+    },
+    {
+      "i_ma": 555.0,
+      "heat_ms": 370,
+      "cool_s": 41.4
+    },
+    {
+      "i_ma": 680.0,
+      "heat_ms": 250,
+      "cool_s": 43.3
+    },
+    {
+      "i_ma": 715.0,
+      "heat_ms": 290,
+      "cool_s": 34.2
+    },
+    {
+      "i_ma": 835.0,
+      "heat_ms": 125,
+      "cool_s": 26.2
+    },
+    {
+      "i_ma": 355.0,
+      "heat_ms": 220,
+      "cool_s": 33.6
+    },
+    {
+      "i_ma": 515.0,
+      "heat_ms": 150,
+      "cool_s": 34.6
+    },
+    {
+      "i_ma": 325.0,
+      "heat_ms": 325,
+      "cool_s": 41.9
+    },
+    {
+      "i_ma": 655.0,
+      "heat_ms": 250,
+      "cool_s": 44.6
+    },
+    {
+      "i_ma": 525.0,
+      "heat_ms": 200,
+      "cool_s": 30.8
+    },
+    {
+      "i_ma": 750.0,
+      "heat_ms": 180,
+      "cool_s": 17.8
+    },
+    {
+      "i_ma": 415.0,
+      "heat_ms": 210,
+      "cool_s": 20.1
+    },
+    {
+      "i_ma": 650.0,
+      "heat_ms": 195,
+      "cool_s": 31.2
+    },
+    {
+      "i_ma": 445.0,
+      "heat_ms": 445,
+      "cool_s": 18.8
+    },
+    {
+      "i_ma": 540.0,
+      "heat_ms": 295,
+      "cool_s": 27.4
+    },
+    {
+      "i_ma": 285.0,
+      "heat_ms": 435,
+      "cool_s": 38.5
+    },
+    {
+      "i_ma": 580.0,
+      "heat_ms": 305,
+      "cool_s": 19.6
+    },
+    {
+      "i_ma": 710.0,
+      "heat_ms": 285,
+      "cool_s": 20.2
+    },
+    {
+      "i_ma": 510.0,
+      "heat_ms": 500,
+      "cool_s": 19.4
+    },
+    {
+      "i_ma": 815.0,
+      "heat_ms": 370,
+      "cool_s": 36.5
+    },
+    {
+      "i_ma": 360.0,
+      "heat_ms": 310,
+      "cool_s": 28.8
+    },
+    {
+      "i_ma": 785.0,
+      "heat_ms": 280,
+      "cool_s": 23.5
+    },
+    {
+      "i_ma": 265.0,
+      "heat_ms": 440,
+      "cool_s": 15.0
+    },
+    {
+      "i_ma": 320.0,
+      "heat_ms": 355,
+      "cool_s": 39.1
+    },
+    {
+      "i_ma": 620.0,
+      "heat_ms": 475,
+      "cool_s": 22.4
+    },
+    {
+      "i_ma": 770.0,
+      "heat_ms": 255,
+      "cool_s": 24.8
+    },
+    {
+      "i_ma": 560.0,
+      "heat_ms": 150,
+      "cool_s": 31.1
+    },
+    {
+      "i_ma": 605.0,
+      "heat_ms": 175,
+      "cool_s": 21.7
+    },
+    {
+      "i_ma": 295.0,
+      "heat_ms": 365,
+      "cool_s": 40.0
+    },
+    {
+      "i_ma": 890.0,
+      "heat_ms": 460,
+      "cool_s": 32.7
+    },
+    {
+      "i_ma": 415.0,
+      "heat_ms": 235,
+      "cool_s": 20.8
+    },
+    {
+      "i_ma": 465.0,
+      "heat_ms": 250,
+      "cool_s": 27.5
+    },
+    {
+      "i_ma": 385.0,
+      "heat_ms": 220,
+      "cool_s": 14.9
+    },
+    {
+      "i_ma": 505.0,
+      "heat_ms": 395,
+      "cool_s": 21.4
+    },
+    {
+      "i_ma": 845.0,
+      "heat_ms": 175,
+      "cool_s": 37.1
+    },
+    {
+      "i_ma": 315.0,
+      "heat_ms": 340,
+      "cool_s": 13.9
+    },
+    {
+      "i_ma": 645.0,
+      "heat_ms": 425,
+      "cool_s": 22.0
+    },
+    {
+      "i_ma": 470.0,
+      "heat_ms": 435,
+      "cool_s": 34.9
+    },
+    {
+      "i_ma": 430.0,
+      "heat_ms": 210,
+      "cool_s": 17.7
+    },
+    {
+      "i_ma": 740.0,
+      "heat_ms": 245,
+      "cool_s": 43.4
+    },
+    {
+      "i_ma": 880.0,
+      "heat_ms": 135,
+      "cool_s": 44.0
+    },
+    {
+      "i_ma": 780.0,
+      "heat_ms": 470,
+      "cool_s": 29.2
+    },
+    {
+      "i_ma": 670.0,
+      "heat_ms": 380,
+      "cool_s": 21.7
+    },
+    {
+      "i_ma": 300.0,
+      "heat_ms": 405,
+      "cool_s": 32.4
+    },
+    {
+      "i_ma": 710.0,
+      "heat_ms": 375,
+      "cool_s": 22.7
+    },
+    {
+      "i_ma": 720.0,
+      "heat_ms": 120,
+      "cool_s": 39.2
+    },
+    {
+      "i_ma": 435.0,
+      "heat_ms": 390,
+      "cool_s": 19.9
+    },
+    {
+      "i_ma": 870.0,
+      "heat_ms": 490,
+      "cool_s": 33.1
+    },
+    {
+      "i_ma": 595.0,
+      "heat_ms": 430,
+      "cool_s": 41.6
+    }
+  ],
+  "seed": 20260806,
+  "envelope": {
+    "source": "sweep_20260805_105318 + sweep_20260805_154528 (Dynalloy short wire fitted 2026-08-05)",
+    "rule": "guideline 9.1: median |dx| >= max(50 um, 3*sigma), not railed, cc within 10%",
+    "i_ma": [
+      250.0,
+      900.0
+    ],
+    "heat_ms_max": 500,
+    "heat_ms_min_vs_i_ma": [
+      [
+        250.0,
+        400.0
+      ],
+      [
+        350.0,
+        200.0
+      ],
+      [
+        450.0,
+        100.0
+      ],
+      [
+        900.0,
+        100.0
+      ]
+    ],
+    "excluded_overnight": "950 mA (asset protection, unattended)",
+    "rejected_cells": [
+      "200x100",
+      "200x200",
+      "200x300",
+      "200x400",
+      "250x100",
+      "250x200",
+      "250x300",
+      "350x100"
+    ]
+  }
+}

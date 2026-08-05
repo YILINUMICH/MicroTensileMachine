@@ -452,6 +452,29 @@ python operator_sweep_report.py  data/raw/sweep_<stamp>          # ALWAYS, right
   produced: laser out-of-window rail, CC tracking >15% (R_est bootstrap /
   clip contact), physically-impossible current sense, load clip, baseline
   jumps, missing pulses.
+- **`operator_profile_queue.py <folder|files...>`** runs a whole campaign of
+  profiles back-to-back for **unattended** collection — `operator_current_sweep.py`
+  handles exactly one profile per launch and exits. It validates every profile
+  before the first pulse fires (parse, port present, nothing above `max_ma`),
+  runs the report after each, honours `--deadline HH:MM`, and writes
+  `queue_manifest.json` mapping each pre-registered role to the capture folder it
+  produced. It judges each profile on **captures written, not exit code** (the
+  sweep exits 0 on a dead port), and abandons the queue only after two
+  consecutive zero-capture profiles — the signature of a rig needing a
+  power-cycle. See `profiles/night_profiles_20260805/README.md` for a worked
+  campaign.
+
+### One pulse per condition (`cycles: 0`)
+
+For randomized RNN training sets, `cycles: 0` fires **one** pulse per condition,
+so consecutive pulses differ in condition — the thermal-history diversity
+`NN_SelfSensing_Baseline/DATA_COLLECTION_GUIDELINE.md` §9.2 requires. With
+`cycles: 1` the runner fires two pulses at the *same* `(i_ma, heat_ms)`, so every
+measured pulse's predecessor is an identical command and the history collapses to
+two command-determined classes. The sweep treats the single pulse as the
+measurement rather than a bootstrap ramp to discard — which also keeps
+`--abort-on-bad-sense` live, since the old code path `continue`d past the sense
+check whenever no non-bootstrap pulse existed.
 
 **Reference dataset: `data/raw/sweep_full_150-950mA/`** — two sessions merged and
 uniformly re-analysed (`make_summary_and_curve.py` / `make_timeline.py` in the
@@ -611,9 +634,10 @@ means wedged), `port live`, and `clock align: src=1/2 shifted +2.19 s`.
 ### After
 
 ```
-python analysis/analyze_raw.py          # add the new sweep folder to RUNS first
-python analysis/plot_envelope.py
-python analysis/plot_trajectory.py
+python operator_sweep_report.py data/raw/sweep_<stamp>   # ALWAYS, right after
+python analysis/plot_drive_trajectory.py --sweep sweep_<stamp>   # the standard figure
+python analysis/analyze_raw.py          # add the sweep to CAMPAIGNS first
+python analysis/plot_envelope.py ../data/derived/heat_time_map_<campaign>_all.csv
 ```
 
 ## Standing analysis pipeline — raw → table → charts (2026-07-31)
@@ -624,9 +648,10 @@ place, so a fixed bug or a new sweep is one command away from updated outputs.
 
 ```
 cd analysis
-python analyze_raw.py                 # raw captures  -> per-cycle table
+python analyze_raw.py                 # raw captures  -> per-cycle table (all campaigns)
 python plot_envelope.py               # per-cycle table -> envelope CSV + charts
-python plot_trajectory.py             # per-cycle traces, overlaid by current
+python plot_drive_trajectory.py --all # THE STANDARD PER-SWEEP FIGURE, any sweep
+python plot_trajectory.py             # per-cycle traces, July campaign only (pinned)
 python plot_energy.py                 # -> energy_collapse.html   (interactive)
 python plot_selfsensing.py            # -> self_sensing.html      (interactive)
 python plot_transition.py             # -> transition_<heat>ms.html (interactive)
@@ -641,6 +666,7 @@ CWD — `cd analysis` is a convenience, not a requirement.
 |---|---|---|---|
 | 1 | `analyze_raw.py` | `data/raw/sweep_*/c*_level_*.csv` + `.console.log` + `.meta.json` | `data/raw/sweep_*/cycles.csv`, `data/derived/heat_time_map_<date>_all.csv` |
 | 2 | `plot_envelope.py` | `data/derived/heat_time_map_<date>_all.csv` | `data/derived/*_envelope.csv`, `*_stroke.png`, `*_force.png` |
+| 2 | `plot_drive_trajectory.py` | raw captures (discovers the grid off filenames — **no table needed**) | `data/derived/drive_<sweep>_<400ms\|200mA>.png` |
 | 2 | `plot_trajectory.py` | per-cycle table + raw captures | `data/derived/trajectory_<heat>ms_<norm>.png` |
 | 2 | `plot_energy.py` | per-cycle table + `energy_table.py` | `data/derived/energy_collapse.html` |
 | 2 | `plot_selfsensing.py` | per-cycle table + `energy_table.py` | `data/derived/self_sensing.html` |
@@ -649,6 +675,41 @@ CWD — `cd analysis` is a convenience, not a requirement.
 | — | `get_cycle.py` | one capture | one cycle's raw time series, on one clock |
 | — | `energy_table.py` | per-cycle table + raw captures | `data/derived/*_all_energy.csv` (cached ∫P dt) |
 | — | `plot_style.py` | — | shared chart chrome for the HTML figures |
+
+### The standard per-sweep figure — `plot_drive_trajectory.py`
+
+**This is the default way to look at a sweep.** Four channels (resistance /
+power / stroke / force) × two time scales (the pulse, and the full cycle
+including cooling), series overlaid and colour-ramped, in the bench's units —
+stroke in **mm**, force in **grams-force**.
+
+```
+python analysis/plot_drive_trajectory.py                       # newest sweep
+python analysis/plot_drive_trajectory.py --sweep sweep_<stamp>
+python analysis/plot_drive_trajectory.py --all                 # every sweep folder
+```
+
+It reads **raw captures directly** and discovers the `(level, heat)` grid off
+the capture filenames, so it needs no per-cycle table, no `CAMPAIGNS` entry, and
+no code edit for a new run — unlike `plot_trajectory.py`, which is pinned to the
+July long-wire campaign through a hardcoded `SRC_MAP`.
+
+- **`--by auto`** (default) picks the axis the colour ramp runs over and emits
+  **both** shapes when a sweep carries both: one figure per pulse length
+  coloured by current (`drive_<sweep>_400ms.png`) for a heat-time map, plus one
+  figure per current coloured by pulse length (`drive_<sweep>_200mA.png`) for a
+  single-current row, which would otherwise be one trace per figure.
+- **Rails are annotated, not hidden.** A channel that touched 0 or 5 V is drawn
+  **dotted** and called out in red (`dotted = amp railed at 0/5 V — 750, 850,
+  950 mA`), because a flat top there is the amplifier, not the wire.
+- **Cycle handling.** A repeated condition is the **median of its non-bootstrap
+  cycles** (cycle 1 fires into a fully relaxed wire — a different initial
+  condition, held out). A condition that fired **once** — the randomized
+  protocol, `cycles: 0` — uses that single pulse and says so in the subtitle;
+  there is no repeat to average and the pulse *is* the measurement.
+- **No temporal filtering, ever.** Cycles are combined across repeats, never
+  smoothed in time. R at the idle bias genuinely carries large per-sample noise
+  and a filter would not create information that was not measured.
 
 **`cycles.csv` is the one derived file that stays under `data/raw/`** — it is
 per-capture provenance, written next to its source, and `operator_sweep_report.py`
@@ -882,8 +943,12 @@ Experiment_SMAThermalCharacterization/
 │
 ├── operator_current_sweep.py   condition sweeps (current × pulse length); --profile / --dry-run
 ├── operator_sweep_report.py    post-sweep analysis + health report (run after EVERY sweep)
+├── operator_profile_queue.py   runs a LIST of profiles back-to-back, unattended (overnight
+│                               campaigns): validates all up front, reports after each,
+│                               --deadline, per-profile logs + queue_manifest.json
 ├── operator_pulse_capture.py   plain single-pulse capture tool
 ├── profiles/                   JSON test profiles (grid + explicit-conditions forms)
+│                               night_profiles_*/ = a whole campaign + its generator
 │
 ├── lib_h7_session.py           shared H7 drive/capture plumbing: port revival, calibration
 │                               restore, watchdog ping, clock offset, sanity checks
@@ -898,7 +963,9 @@ Experiment_SMAThermalCharacterization/
 ├── analysis/                   THE STANDING PIPELINE — raw → table → charts
 │   ├── analyze_raw.py          stage 1: raw captures -> per-cycle table
 │   ├── plot_envelope.py        stage 2: table -> envelope CSV + stroke/force PNGs
-│   ├── plot_trajectory.py      stage 2: per-cycle traces, overlaid by current (PNG)
+│   ├── plot_drive_trajectory.py  stage 2: THE STANDARD PER-SWEEP FIGURE — 4 channels
+│   │                             x 2 time scales, ANY sweep, --all for a campaign
+│   ├── plot_trajectory.py      stage 2: per-cycle traces, July campaign only (pinned)
 │   ├── plot_energy.py          FIGURE A -> energy_collapse.html
 │   ├── plot_selfsensing.py     FIGURE B -> self_sensing.html
 │   ├── plot_transition.py      FIGURE C -> transition_<heat>ms.html

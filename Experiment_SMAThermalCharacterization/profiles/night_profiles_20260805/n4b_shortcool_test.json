@@ -1,0 +1,604 @@
+{
+  "name": "n4b_shortcool_test",
+  "description": "Interrupted-cooling OOD TEST, half B of 2. Cool 5-11 s \u2014 DISJOINT from n1/n2's 12-45 s \u2014 so pulses land on a partially recovered coil and the estimator must track incomplete decay; a command-lookup model fails here first. Current capped at 650 mA so a short cool never meets the highest pulse energy unattended. Role pre-registered: TEST-ONLY.",
+  "protocol": "guideline 9.2 randomized excitation: continuous LHS draws inside the 08-05 envelope, ONE pulse per condition, cool_s randomized per condition",
+  "port": "COM8",
+  "max_ma": 1000,
+  "i_low_ma": 0,
+  "v_idle": 0.5,
+  "r_min_ohm": 1.6,
+  "abort_on_bad_sense": true,
+  "settle_s": 2.0,
+  "cycles": 0,
+  "conditions": [
+    {
+      "i_ma": 550.0,
+      "heat_ms": 195,
+      "cool_s": 6.3
+    },
+    {
+      "i_ma": 405.0,
+      "heat_ms": 345,
+      "cool_s": 5.9
+    },
+    {
+      "i_ma": 605.0,
+      "heat_ms": 150,
+      "cool_s": 10.3
+    },
+    {
+      "i_ma": 315.0,
+      "heat_ms": 375,
+      "cool_s": 8.3
+    },
+    {
+      "i_ma": 385.0,
+      "heat_ms": 200,
+      "cool_s": 10.9
+    },
+    {
+      "i_ma": 650.0,
+      "heat_ms": 240,
+      "cool_s": 8.8
+    },
+    {
+      "i_ma": 630.0,
+      "heat_ms": 340,
+      "cool_s": 9.7
+    },
+    {
+      "i_ma": 335.0,
+      "heat_ms": 340,
+      "cool_s": 6.1
+    },
+    {
+      "i_ma": 420.0,
+      "heat_ms": 320,
+      "cool_s": 5.8
+    },
+    {
+      "i_ma": 385.0,
+      "heat_ms": 340,
+      "cool_s": 10.4
+    },
+    {
+      "i_ma": 610.0,
+      "heat_ms": 335,
+      "cool_s": 6.8
+    },
+    {
+      "i_ma": 295.0,
+      "heat_ms": 425,
+      "cool_s": 10.9
+    },
+    {
+      "i_ma": 455.0,
+      "heat_ms": 175,
+      "cool_s": 7.4
+    },
+    {
+      "i_ma": 510.0,
+      "heat_ms": 115,
+      "cool_s": 5.8
+    },
+    {
+      "i_ma": 370.0,
+      "heat_ms": 350,
+      "cool_s": 9.9
+    },
+    {
+      "i_ma": 560.0,
+      "heat_ms": 320,
+      "cool_s": 6.5
+    },
+    {
+      "i_ma": 535.0,
+      "heat_ms": 220,
+      "cool_s": 7.7
+    },
+    {
+      "i_ma": 345.0,
+      "heat_ms": 310,
+      "cool_s": 7.1
+    },
+    {
+      "i_ma": 595.0,
+      "heat_ms": 375,
+      "cool_s": 10.2
+    },
+    {
+      "i_ma": 475.0,
+      "heat_ms": 470,
+      "cool_s": 10.2
+    },
+    {
+      "i_ma": 600.0,
+      "heat_ms": 210,
+      "cool_s": 6.2
+    },
+    {
+      "i_ma": 520.0,
+      "heat_ms": 355,
+      "cool_s": 10.7
+    },
+    {
+      "i_ma": 425.0,
+      "heat_ms": 435,
+      "cool_s": 6.7
+    },
+    {
+      "i_ma": 545.0,
+      "heat_ms": 385,
+      "cool_s": 9.1
+    },
+    {
+      "i_ma": 390.0,
+      "heat_ms": 445,
+      "cool_s": 8.9
+    },
+    {
+      "i_ma": 585.0,
+      "heat_ms": 215,
+      "cool_s": 6.1
+    },
+    {
+      "i_ma": 545.0,
+      "heat_ms": 490,
+      "cool_s": 7.2
+    },
+    {
+      "i_ma": 370.0,
+      "heat_ms": 205,
+      "cool_s": 5.4
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 480,
+      "cool_s": 8.8
+    },
+    {
+      "i_ma": 405.0,
+      "heat_ms": 380,
+      "cool_s": 10.4
+    },
+    {
+      "i_ma": 530.0,
+      "heat_ms": 485,
+      "cool_s": 8.3
+    },
+    {
+      "i_ma": 320.0,
+      "heat_ms": 260,
+      "cool_s": 7.7
+    },
+    {
+      "i_ma": 495.0,
+      "heat_ms": 475,
+      "cool_s": 10.6
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 420,
+      "cool_s": 5.7
+    },
+    {
+      "i_ma": 575.0,
+      "heat_ms": 450,
+      "cool_s": 10.1
+    },
+    {
+      "i_ma": 580.0,
+      "heat_ms": 230,
+      "cool_s": 7.9
+    },
+    {
+      "i_ma": 305.0,
+      "heat_ms": 455,
+      "cool_s": 6.2
+    },
+    {
+      "i_ma": 630.0,
+      "heat_ms": 105,
+      "cool_s": 7.5
+    },
+    {
+      "i_ma": 450.0,
+      "heat_ms": 420,
+      "cool_s": 9.8
+    },
+    {
+      "i_ma": 515.0,
+      "heat_ms": 125,
+      "cool_s": 6.3
+    },
+    {
+      "i_ma": 500.0,
+      "heat_ms": 400,
+      "cool_s": 9.7
+    },
+    {
+      "i_ma": 540.0,
+      "heat_ms": 155,
+      "cool_s": 6.6
+    },
+    {
+      "i_ma": 475.0,
+      "heat_ms": 290,
+      "cool_s": 9.3
+    },
+    {
+      "i_ma": 635.0,
+      "heat_ms": 275,
+      "cool_s": 9.5
+    },
+    {
+      "i_ma": 360.0,
+      "heat_ms": 365,
+      "cool_s": 5.8
+    },
+    {
+      "i_ma": 640.0,
+      "heat_ms": 185,
+      "cool_s": 8.1
+    },
+    {
+      "i_ma": 360.0,
+      "heat_ms": 450,
+      "cool_s": 10.6
+    },
+    {
+      "i_ma": 255.0,
+      "heat_ms": 480,
+      "cool_s": 9.4
+    },
+    {
+      "i_ma": 590.0,
+      "heat_ms": 445,
+      "cool_s": 7.3
+    },
+    {
+      "i_ma": 555.0,
+      "heat_ms": 140,
+      "cool_s": 8.7
+    },
+    {
+      "i_ma": 310.0,
+      "heat_ms": 330,
+      "cool_s": 8.5
+    },
+    {
+      "i_ma": 610.0,
+      "heat_ms": 275,
+      "cool_s": 8.9
+    },
+    {
+      "i_ma": 615.0,
+      "heat_ms": 110,
+      "cool_s": 7.9
+    },
+    {
+      "i_ma": 425.0,
+      "heat_ms": 495,
+      "cool_s": 6.3
+    },
+    {
+      "i_ma": 445.0,
+      "heat_ms": 380,
+      "cool_s": 8.1
+    },
+    {
+      "i_ma": 505.0,
+      "heat_ms": 290,
+      "cool_s": 6.4
+    },
+    {
+      "i_ma": 460.0,
+      "heat_ms": 165,
+      "cool_s": 10.8
+    },
+    {
+      "i_ma": 480.0,
+      "heat_ms": 185,
+      "cool_s": 10.7
+    },
+    {
+      "i_ma": 285.0,
+      "heat_ms": 445,
+      "cool_s": 8.7
+    },
+    {
+      "i_ma": 525.0,
+      "heat_ms": 270,
+      "cool_s": 6.9
+    },
+    {
+      "i_ma": 455.0,
+      "heat_ms": 160,
+      "cool_s": 10.1
+    },
+    {
+      "i_ma": 290.0,
+      "heat_ms": 410,
+      "cool_s": 8.3
+    },
+    {
+      "i_ma": 260.0,
+      "heat_ms": 460,
+      "cool_s": 9.8
+    },
+    {
+      "i_ma": 490.0,
+      "heat_ms": 265,
+      "cool_s": 7.4
+    },
+    {
+      "i_ma": 620.0,
+      "heat_ms": 465,
+      "cool_s": 7.6
+    },
+    {
+      "i_ma": 465.0,
+      "heat_ms": 315,
+      "cool_s": 7.3
+    },
+    {
+      "i_ma": 280.0,
+      "heat_ms": 400,
+      "cool_s": 9.9
+    },
+    {
+      "i_ma": 570.0,
+      "heat_ms": 390,
+      "cool_s": 7.6
+    },
+    {
+      "i_ma": 405.0,
+      "heat_ms": 380,
+      "cool_s": 10.4
+    },
+    {
+      "i_ma": 400.0,
+      "heat_ms": 310,
+      "cool_s": 8.0
+    },
+    {
+      "i_ma": 600.0,
+      "heat_ms": 210,
+      "cool_s": 6.2
+    },
+    {
+      "i_ma": 410.0,
+      "heat_ms": 460,
+      "cool_s": 6.7
+    },
+    {
+      "i_ma": 530.0,
+      "heat_ms": 485,
+      "cool_s": 8.3
+    },
+    {
+      "i_ma": 580.0,
+      "heat_ms": 410,
+      "cool_s": 9.1
+    },
+    {
+      "i_ma": 605.0,
+      "heat_ms": 150,
+      "cool_s": 10.3
+    },
+    {
+      "i_ma": 350.0,
+      "heat_ms": 295,
+      "cool_s": 7.0
+    },
+    {
+      "i_ma": 595.0,
+      "heat_ms": 375,
+      "cool_s": 10.2
+    },
+    {
+      "i_ma": 350.0,
+      "heat_ms": 210,
+      "cool_s": 5.4
+    },
+    {
+      "i_ma": 510.0,
+      "heat_ms": 115,
+      "cool_s": 5.8
+    },
+    {
+      "i_ma": 255.0,
+      "heat_ms": 420,
+      "cool_s": 5.4
+    },
+    {
+      "i_ma": 390.0,
+      "heat_ms": 445,
+      "cool_s": 8.9
+    },
+    {
+      "i_ma": 375.0,
+      "heat_ms": 365,
+      "cool_s": 7.2
+    },
+    {
+      "i_ma": 650.0,
+      "heat_ms": 240,
+      "cool_s": 8.8
+    },
+    {
+      "i_ma": 325.0,
+      "heat_ms": 430,
+      "cool_s": 9.2
+    },
+    {
+      "i_ma": 330.0,
+      "heat_ms": 480,
+      "cool_s": 8.8
+    },
+    {
+      "i_ma": 280.0,
+      "heat_ms": 380,
+      "cool_s": 6.1
+    },
+    {
+      "i_ma": 425.0,
+      "heat_ms": 435,
+      "cool_s": 6.7
+    },
+    {
+      "i_ma": 300.0,
+      "heat_ms": 375,
+      "cool_s": 6.0
+    },
+    {
+      "i_ma": 610.0,
+      "heat_ms": 335,
+      "cool_s": 6.8
+    },
+    {
+      "i_ma": 525.0,
+      "heat_ms": 355,
+      "cool_s": 7.3
+    },
+    {
+      "i_ma": 260.0,
+      "heat_ms": 495,
+      "cool_s": 5.7
+    },
+    {
+      "i_ma": 315.0,
+      "heat_ms": 380,
+      "cool_s": 8.2
+    },
+    {
+      "i_ma": 555.0,
+      "heat_ms": 345,
+      "cool_s": 8.6
+    },
+    {
+      "i_ma": 500.0,
+      "heat_ms": 455,
+      "cool_s": 6.8
+    },
+    {
+      "i_ma": 270.0,
+      "heat_ms": 480,
+      "cool_s": 9.3
+    },
+    {
+      "i_ma": 430.0,
+      "heat_ms": 195,
+      "cool_s": 7.0
+    },
+    {
+      "i_ma": 440.0,
+      "heat_ms": 215,
+      "cool_s": 9.1
+    },
+    {
+      "i_ma": 295.0,
+      "heat_ms": 450,
+      "cool_s": 7.6
+    },
+    {
+      "i_ma": 440.0,
+      "heat_ms": 170,
+      "cool_s": 8.5
+    },
+    {
+      "i_ma": 365.0,
+      "heat_ms": 200,
+      "cool_s": 5.4
+    },
+    {
+      "i_ma": 270.0,
+      "heat_ms": 375,
+      "cool_s": 7.8
+    },
+    {
+      "i_ma": 345.0,
+      "heat_ms": 495,
+      "cool_s": 6.6
+    },
+    {
+      "i_ma": 570.0,
+      "heat_ms": 480,
+      "cool_s": 8.4
+    },
+    {
+      "i_ma": 415.0,
+      "heat_ms": 425,
+      "cool_s": 7.1
+    },
+    {
+      "i_ma": 620.0,
+      "heat_ms": 240,
+      "cool_s": 9.6
+    },
+    {
+      "i_ma": 430.0,
+      "heat_ms": 240,
+      "cool_s": 10.8
+    },
+    {
+      "i_ma": 485.0,
+      "heat_ms": 170,
+      "cool_s": 10.0
+    },
+    {
+      "i_ma": 390.0,
+      "heat_ms": 420,
+      "cool_s": 9.5
+    },
+    {
+      "i_ma": 470.0,
+      "heat_ms": 135,
+      "cool_s": 5.4
+    },
+    {
+      "i_ma": 645.0,
+      "heat_ms": 255,
+      "cool_s": 10.5
+    }
+  ],
+  "seed": 20260810,
+  "envelope": {
+    "source": "sweep_20260805_105318 + sweep_20260805_154528 (Dynalloy short wire fitted 2026-08-05)",
+    "rule": "guideline 9.1: median |dx| >= max(50 um, 3*sigma), not railed, cc within 10%",
+    "i_ma": [
+      250.0,
+      900.0
+    ],
+    "heat_ms_max": 500,
+    "heat_ms_min_vs_i_ma": [
+      [
+        250.0,
+        400.0
+      ],
+      [
+        350.0,
+        200.0
+      ],
+      [
+        450.0,
+        100.0
+      ],
+      [
+        900.0,
+        100.0
+      ]
+    ],
+    "excluded_overnight": "950 mA (asset protection, unattended)",
+    "rejected_cells": [
+      "200x100",
+      "200x200",
+      "200x300",
+      "200x400",
+      "250x100",
+      "250x200",
+      "250x300",
+      "350x100"
+    ]
+  }
+}

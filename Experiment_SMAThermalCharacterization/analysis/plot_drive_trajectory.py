@@ -134,17 +134,29 @@ def railed(v):
 
 
 def condition_trace(sweep, level_mA, heat_ms, grid):
-    """Median trajectory over the non-bootstrap cycles, on a common grid."""
+    """Median trajectory over the non-bootstrap cycles, on a common grid.
+
+    ONE-PULSE CONDITIONS. A repeated condition holds cycle 1 out: it fires into
+    a fully relaxed wire, so it is a different initial condition, not bad data.
+    But the randomized protocol (`cycles: 0`, DATA_COLLECTION_GUIDELINE §9.2)
+    fires each condition EXACTLY ONCE so consecutive pulses differ in
+    condition — there is no repeat to average and the single pulse IS the
+    measurement. `range(2, n_cyc + 1)` is empty in that case and the old
+    `n_cyc < 2` guard returned None, so every capture of a randomized campaign
+    would have plotted as "no usable cycles" — silently, for the whole run.
+    """
     try:
         n_cyc = len(list_cycles(sweep, level_mA, heat_ms))
     except Exception:
         return None
-    if n_cyc < 2:
+    if n_cyc < 1:
         return None
+    single = (n_cyc == 1)
+    use = [1] if single else range(2, n_cyc + 1)
     stack = {k: [] for k, _, _ in CHANNELS}
     r0s = []
     rail = {"dx_mm": 0, "dF_gf": 0}          # cycles in which that amp saturated
-    for c in range(2, n_cyc + 1):            # cycle 1 = bootstrap, held out
+    for c in use:
         try:
             df = get_cycle(sweep, level_mA, heat_ms, cycle=c,
                            pre_s=PRE_S, post_s=POST_S)
@@ -187,6 +199,7 @@ def condition_trace(sweep, level_mA, heat_ms, grid):
         out["_r0"] = float(np.nanmedian(r0s))
         out["_n"] = len(stack["power_W"])
         out["_rail"] = rail
+        out["_single"] = single
     return out or None
 
 
@@ -316,6 +329,12 @@ def build(sweep, by, fixed, series):
     n_cyc = max((t.get("_n", 0) for t in traces.values()), default=0)
     head = (f"{fixed} ms pulse" if lvl_axis else f"{fixed:.0f} mA drive")
     what = ("current levels" if lvl_axis else "pulse lengths")
+    # Never claim a median that was not taken. Under the randomized protocol
+    # each condition fires once, so the trace is that one pulse.
+    single = all(t.get("_single") for t in traces.values())
+    how = ("1 pulse per condition (randomized protocol)" if single else
+           f"median of the {n_cyc} repeat cycles per condition "
+           f"(bootstrap held out)")
     # Both anchored va="top" from an explicit y. Without va the default is
     # "baseline", which puts a multi-line block's FIRST line ABOVE its y and
     # straight through the title.
@@ -324,8 +343,7 @@ def build(sweep, by, fixed, series):
              ha="left", va="top", fontsize=16, weight="semibold", color=INK)
     fig.text(0.075, 0.966,
              f"{sweep} · {len(lv_sorted)} {what} · RAW, no temporal "
-             f"filtering · median of the {n_cyc} repeat cycles per condition "
-             f"(bootstrap held out) · shaded = heat pulse\n"
+             f"filtering · {how} · shaded = heat pulse\n"
              f"physical units — stroke in mm, force in grams-force; power "
              f"deliberately NOT normalized, its spread is the independent "
              f"variable",
@@ -353,8 +371,36 @@ def main():
                          "(a heat row AND a current row) gets both.")
     ap.add_argument("--heat", type=int, default=None, help="one pulse length only")
     ap.add_argument("--level", type=float, default=None, help="one current only")
+    ap.add_argument("--all", action="store_true",
+                    help="every sweep_* folder under data/raw, so the standard "
+                         "figure set can be regenerated in one command (an "
+                         "overnight campaign lands as a dozen folders)")
     a = ap.parse_args()
-    sweep = a.sweep or latest_sweep()
+
+    if a.all:
+        folders = sorted(os.path.basename(p) for p in
+                         glob.glob(os.path.join(RAW, "sweep_*"))
+                         if os.path.isdir(p))
+        if not folders:
+            raise SystemExit(f"no sweep_* folders under {RAW}")
+        rc, made = 0, 0
+        for f in folders:
+            print(f"\n=== {f}")
+            try:
+                made += run_one(f, a)
+            except SystemExit as e:            # keep going over a bad folder
+                print(f"  skipped — {e}")
+                rc = 1
+            except Exception as e:             # noqa: BLE001
+                print(f"  ERROR — {e}")
+                rc = 1
+        print(f"\n{made} figure(s) over {len(folders)} sweep folder(s)")
+        return rc
+    return 0 if run_one(a.sweep or latest_sweep(), a) else 1
+
+
+def run_one(sweep, a):
+    """Figures for ONE sweep folder. Returns how many were written."""
     gridmap = discover(sweep)
     if not gridmap:
         raise SystemExit(f"no captures found in data/raw/{sweep}")
@@ -395,13 +441,16 @@ def main():
         by_lvl = {h: [l for l in v if l == a.level] for h, v in by_lvl.items()}
         by_lvl = {h: v for h, v in by_lvl.items() if v}
 
+    made = 0
     for h in sorted(by_lvl):
         print(f"  {h} ms pulse:")
-        build(sweep, "level", h, by_lvl[h])
+        made += bool(build(sweep, "level", h, by_lvl[h]))
     for lv in sorted(by_heat):
         print(f"  {lv:.0f} mA drive:")
-        build(sweep, "heat", lv, by_heat[lv])
-    return 0
+        made += bool(build(sweep, "heat", lv, by_heat[lv]))
+    if not made:
+        print("  no figure written — no condition yielded a usable trace")
+    return made
 
 
 if __name__ == "__main__":

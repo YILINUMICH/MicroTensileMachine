@@ -390,10 +390,18 @@ def main() -> int:
             # their files carry the sequence index to stay collision-free.
             stem = (f"c{k:02d}_level_{lvl:.0f}mA_h{heat_ms}ms" if explicit
                     else f"level_{lvl:.0f}mA_h{heat_ms}ms")
+            # PROVENANCE (guideline §9.3 "log the RNG seed", §7 "protocol
+            # changes belong in meta.json"): a randomized campaign is only
+            # reproducible if the profile identity and its seed travel with
+            # every capture, not just with the profile.json copy in the folder.
             save_capture(cap, out / f"{stem}.csv",
                          {"seq": k, "level_mA": lvl, "heat_ms": heat_ms,
                           "cool_s": cool_s, "cycles": cycles,
                           "m4_clock_offset_s": m4_off,
+                          "profile_name": profile.get("name"),
+                          "profile_seed": profile.get("seed"),
+                          "protocol": profile.get("protocol"),
+                          "i_low_mA": a.i_low,
                           "captured_utc": datetime.now(timezone.utc).isoformat()})
             if m4_off == 0.0:
                 print("  WARNING: no m7_us/m4_us STATUS line captured — "
@@ -443,6 +451,18 @@ def main() -> int:
             # window (2026-07-28). If only the bootstrap pulse survives, the
             # segmentation is wrong and the run must stop, not report a number.
             per_v = [r for r in per if not r["bootstrap"]]
+            if n_cyc == 1:
+                # ONE-PULSE CONDITIONS (`cycles: 0`) are the randomized-
+                # excitation protocol of DATA_COLLECTION_GUIDELINE §9.2:
+                # consecutive pulses must differ in condition, so a condition
+                # fires exactly once and its single pulse IS the measurement,
+                # not a ramp to discard. Without this the run would `continue`
+                # below and SKIP THE SENSE CHECK — silently disabling
+                # --abort-on-bad-sense for the whole campaign, which is the one
+                # guard an unattended night depends on. Measured 2026-08-05:
+                # first-after-arm pulses reach 97-102 % of command on this
+                # coil, so they are full-energy measurements.
+                per_v = per
             if not per_v:
                 # Still never judge the level on the bootstrap cycle — but the
                 # raw capture is already saved, so skip to the next level rather

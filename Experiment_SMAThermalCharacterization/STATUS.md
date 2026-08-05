@@ -50,6 +50,163 @@ Three things that had to move with it, easy to miss:
 travel with a clone. The module's entire ignore set stays machine-local: `.claude/`,
 `__pycache__/`, `zaber_config.json`.
 
+## 2026-08-05 — `plot_drive_trajectory.py` promoted to THE standard sweep figure
+
+The 4-channel × 2-time-scale drive figure is now documented in the README as the
+default way to look at any sweep (its own section, plus the pipeline table, the
+command list, and the tree). It already read raw captures directly and
+discovered the grid off capture filenames, so it needs no per-cycle table and no
+code edit per run — the gap was that it was undocumented and per-sweep manual.
+
+- **`--all`** added: every `sweep_*` folder under `data/raw/` in one command. An
+  overnight campaign lands as a dozen folders, so the per-sweep invocation was
+  the thing standing between "standard step" and "bookkeeping". A folder with no
+  captures is skipped with a reason and the batch continues; the exit code still
+  reports that not everything worked.
+- **One-pulse conditions now plot.** `condition_trace()` looped
+  `range(2, n_cyc + 1)` to hold out the bootstrap cycle, and bailed on
+  `n_cyc < 2`. Tonight's randomized protocol fires each condition **exactly
+  once**, so that range is empty and every one of the 962 overnight captures
+  would have plotted as "no usable cycles" — silently, for the whole campaign.
+  A single-cycle condition now uses its one pulse, and the subtitle says
+  `1 pulse per condition (randomized protocol)` rather than claiming a median it
+  did not take. Verified by forcing the single-cycle path over real captures:
+  6-cycle traces unchanged (n=5, peak 1.108 mm), 1-cycle path returns a trace
+  (n=1, peak 1.129 mm) where it previously returned `None`.
+
+The two `sweep_20260805_154528` figures already existed and were already correct
+— including the red `dotted = amp railed at 0/5 V — 750, 850, 950 mA` callout on
+the load-cell panel. They were regenerated to confirm identical content.
+
+## 2026-08-05 — the 08-05 sweeps analysed; stage 1 is now campaign-aware
+
+Ran the standing pipeline on the two Dynalloy sweeps, which had only ever been
+plotted by `plot_drive_trajectory.py` — the mandatory
+`operator_sweep_report.py` step had been skipped on both, so neither had a
+`report.txt`, a `cycles.csv`, or an envelope figure.
+
+**`analyze_raw.py` now keys on CAMPAIGNS, not one global `RUNS`/`MERGED`.**
+`MERGED` was a single hardcoded filename written unconditionally, so
+`analyze_raw.py sweep_20260805_154528` would have **rewritten the committed
+07-31 table with only that folder's rows**. Each wire now gets its own merged
+table (guideline §7: a different coil is the largest protocol change there is),
+and a campaign contributing no rows is left untouched rather than truncated.
+`run_type` also declares expected cycles per condition, so tonight's
+one-pulse-per-condition captures self-check correctly (`random`: 1).
+Verified: the 07-31 table and all five of its `cycles.csv` regenerate
+**byte-identical**.
+
+**Two real bugs in `plot_envelope.py`, both found by pointing it at this data:**
+
+- **`HEATS = [100, 200, 300, 400]` was hardcoded and `aggregate()` looped it**,
+  so every cycle at any other heat time was silently discarded. The 08-05
+  campaign's whole 500 ms row — 48 cycles, 8 of 44 conditions — vanished while
+  the script printed *"none excluded"*, in direct violation of the module's NO
+  DATA SELECTION rule. The heat list is now derived from the table and the
+  ramp is built to fit it; sampling the validated anchors at 4 points
+  reproduces the four validated colours **exactly**, so existing figures are
+  unchanged. A 5+-step ramp stays single-hue and monotone in lightness by
+  construction but has **not** been through `validate_palette.py`.
+- **Saturation was a single flag from `clipped | railed`, used on both charts.**
+  `railed` (laser out of window) bounds `dx`; `clipped` (load cell at 5 V)
+  bounds `dF`. This campaign railed the laser **0** times and clipped force
+  **28** times, so the entire top of the stroke chart was drawn hollow and
+  dashed as *"lower bounds, not measurements"* when every one of those
+  displacements is exact. Now per-channel (`saturated_dx` / `saturated_dF`,
+  added alongside `saturated` — add, don't remove), and each chart names its
+  own rail and count in its subtitle.
+
+`plot_energy.py` and `plot_selfsensing.py` share the latent version of the first
+bug via `ps.HEATS`, but they are pinned to the 07-31 `TABLE` and their prose
+hardcodes "150–950 mA × 100–400 ms", so porting them to a second campaign is
+authorship, not plumbing. They now call `ps.check_heats()`, which turns the
+silent drop into a loud stderr warning if that pin ever moves.
+
+**What the 08-05 Dynalloy campaign shows** (44 conditions, 264 cycles):
+stroke is steeply super-linear in current and nowhere near saturating — 950 mA
+× 500 ms reaches 7.6 mm against a ~10 mm laser window, and nothing railed.
+Force is the binding channel, not displacement: it clips from 750 mA upward on
+the long pulses, and because the cold baseline sat at 3.23 V the usable *rise*
+tops out near 190 mN, far below the 490 mN full scale. Re-zeroing the load cell
+cold is what makes the top of the 500 ms row measurable.
+
+**Platform note.** `csv.writer` defaults to CRLF while the committed tables are
+LF (written on the Windows rig, normalised on commit), so regenerating on macOS
+rewrote all 261 lines with identical values. Stage 1 now pins `lineterminator`
+to LF and is byte-reproducible on either host. The plotly HTML pages and the
+matplotlib PNGs still carry host-specific churn (a per-render div UUID, last-ULP
+float differences, and macOS font fallback for weights `medium`/`semibold`), so
+**the 07-31 figures were left at their committed versions** — regenerate them on
+the rig host to pick up the per-channel rail fix.
+
+## 2026-08-05 — overnight campaign runner + the shuffle protocol was not shuffling
+
+Prepared the 2026-08-05/06 overnight collection (13 profiles, 962 pulses,
+~9.2 h). Campaign and its rationale:
+`profiles/night_profiles_20260805/README.md`.
+
+**New: `operator_profile_queue.py`** (module root, `operator_` = run directly).
+`operator_current_sweep.py` runs one profile per launch and exits, so a
+multi-profile campaign needed someone awake at 03:00. The queue validates every
+profile before the first pulse fires, runs the report after each, honours
+`--deadline HH:MM`, and writes `queue_manifest.json` mapping pre-registered role
+→ capture folder. Two behaviours worth knowing:
+
+- **It judges a profile on captures written, not exit code.** `operator_current_sweep.py`
+  returns 0 on nearly every failure path — dead port, hub fault, sense abort —
+  after writing `summary.csv`. A first cut of the queue reported "2 ok" for two
+  profiles that had captured *nothing*. It now scrapes the sweep's own stop
+  reason and counts capture CSVs.
+- **Circuit breaker:** two consecutive zero-capture profiles abandon the queue.
+  A rig that has dropped off USB is not fixed by trying the next profile.
+
+**The confound the shuffle blocks existed to remove was still present.** The
+first draft of the campaign used `cycles: 1` + `settle_s: 40`. That fires two
+pulses at the *same* `(i_ma, heat_ms)` 30 s apart, then waits ~70 s before the
+next condition — so the recurrent window sees exactly **two thermal-history
+classes** (cold start / 30 s after an identical pulse), both a deterministic
+function of the command, and shuffling the condition *order* changes nothing.
+`DATA_COLLECTION_GUIDELINE.md` §9.2 requires the opposite: *consecutive pulses
+must differ in condition*. Confirmed on 08-05 data — same cell, cold-start vs
+30 s later: 250×400 → 74.7 vs 52.1 µm, 250×300 → 53.6 vs 43.9.
+
+The shuffle blocks now use **`cycles: 0`, one pulse per condition**, with
+`settle_s: 2` so the block is one randomized excitation train. Two changes to
+`operator_current_sweep.py` were required:
+
+- **`n_cyc == 1` treats the single pulse as the measurement.** Otherwise `per_v`
+  (non-bootstrap pulses) is empty and the code `continue`s — **skipping the
+  sense check**, silently disabling `--abort-on-bad-sense` for the entire
+  campaign. That guard is the one thing standing between an unattended night and
+  a repeat of the 2026-07-28 corrupted-sense sweep. Safe because
+  first-after-arm pulses measure 97–102 % of command on this coil (the
+  "bootstrap is a ramp" warning describes pre-seed firmware on the long coil),
+  and `prepare_pulse_runs.py` explicitly *keeps* `bootstrap == 1` rows.
+- **`meta.json` now carries `profile_name` / `profile_seed` / `protocol` /
+  `i_low_mA`** per capture, so a randomized campaign is reproducible from the
+  captures alone (guideline §9.3 seed logging, §7 protocol identifiability).
+
+**Profiles are drawn to the §9.1 envelope measured on the current coil** — a cell
+is admitted only if median |stroke| ≥ max(50 µm, 3σ) and the drive is
+trustworthy. 36 of 44 cells admitted; the whole 200 mA column, 250×100/200/300
+and 350×100 rejected, which sets a current-dependent minimum heat time
+(250 mA → ≥400 ms, 350 → ≥200, ≥450 → ≥100). Draws are continuous
+Latin-hypercube inside it, not grid nodes; `cool_s` is randomized per condition
+(12–45 s, floored by pulse energy; n4 uses a disjoint 5–11 s for the OOD
+short-cool test, current-capped at 650 mA). Nothing railed — the laser window is
+healthy across the full ~10 mm.
+
+**Two open downstream items:** every night pulse carries `bootstrap = 1`
+(semantically correct, one pulse per capture, but no longer discriminating — use
+`cc_pct`), and `prepare_pulse_runs.py`'s per-cell median/σ filter becomes a
+no-op on this data since it reads `bootstrap == 0` rows. Mitigated by applying
+the envelope at draw time; the filter should be revisited before training on
+randomized campaigns.
+
+**Not yet bench-verified:** the `cycles: 0` path has been dry-run and
+compile-checked but never driven against the rig. Fire `n0_anchor_start` and one
+short slice of `n1a` attended before committing to the night.
+
 ## 2026-08-05 — Dynalloy short-wire campaign: 44 cells + a sweep-agnostic plotter
 
 New coil fitted (0.08 in, 10 mm solid, cold-stretched to 40 mm). Three captures,

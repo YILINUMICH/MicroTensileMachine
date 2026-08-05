@@ -82,6 +82,7 @@ def build():
     # Every cycle that HAS the coordinates is drawn. `usable` decides only what
     # the fits are computed from -- see energy_table.py, "NO DATA SELECTION".
     all_d = load(verbose=True)
+    ps.check_heats(all_d, __file__.split('/')[-1])
     d = all_d[(all_d.dx_um > 1) & (all_d.dF_mN > 0) & all_d.E_J.notna()
               & all_d.p_hot_W.notna()].copy()
     fit = d[d.usable]
