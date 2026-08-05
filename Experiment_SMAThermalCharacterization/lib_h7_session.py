@@ -296,7 +296,7 @@ def align_m4(cap: Capture, offset_s: float) -> Capture:
 
 
 def measurement_sane(cap: Capture, windows, v_idle: float = 0.5,
-                     r_min_ohm: float = 2.0, max_frac: float = 0.01):
+                     r_min_ohm: float = 1.6, max_frac: float = 0.01):
     """Is the current sense telling the truth? Returns (ok, message).
 
     On 2026-07-28 a whole 9-minute sweep was recorded through a corrupted
@@ -310,9 +310,19 @@ def measurement_sane(cap: Capture, windows, v_idle: float = 0.5,
 
     The test: during COOL with i_low=0 the DAC parks at code 0, so the wire sees
     a known `v_idle`. Any sample implying R = v_idle/I below `r_min_ohm` is
-    impossible — a Flexinol coil on this rig measures ~4.2-4.8 ohm and cannot
-    approach 2. In the corrupted sweep 13-14% of cool samples implied R < 2;
-    in six healthy captures it is 0.00%.
+    impossible. In the corrupted sweep 13-14% of cool samples implied R below
+    half the wire's cold resistance; in six healthy captures it is 0.00%.
+
+    `r_min_ohm` MUST TRACK THE WIRE ON THE RIG — it is a fraction (~45%) of the
+    cold resistance, not a constant:
+
+        long coil, through 2026-08-04      ~4.2-4.8 ohm  -> guard 2.0
+        1.8 ohm coil, 2026-08-04 evening   ~1.8 ohm      -> guard 0.8
+        Dynalloy coil, 2026-08-05 (fitted) ~3.5 ohm      -> guard 1.6
+
+    A stale guard aborts every healthy sweep on the first condition: the 1.8 ohm
+    coil's idle bias alone draws v_idle/R = 0.5/1.8 = 278 mA, which the 2.0
+    guard read as "impossible" and killed sweep_20260804_213705 on condition 1.
 
     Cheap, needs no root cause, and would have killed that sweep in its first
     second instead of after nine minutes of unusable data.
@@ -332,9 +342,10 @@ def measurement_sane(cap: Capture, windows, v_idle: float = 0.5,
         return False, (
             f"{100*frac:.2f}% of cool samples exceed {1e3*i_max:.0f} mA, which "
             f"at the {v_idle:.3f} V idle bias implies R < {r_min_ohm:.1f} ohm — "
-            f"physically impossible for this wire (~4.2-4.8 ohm). The current "
-            f"sense is corrupted; the data is NOT usable. Power-cycle USB + EVM, "
-            f"reseat the SMA clips, and re-run. "
+            f"physically impossible for this wire. EITHER the current sense is "
+            f"corrupted (data NOT usable — power-cycle USB + EVM, reseat the "
+            f"SMA clips, re-run) OR --r-min is stale for the wire now fitted: "
+            f"check its cold resistance and set r_min_ohm to ~45% of it. "
             f"See data/raw/sweep_20260728_215606/README.md.")
     return True, f"{100*frac:.2f}% impossible cool samples (limit {100*max_frac:.0f}%)"
 

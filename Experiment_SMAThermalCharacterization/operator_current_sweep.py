@@ -216,12 +216,17 @@ def main() -> int:
     p.add_argument("--v-idle", type=float, default=0.5,
                    help="LDO output at DAC code 0 (the cool-phase bias). Must "
                         "match the firmware `offset`. Used by the sense check.")
-    p.add_argument("--r-min", type=float, default=2.0,
+    p.add_argument("--r-min", type=float, default=1.6,
                    help="lowest believable wire resistance, ohm. A cool sample "
                         "implying less than this is physically impossible and "
                         "means the current sense is corrupted — the sweep "
-                        "ABORTS rather than record unusable data. The wire "
-                        "measures ~4.2-4.8 ohm, so 2.0 is a wide margin.")
+                        "ABORTS rather than record unusable data. MUST TRACK "
+                        "THE WIRE ON THE RIG at ~45%% of its cold resistance: "
+                        "long coil ~4.2-4.8 ohm -> 2.0; the 2026-08-04 short "
+                        "coil ~1.8 ohm -> 0.8; the Dynalloy coil fitted "
+                        "2026-08-05 ~3.5 ohm -> 1.6 (the default). Set it per "
+                        "wire, and prefer `r_min_ohm` in the profile so it "
+                        "rides with the data.")
     p.add_argument("--out", default=None)
     p.add_argument("--dry-run", action="store_true",
                    help="print the resolved condition plan and exit WITHOUT "
@@ -307,6 +312,7 @@ def main() -> int:
     print(f"  {shape}")
     print(f"  {len(conditions)} conditions, ~{sum(per_cond)/60:.0f} min total\n")
 
+    t_start = time.time()           # wall clock the ETA below paces against
     h7 = H7(a.port)
     rows, ceiling, stop_reason = [], None, "all levels passed"
     try:
