@@ -39,7 +39,10 @@ from energy_table import load
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
-OUT = os.path.join(DERIVED, "energy_collapse.html")
+
+from analyze_raw import CAMPAIGNS, derived_dir  # noqa: E402
+OUT = os.path.join(derived_dir(CAMPAIGNS["20260731"]["dir"]),
+                   "energy_collapse.html")
 
 # the log-scaled axes, in plotly's naming — panel 4's y is a % residual and
 # stays linear

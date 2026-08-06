@@ -65,6 +65,27 @@ New/changed:
   nothing, so the notebook's session auto-pick reported "no console_* session
   found" for sessions that were merely filed.
 
+**`data/derived/` mirrors the same grouping**, sharing the `dir` name so a
+campaign's captures and its analysed results cannot drift apart. This matters
+most for the five outputs whose FILENAME carries no provenance —
+`trajectory_*.png` and the four interactive HTMLs are all 15 mm-wire results and
+used to sit flat next to 10 mm-wire results, indistinguishable.
+`plot_drive_trajectory.py` reads a sweep's parent folder and writes beside it;
+a merge that SPANS campaigns lands at the `data/derived` root rather than being
+filed under one campaign it only half belongs to.
+
+The seven `console_*`/`noise_*`/`pulse_*` folders that had been staged for
+deletion were **restored and filed under `troubleshoot/`** instead — 46 files,
+now renames rather than deletions, nothing lost. `troubleshoot/` holds 19
+investigations.
+
+**`energy_table.py`'s July pin is unchanged and now visible.** It hardcoded
+`heat_time_map_20260731_all.csv`; it now resolves the same table through
+`CAMPAIGNS["20260731"]`, so `plot_energy` / `plot_selfsensing` /
+`plot_transition` / `plot_r_bias` still show 15 mm-wire results no matter which
+campaign was analysed last. That is a real limitation, documented in
+`data/derived/README.md`, and the one place a `--campaign` argument would go.
+
 **Known gap, unchanged by this:** the seven 2026-07-30 folders (1.6 GB) use the
 older `level_850mA_h400ms.csv` naming, and every pipeline glob matches
 `c*_level_*`. They are on disk and invisible to every stage. `INDEX.md` reports

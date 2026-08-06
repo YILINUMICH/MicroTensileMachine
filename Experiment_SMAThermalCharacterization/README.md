@@ -638,7 +638,7 @@ python operator_sweep_report.py data/raw/campaigns/<key>/sweep_<stamp>   # ALWAY
 python analysis/make_index.py                            # refresh data/raw/INDEX.md
 python analysis/plot_drive_trajectory.py --sweep sweep_<stamp>   # the standard figure
 python analysis/analyze_raw.py          # add the sweep to CAMPAIGNS first
-python analysis/plot_envelope.py ../data/derived/heat_time_map_<campaign>_all.csv
+python analysis/plot_envelope.py data/derived/campaigns/<dir>/heat_time_map_<campaign>_all.csv
 ```
 
 ## Standing analysis pipeline — raw → table → charts (2026-07-31)
@@ -664,11 +664,17 @@ python plot_r_bias.py                 # -> r_bias_artifact.html   (interactive)
 `../data/raw` and `../data/derived` off their own location, so they work from any
 CWD — `cd analysis` is a convenience, not a requirement.
 
+**Both data folders are grouped by campaign** (2026-08-06) and share the folder
+name, which comes from the `dir` field of `CAMPAIGNS` in `analysis/analyze_raw.py`:
+`data/raw/campaigns/<dir>/` holds the captures and `data/derived/campaigns/<dir>/`
+holds what they produced. See `data/raw/INDEX.md` (generated) for which campaign
+holds what, and `data/derived/README.md` for what writes each output.
+
 | stage | script | reads | writes |
 |---|---|---|---|
-| 1 | `analyze_raw.py` | `data/raw/sweep_*/c*_level_*.csv` + `.console.log` + `.meta.json` | `data/raw/sweep_*/cycles.csv`, `data/derived/heat_time_map_<date>_all.csv` |
-| 2 | `plot_envelope.py` | `data/derived/heat_time_map_<date>_all.csv` | `data/derived/*_envelope.csv`, `*_stroke.png`, `*_force.png` |
-| 2 | `plot_drive_trajectory.py` | raw captures, one or more sweep folders (discovers the grid off filenames — **no table needed**) | `data/derived/drive_<sweep[+stamp…]>_<400ms\|200mA>.png` |
+| 1 | `analyze_raw.py` | `data/raw/campaigns/<dir>/sweep_*/c*_level_*.csv` + `.console.log` + `.meta.json` | `<sweep>/cycles.csv`, `data/derived/campaigns/<dir>/heat_time_map_<campaign>_all.csv` |
+| 2 | `plot_envelope.py` | a campaign's `heat_time_map_*_all.csv` | `*_envelope.csv`, `*_stroke.png`, `*_force.png` — **next to the input** |
+| 2 | `plot_drive_trajectory.py` | raw captures, one or more sweep folders (discovers the grid off filenames — **no table needed**) | `data/derived/campaigns/<dir>/drive_<sweep[+stamp…]>_<400ms\|200mA>.png` — follows the captures' campaign |
 | 2 | `plot_trajectory.py` | per-cycle table + raw captures | `data/derived/trajectory_<heat>ms_<norm>.png` |
 | 2 | `plot_energy.py` | per-cycle table + `energy_table.py` | `data/derived/energy_collapse.html` |
 | 2 | `plot_selfsensing.py` | per-cycle table + `energy_table.py` | `data/derived/self_sensing.html` |

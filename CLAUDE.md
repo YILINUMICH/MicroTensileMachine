@@ -113,7 +113,13 @@ data/raw/        What the RIG wrote. Never hand-edit. Capture folders keep
                  INBOX: a run without --campaign lands loose and the index
                  flags it as unfiled.
 data/derived/    What the PIPELINE computed. Regenerable, but committed so
-                 analysed results travel with a clone.
+                 analysed results travel with a clone. MIRRORS data/raw's
+                 campaign grouping (2026-08-06) and shares the folder name via
+                 the `dir` field of CAMPAIGNS, so a campaign's captures and its
+                 results cannot drift apart: data/derived/campaigns/<dir>/.
+                 See data/derived/README.md for what writes each output --
+                 including which ones are still pinned to the July campaign
+                 through energy_table.py.
 ```
 
 **Path constants, not CWD.** Every script in `analysis/` and `diagnostics/` that touches data resolves `RAW` and/or `DERIVED` off its own `__file__` (`../data/raw`, `../data/derived`), so they run from any working directory. (`plot_style.py` touches no paths; `make_rnn_profile.py` writes `../profiles`.) If you add a script there, follow that pattern — do not use bare relative paths.

@@ -30,6 +30,10 @@ import matplotlib.pyplot as plt
 _HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(_HERE, "..", "data", "raw")           # capture folders
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
+# CLOSED diagnostic — this is a PATH UPDATE ONLY, not an extension. Its outputs
+# follow the 2026-08-06 campaign grouping so they sit beside the 15 s-cool
+# captures they were computed from, instead of loose next to live results.
+_OUT = os.path.join(DERIVED, "campaigns", "20260730_dynalloy_15mm_cool15s")
 # Calibrate_LoadCell/calibration.json: 10.2009 mV/mN -> 98.03 mN/V.
 # baseline_V/peak_V/rise_V in summary.csv are LOAD CELL volts (SRC_LOAD);
 # `clipped` is the load cell hitting 5 V full scale (~490 mN), not the laser.
@@ -75,7 +79,7 @@ for s in SWEEPS:
             else:
                 dropped[flag] = dropped.get(flag, 0) + 1
 
-clean_path = os.path.join(DERIVED, "heat_time_map_20260730_clean.csv")
+clean_path = os.path.join(_OUT, "heat_time_map_20260730_clean.csv")
 cols = ["level_mA", "heat_ms", "sweep", "cycle", "i_mA", "dx_um",
         "x_base_um", "baseline_V", "peak_V", "rise_V"]
 with open(clean_path, "w", newline="") as f:
@@ -85,7 +89,7 @@ with open(clean_path, "w", newline="") as f:
         w.writerow([r[c] for c in cols] +
                    [round(float(r["rise_V"]) * F_MN_PER_V, 2), r["cool_s"]])
 
-env_path = os.path.join(DERIVED, "heat_time_map_20260730_envelope.csv")
+env_path = os.path.join(_OUT, "heat_time_map_20260730_envelope.csv")
 env = {}   # (heat, level) -> dict
 with open(env_path, "w", newline="") as f:
     w = csv.writer(f)
@@ -207,7 +211,7 @@ leg.get_title().set_color(INK2)
 for t in leg.get_texts():
     t.set_color(INK2)
 
-png_path = os.path.join(DERIVED, "heat_time_map_20260730_envelope.png")
+png_path = os.path.join(_OUT, "heat_time_map_20260730_envelope.png")
 fig.tight_layout()
 fig.savefig(png_path, facecolor=SURFACE, bbox_inches="tight")
 print("wrote", png_path)
@@ -267,7 +271,7 @@ leg2.get_title().set_color(INK2)
 for t in leg2.get_texts():
     t.set_color(INK2)
 
-png2_path = os.path.join(DERIVED, "heat_time_map_20260730_force_envelope.png")
+png2_path = os.path.join(_OUT, "heat_time_map_20260730_force_envelope.png")
 fig2.tight_layout()
 fig2.savefig(png2_path, facecolor=SURFACE, bbox_inches="tight")
 print("wrote", png2_path)

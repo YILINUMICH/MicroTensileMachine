@@ -160,6 +160,7 @@ CYCLES_EXPECTED = {"map": 6, "probe": 4, "extremes": 6, "random": 1}
 # On disk: data/raw/campaigns/<date>_dynalloy_<length>[_<protocol>]/.
 CAMPAIGNS = {
     "20260731": {
+        "dir": "20260731_dynalloy_15mm_cool30s",
         "merged": "heat_time_map_20260731_all.csv",
         "cool_s": 30.0,
         "wire": "Dynalloy, 15 mm cold length, ~4.2-4.8 ohm cold "
@@ -173,6 +174,7 @@ CAMPAIGNS = {
         ],
     },
     "20260805_dynalloy": {
+        "dir": "20260805_dynalloy_10mm",
         "merged": "heat_time_map_20260805_dynalloy_all.csv",
         "cool_s": 30.0,
         "wire": "Dynalloy 0.08 in, 10 mm cold length, cold-stretched to 40 mm, "
@@ -184,6 +186,23 @@ CAMPAIGNS = {
         ],
     },
 }
+
+
+# data/derived mirrors data/raw's campaign grouping (2026-08-06). `dir` above is
+# the ONE name shared by both sides, so a campaign's captures and its analysed
+# results sit under the same folder name and neither can drift from the other.
+# It matters most for the outputs whose FILENAME says nothing about provenance:
+# trajectory_400ms_abs.png and energy_collapse.html are 15 mm-wire results and
+# used to sit in a flat folder next to 10 mm-wire results, indistinguishable.
+DERIVED_CAMPAIGNS = os.path.join(DERIVED, "campaigns")
+
+
+def derived_dir(campaign_folder, make=True):
+    """data/derived/campaigns/<campaign_folder>, created on demand."""
+    d = os.path.join(DERIVED_CAMPAIGNS, campaign_folder)
+    if make:
+        os.makedirs(d, exist_ok=True)
+    return d
 
 
 WRAP_S = 2 ** 32 / 1e6          # micros() is 32-bit: rolls over every 4294.97 s
@@ -480,7 +499,8 @@ def run_campaign(name, camp, want):
              "cool_s", "i_low_mA", "seeded"]
     allrows.sort(key=lambda r: (r["heat_ms"], r["level_mA"], r["sweep"],
                                 r["cycle"]))
-    with open(os.path.join(DERIVED, MERGED), "w", newline="") as fh:
+    out_dir = derived_dir(camp["dir"])
+    with open(os.path.join(out_dir, MERGED), "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=order, extrasaction="ignore",
                            lineterminator=LF)
         w.writeheader()
@@ -493,7 +513,7 @@ def run_campaign(name, camp, want):
           f"(all RETAINED)")
 
     # ---- guideline §6: campaign calibration, so a change is detectable ----
-    with open(os.path.join(DERIVED, MERGED.replace(".csv", "_meta.json")),
+    with open(os.path.join(out_dir, MERGED.replace(".csv", "_meta.json")),
               "w") as fh:
         json.dump({
             "campaign": MERGED,

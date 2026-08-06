@@ -90,7 +90,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 
-from analyze_raw import capture_dirs, resolve_sweep
+from analyze_raw import capture_dirs, derived_dir, resolve_sweep
 from get_cycle import get_cycle, list_cycles
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -165,6 +165,23 @@ def cool_label(sweeps, default=30.0):
     vals = sorted(set(vals)) or [default]
     return (f"{vals[0]:.0f} s cool" if len(vals) == 1
             else f"{vals[0]:.0f}–{vals[-1]:.0f} s cool")
+
+
+def out_dir(sweeps):
+    """Where this figure belongs under data/derived.
+
+    Follows the CAPTURES: a sweep filed in data/raw/campaigns/<X>/ puts its
+    figure in data/derived/campaigns/<X>/, so the two sides never drift and a
+    figure is never orphaned from the wire that produced it. Read off the
+    parent folder rather than CAMPAIGNS, so an unregistered sweep still files
+    correctly. A merge that SPANS campaigns has no single home and lands at the
+    data/derived root — which is the honest answer, and visible."""
+    parents = {os.path.basename(os.path.dirname(resolve_sweep(s))) for s in sweeps}
+    if len(parents) == 1:
+        only = parents.pop()
+        if only != "raw":                      # loose in the inbox
+            return derived_dir(only)
+    return DERIVED
 
 
 def group_label(sweeps):
@@ -452,7 +469,7 @@ def build(sweeps, owner, by, fixed, series):
              ha="left", va="top", fontsize=10.5, color=INK_MUTED)
 
     tag = f"{fixed}ms" if lvl_axis else f"{fixed:.0f}mA"
-    out = os.path.join(DERIVED, f"drive_{group_label(sweeps)}_{tag}.png")
+    out = os.path.join(out_dir(sweeps), f"drive_{group_label(sweeps)}_{tag}.png")
     fig.savefig(out, dpi=140, facecolor=SURFACE)
     plt.close(fig)
     print(f"  -> {os.path.basename(out)}  ({len(lv_sorted)} series)")

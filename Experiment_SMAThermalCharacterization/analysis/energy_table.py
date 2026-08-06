@@ -56,8 +56,17 @@ import pandas as pd
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
-TABLE = os.path.join(DERIVED, "heat_time_map_20260731_all.csv")
-CACHE = os.path.join(DERIVED, "heat_time_map_20260731_all_energy.csv")
+
+from analyze_raw import CAMPAIGNS, derived_dir  # noqa: E402
+# STILL PINNED to the 2026-07-31 campaign — every importer of load() inherits
+# that pin, so plot_energy / plot_selfsensing / plot_transition / plot_r_bias
+# show 15 mm-wire results no matter which campaign was last analysed. The pin
+# is not new; routing it through CAMPAIGNS makes it visible in one place
+# instead of a bare filename, and is where a --campaign argument would land.
+_J = CAMPAIGNS["20260731"]
+_JDIR = derived_dir(_J["dir"])
+TABLE = os.path.join(_JDIR, _J["merged"])
+CACHE = os.path.join(_JDIR, _J["merged"].replace(".csv", "_energy.csv"))
 KEY = ["sweep", "level_mA", "heat_ms", "cycle"]
 
 

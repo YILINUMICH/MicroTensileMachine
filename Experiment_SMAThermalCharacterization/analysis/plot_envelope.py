@@ -51,6 +51,8 @@ import matplotlib.pyplot as plt
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
+
+from analyze_raw import CAMPAIGNS, derived_dir  # noqa: E402
 # HEAT TIMES COME FROM THE DATA, never from a constant. A hardcoded
 # `HEATS = [100, 200, 300, 400]` silently dropped every cycle at any other heat
 # time: the 2026-08-05 Dynalloy campaign added a 500 ms row, and `aggregate()`
@@ -214,7 +216,12 @@ def chart(d, env, ycol_pt, ycol_med, ylabel, title, subtitle, out,
 
 
 def main(argv):
-    src = argv[0] if argv else os.path.join(DERIVED, "heat_time_map_20260731_all.csv")
+    # Outputs land NEXT TO THE INPUT, so a campaign's envelope files follow
+    # its table into data/derived/campaigns/<dir>/ with no path logic here.
+    # The no-argument default is still the JULY campaign: passing the table
+    # you actually want is not optional for any other one.
+    _J = CAMPAIGNS["20260731"]
+    src = argv[0] if argv else os.path.join(derived_dir(_J["dir"]), _J["merged"])
     stem = src[:-4]
     d = pd.read_csv(src)
     env = aggregate(d)

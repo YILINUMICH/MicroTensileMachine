@@ -76,7 +76,7 @@ Runs that produced no usable capture (opened and stopped, or killed before the f
 
 Closed diagnostic sessions — `console_*` and `isense_*`. See `../../STATUS.md` for what each one concluded.
 
-12 folders · 0.27 GB
+19 folders · 0.32 GB
 
 - `console_20260713_115921_laserhiddenpattern`
 - `console_20260713_122906_laserfix`
@@ -84,12 +84,19 @@ Closed diagnostic sessions — `console_*` and `isense_*`. See `../../STATUS.md`
 - `console_20260715_172418_3V0.5V`
 - `console_20260715_192837_3V0.6V`
 - `console_20260715_193936_5V0.5V`
+- `console_20260728_115753`
 - `isense_20260728_224340_sma-connected`
 - `isense_20260728_230850_sma-connected-cc`
 - `isense_20260728_231141_sma-disconnected-voltage`
 - `isense_20260728_231944_sma-higher-cc`
 - `isense_20260728_232918_sma-connected-cc`
 - `isense_20260728_233618_sma-connected-cccycle`
+- `noise_20260728_125440_quiet_baseline`
+- `noise_20260728_shorted_input_test`
+- `pulse_20260729_001232`
+- `pulse_20260731_123222`
+- `pulse_20260731_124214`
+- `pulse_20260731_125642`
 
 ## Not readable by the pipeline
 

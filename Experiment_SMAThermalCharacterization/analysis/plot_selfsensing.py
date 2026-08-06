@@ -42,7 +42,10 @@ from energy_table import load
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
-OUT = os.path.join(DERIVED, "self_sensing.html")
+
+from analyze_raw import CAMPAIGNS, derived_dir  # noqa: E402
+OUT = os.path.join(derived_dir(CAMPAIGNS["20260731"]["dir"]),
+                   "self_sensing.html")
 
 
 def r2_of(y, pred):

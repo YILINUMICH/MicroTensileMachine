@@ -60,8 +60,11 @@ from get_cycle import get_cycle, list_cycles
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
-OUT = os.path.join(DERIVED, "r_bias_artifact.html")
-CACHE = os.path.join(DERIVED, "r_bias_points.csv")
+
+from analyze_raw import CAMPAIGNS, derived_dir  # noqa: E402
+_JDIR = derived_dir(CAMPAIGNS["20260731"]["dir"])
+OUT = os.path.join(_JDIR, "r_bias_artifact.html")
+CACHE = os.path.join(_JDIR, "r_bias_points.csv")
 
 ONSET = (0.004, 0.020)      # wire still at ambient, current settled
 PRE_END = (-0.050, -0.005)  # last 45 ms of heat, relative to heat end

@@ -65,6 +65,8 @@ from get_cycle import get_cycle, list_cycles
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
+
+from analyze_raw import CAMPAIGNS, derived_dir  # noqa: E402
 PRE_S, POST_S = 2.0, 29.0
 GRID_HZ = 400.0
 DETAIL_S = 1.5
@@ -429,7 +431,8 @@ def main():
         ns = sorted({t["_n"] for t in traces.values()})
         n_desc = (f"{ns[0]} cycles" if len(ns) == 1
                   else f"{min(ns)}–{max(ns)} cycles depending on condition")
-        out = os.path.join(DERIVED, f"transition_{h}ms.html")
+        out = os.path.join(derived_dir(CAMPAIGNS["20260731"]["dir"]),
+                           f"transition_{h}ms.html")
         stand = (f"{len(lv_sorted)} current levels · {h} ms pulse · median of "
                  f"the repeat cycles · absolute ohms. Rise takes a fraction of "
                  f"a second, recovery tens of seconds. The phase column stops "
