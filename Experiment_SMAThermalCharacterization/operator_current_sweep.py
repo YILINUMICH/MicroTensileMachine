@@ -227,7 +227,17 @@ def main() -> int:
                         "2026-08-05 ~3.5 ohm -> 1.6 (the default). Set it per "
                         "wire, and prefer `r_min_ohm` in the profile so it "
                         "rides with the data.")
-    p.add_argument("--out", default=None)
+    p.add_argument("--out", default=None,
+                   help="explicit output folder; overrides --campaign")
+    p.add_argument("--campaign", default=None, metavar="KEY",
+                   help="file this run under data/raw/campaigns/<KEY>/ instead "
+                        "of loose in data/raw/. A campaign is one WIRE + "
+                        "PROTOCOL — cold length is the axis that matters most, "
+                        "so name it like 20260806_dynalloy_10mm. Filing at "
+                        "capture time means the folder says which wire it came "
+                        "from from the moment it is written; a run left loose "
+                        "in data/raw/ has to be identified later from its "
+                        "meta.json, which does not record the wire at all.")
     p.add_argument("--dry-run", action="store_true",
                    help="print the resolved condition plan and exit WITHOUT "
                         "opening the serial port. ALWAYS use this to check a "
@@ -298,9 +308,18 @@ def main() -> int:
         return 0
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out = (Path(a.out) if a.out
-           else Path(__file__).parent / "data" / "raw" / f"sweep_{stamp}")
+    raw = Path(__file__).parent / "data" / "raw"
+    if a.out:
+        out = Path(a.out)
+    elif a.campaign:
+        out = raw / "campaigns" / a.campaign / f"sweep_{stamp}"
+    else:
+        # Loose in data/raw/ is still allowed — a quick probe should not need a
+        # campaign — but it is an INBOX, not a home. analysis/make_index.py
+        # lists anything left here as unfiled.
+        out = raw / f"sweep_{stamp}"
     out.mkdir(parents=True, exist_ok=True)
+    print(f"  writing to {out.relative_to(Path(__file__).parent)}")
     if profile:                     # provenance: the profile rides with the data
         (out / "profile.json").write_text(
             Path(a.profile).read_text(), encoding="utf-8")

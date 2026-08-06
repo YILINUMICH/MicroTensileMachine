@@ -8,6 +8,68 @@
 | **Owner** | Yilin |
 | **Quick test (no hardware)** | `python -c "import config, workers, recording_core, sma_console, analyze_sma"` then run the analyzer on a synthetic console session (see README). GUI: `QT_QPA_PLATFORM=offscreen` + `run_gui(..., _build_only=True)`. |
 
+## 2026-08-06 — `data/raw/` grouped by campaign; generated capture INDEX
+
+20 `sweep_*` folders named by timestamp and nothing else, 3.8 GB, and no way to
+tell which wire a run used without opening `meta.json` — which does not record
+the wire at all. Reorganized ahead of the next collection round.
+
+**Cold length is the campaign axis**, not the date: it is the same Dynalloy
+stock throughout, cut/stretched to a different cold length per campaign, and
+that changes the response more than anything else the protocol varies.
+
+```
+data/raw/
+  INDEX.md         GENERATED — which folder holds what
+  campaigns/
+    20260730_dynalloy_15mm_cool15s/   7 sweeps, 1.6 GB   (cooling issue)
+    20260731_dynalloy_15mm_cool30s/   5 sweeps, 1.1 GB   -> heat_time_map_20260731_all.csv
+    20260804_dynalloy_4mm/            1 sweep,  18 MB
+    20260805_dynalloy_10mm/           2 sweeps, 842 MB   -> heat_time_map_20260805_dynalloy_all.csv
+  writeups/ aborted/ troubleshoot/ logs/
+```
+
+2026-07-30 and 07-31 are the SAME 15 mm wire; 07-30 ran a 15 s cool and hit the
+cooling issue, so it is a different protocol and a separate campaign.
+
+**Folder names are unchanged, and a sweep is still identified by its BARE NAME
+everywhere** — the `sweep` column of the merged table, `CAMPAIGNS`, `--sweep` on
+the plotters. `analyze_raw.resolve_sweep()` maps a name to wherever it is filed,
+so refiling a folder rewrites no table and breaks no command. Both merged tables
+regenerate byte-identical after the move; only the two `_meta.json` files
+changed, and only because the `wire` descriptions were corrected to name the
+cold length.
+
+New/changed:
+
+- **`analysis/make_index.py`** (new) — generates `data/raw/INDEX.md` from the
+  files: grid off the capture filenames, protocol off `meta.json`, campaign off
+  the parent folder, registration off `CAMPAIGNS`. `--check` exits 1 when stale.
+  It flags **unfiled** runs (loose in `data/raw/`, wire unrecorded),
+  **unregistered** folders (in no campaign, so in no table), and **old naming**.
+- **`operator_current_sweep.py --campaign KEY`** — a run files itself into
+  `data/raw/campaigns/KEY/` at capture time, so the folder names its wire from
+  the moment it is written. Without it a run still lands loose in `data/raw/`,
+  which is now an INBOX; the index lists it as unfiled. NOT bench-verified —
+  `pyserial` was unavailable on the machine this was written on.
+- **`analyze_raw.capture_dirs()` / `resolve_sweep()`** — name → path, walking
+  the grouping folders but never descending into a capture folder.
+- **`plot_drive_trajectory.all_sweeps()`** replaces the old
+  `sorted(glob("sweep_*"))[-1]` for "latest". That sort was lexicographic, so
+  `sweep_full_150-950mA` beat every `sweep_<stamp>` ('f' > '2') and a bare run
+  had been plotting that folder rather than the newest capture. Now sorts on the
+  parsed stamp, falling back to mtime for unstamped names, and skips
+  `aborted/` + `writeups/` so `--all` stops emitting a failure line per folder.
+- **`lib_analysis.latest_session()`** searches one level down as well. The
+  `troubleshoot/` move had already broken it: `data/raw/console_*` matched
+  nothing, so the notebook's session auto-pick reported "no console_* session
+  found" for sessions that were merely filed.
+
+**Known gap, unchanged by this:** the seven 2026-07-30 folders (1.6 GB) use the
+older `level_850mA_h400ms.csv` naming, and every pipeline glob matches
+`c*_level_*`. They are on disk and invisible to every stage. `INDEX.md` reports
+them under "Not readable by the pipeline" rather than letting them look analysed.
+
 ## 2026-08-06 — `plot_drive_trajectory.py` merges sweep folders; 08-05 envelope figures
 
 `--sweep A B ...` now reads several capture folders as ONE grid. The 2026-08-05

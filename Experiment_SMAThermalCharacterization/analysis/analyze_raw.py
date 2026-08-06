@@ -74,6 +74,47 @@ DERIVED = os.path.join(_HERE, "..", "data", "derived")   # pipeline outputs
 # per-capture provenance, and operator_sweep_report.py takes that folder as its
 # only argument. Only the MERGED cross-campaign table lands in DERIVED.
 
+# data/raw is grouped into campaigns/<key>/<sweep> (2026-08-06). A sweep is
+# still identified EVERYWHERE ELSE by its BARE FOLDER NAME — the `sweep` column
+# of the merged table, the CAMPAIGNS entries below, `--sweep` on the plotters.
+# Resolving name -> path here (rather than storing paths) means a folder can be
+# refiled into a different campaign without rewriting a single table or command.
+CAPTURE_PREFIXES = ("sweep_", "console_", "pulse_", "isense_", "noise_",
+                    "adcavg_", "queue_")
+
+
+def capture_dirs(base=None, prefixes=CAPTURE_PREFIXES):
+    """{bare folder name: path} for every capture folder under data/raw.
+
+    Walks the grouping folders (campaigns/, writeups/, aborted/, troubleshoot/)
+    but never descends INTO a capture folder — those hold thousands of sample
+    files and there is nothing below them to find."""
+    base = base or RAW
+    found = {}
+    for root, dirs, _ in os.walk(base):
+        keep = []
+        for d in dirs:
+            if d.startswith(prefixes):
+                found.setdefault(d, os.path.join(root, d))
+            else:
+                keep.append(d)
+        dirs[:] = keep
+    return found
+
+
+def resolve_sweep(name, base=None):
+    """Path of a capture folder from its BARE NAME or a path relative to
+    data/raw. Both forms work, so commands written before the 2026-08-06
+    regrouping still run."""
+    direct = os.path.join(base or RAW, name)
+    if os.path.isdir(direct):
+        return direct
+    hit = capture_dirs(base).get(os.path.basename(name.rstrip("/\\")))
+    if hit is None:
+        raise FileNotFoundError(f"no capture folder named {name!r} under {RAW}")
+    return hit
+
+
 SRC_LASER, SRC_LOAD, SRC_V, SRC_I = 1, 2, 3, 4
 K_MV_PER_UM = -0.49779577092171906      # Calibrate_LaserHead
 V0_MV = 2503.7500968693835
@@ -111,11 +152,18 @@ LF = "\n"
 # run_type also declares the EXPECTED cycles per condition for self-check §8.1.
 CYCLES_EXPECTED = {"map": 6, "probe": 4, "extremes": 6, "random": 1}
 
+# COLD LENGTH is the campaign axis, not the date: it is the same Dynalloy stock
+# throughout, cut/stretched to a different cold length per campaign, and that
+# changes the response more than anything else the protocol varies. 2026-07-30
+# shares 07-31's 15 mm wire but ran a 15 s cool and hit the cooling issue, so it
+# is a DIFFERENT protocol and would be its own campaign if it were registered.
+# On disk: data/raw/campaigns/<date>_dynalloy_<length>[_<protocol>]/.
 CAMPAIGNS = {
     "20260731": {
         "merged": "heat_time_map_20260731_all.csv",
         "cool_s": 30.0,
-        "wire": "long coil, ~4.2-4.8 ohm cold",
+        "wire": "Dynalloy, 15 mm cold length, ~4.2-4.8 ohm cold "
+                "(data/raw/campaigns/20260731_dynalloy_15mm_cool30s)",
         "runs": [
             ("sweep_20260731_134414", 100, 0, "probe"),
             ("sweep_20260731_141513", 100, 1, "probe"),
@@ -127,8 +175,9 @@ CAMPAIGNS = {
     "20260805_dynalloy": {
         "merged": "heat_time_map_20260805_dynalloy_all.csv",
         "cool_s": 30.0,
-        "wire": "Dynalloy 0.08 in, 10 mm solid, cold-stretched to 40 mm, "
-                "R0 = 4.01 ohm measured at the idle bias; fitted 2026-08-05",
+        "wire": "Dynalloy 0.08 in, 10 mm cold length, cold-stretched to 40 mm, "
+                "R0 = 4.01 ohm measured at the idle bias; fitted 2026-08-05 "
+                "(data/raw/campaigns/20260805_dynalloy_10mm)",
         "runs": [
             ("sweep_20260805_105318", 0, 1, "map"),
             ("sweep_20260805_154528", 0, 1, "extremes"),
@@ -362,7 +411,8 @@ def analyze_capture(csv_path):
 
 def analyze_sweep(folder, i_low, seeded, run_type):
     out = []
-    pat = os.path.join(RAW, folder, "c*_level_*mA_h*ms.csv")
+    root = resolve_sweep(folder)
+    pat = os.path.join(root, "c*_level_*mA_h*ms.csv")
     for f in sorted(glob.glob(pat)):
         if f.endswith("_report.csv"):
             continue
@@ -372,7 +422,7 @@ def analyze_sweep(folder, i_low, seeded, run_type):
             out.append(r)
     if out:
         cols = list(out[0].keys())
-        with open(os.path.join(RAW, folder, "cycles.csv"), "w", newline="") as fh:
+        with open(os.path.join(root, "cycles.csv"), "w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=cols, lineterminator=LF)
             w.writeheader()
             w.writerows(out)
@@ -405,7 +455,9 @@ def run_campaign(name, camp, want):
     for folder, i_low, seeded, run_type in camp["runs"]:
         if want and folder not in want:
             continue
-        if not os.path.isdir(os.path.join(RAW, folder)):
+        try:
+            resolve_sweep(folder)
+        except FileNotFoundError:
             print(f"  {folder:26s} MISSING — skipped")
             continue
         allrows += analyze_sweep(folder, i_low, seeded, run_type)

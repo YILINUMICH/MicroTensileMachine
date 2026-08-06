@@ -28,7 +28,8 @@ import os
 import numpy as np
 import pandas as pd
 
-from analyze_raw import schedule_windows, refine, unwrap_us as _unwrap
+from analyze_raw import (resolve_sweep, schedule_windows, refine,
+                         unwrap_us as _unwrap)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 RAW = os.path.join(_HERE, "..", "data", "raw")      # capture folders, as the rig wrote them
@@ -57,7 +58,10 @@ SRC = {"laser": 1, "load": 2, "sma_v": 3, "sma_i": 4, "sma_r": 5,
 
 
 def _capture(sweep, level_mA, heat_ms):
-    pat = os.path.join(RAW, sweep, f"c*_level_{int(level_mA)}mA_h{int(heat_ms)}ms.csv")
+    # `sweep` is a BARE FOLDER NAME (or a path relative to data/raw); the
+    # resolver finds it wherever it is filed under campaigns/.
+    pat = os.path.join(resolve_sweep(sweep),
+                       f"c*_level_{int(level_mA)}mA_h{int(heat_ms)}ms.csv")
     hits = [f for f in glob.glob(pat) if not f.endswith("_report.csv")]
     if not hits:
         raise FileNotFoundError(f"no capture for {level_mA} mA / {heat_ms} ms in {sweep}")

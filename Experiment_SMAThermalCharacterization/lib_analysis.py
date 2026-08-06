@@ -199,7 +199,12 @@ def latest_session(base: Optional[Path] = None) -> Optional[Path]:
     newest session even if empty."""
     if base is None:
         base = Path(__file__).resolve().parent / "data" / "raw"
-    cands = sorted(p for p in base.glob("console_*") if p.is_dir())
+    # data/raw is grouped into subfolders (2026-08-06): a NEW session still
+    # lands loose in data/raw/, but archived ones sit under troubleshoot/ or
+    # campaigns/<key>/. Search one level down as well, or the picker reports
+    # "no console_* session found" for a folder that is simply filed.
+    cands = sorted((p for p in [*base.glob("console_*"), *base.glob("*/console_*")]
+                    if p.is_dir()), key=lambda p: p.name)
     for p in reversed(cands):
         h7 = p / "h7.csv"
         if (h7.exists() and h7.stat().st_size > 200

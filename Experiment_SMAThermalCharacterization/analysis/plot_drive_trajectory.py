@@ -90,6 +90,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib import cm, colors
 
+from analyze_raw import capture_dirs, resolve_sweep
 from get_cycle import get_cycle, list_cycles
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -130,7 +131,8 @@ def discover(sweeps):
     (the stamped names sort chronologically) with a printed note."""
     grid, owner = {}, {}
     for sweep in sweeps:
-        for f in sorted(glob.glob(os.path.join(RAW, sweep, "c*_level_*mA_h*ms.csv"))):
+        for f in sorted(glob.glob(os.path.join(resolve_sweep(sweep),
+                                              "c*_level_*mA_h*ms.csv"))):
             m = _NAME.search(os.path.basename(f))
             if not m:
                 continue
@@ -153,7 +155,8 @@ def cool_label(sweeps, default=30.0):
     a spread is reported as a range rather than silently taking the first."""
     vals = []
     for sweep in sweeps:
-        for f in sorted(glob.glob(os.path.join(RAW, sweep, "c*.meta.json"))):
+        for f in sorted(glob.glob(os.path.join(resolve_sweep(sweep),
+                                              "c*.meta.json"))):
             try:
                 vals.append(float(json.load(open(f))["cool_s"]))
                 break
@@ -174,11 +177,35 @@ def group_label(sweeps):
     return "+".join([sweeps[0]] + rest)
 
 
+def all_sweeps():
+    """Every sweep folder under data/raw, bare names, CHRONOLOGICAL.
+
+    Sorting the names lexicographically is not the same thing: `sweep_full_150-950mA`
+    sorts after every `sweep_<stamp>` because 'f' > '2', so the old
+    `sorted(glob(...))[-1]` returned that folder as "the newest sweep" no matter
+    what had just been captured. Sort on the parsed stamp, and fall back to the
+    folder mtime for names that carry no stamp."""
+    out = []
+    for name, path in capture_dirs(prefixes=("sweep_",)).items():
+        # aborted/ and writeups/ hold folders NAMED sweep_* that carry no
+        # captures — an abandoned run and two analysis write-ups. Skipping them
+        # here keeps `--all` from printing a failure line for each; they stay
+        # reachable by name through resolve_sweep().
+        parts = os.path.normpath(path).split(os.sep)
+        if "aborted" in parts or "writeups" in parts:
+            continue
+        m = re.search(r"(\d{8})_(\d{6})", name)
+        key = (m.group(1) + m.group(2)) if m else str(int(os.path.getmtime(path)))
+        out.append((m is not None, key, name))
+    # Stamped folders first, so an unstamped one can never win "latest".
+    return [n for _, _, n in sorted(out)]
+
+
 def latest_sweep():
-    hits = sorted(glob.glob(os.path.join(RAW, "sweep_*")))
+    hits = all_sweeps()
     if not hits:
         raise SystemExit("no sweep_* folders under data/raw")
-    return os.path.basename(hits[-1])
+    return hits[-1]
 
 
 def railed(v):
@@ -459,9 +486,7 @@ def main():
     a = ap.parse_args()
 
     if a.all:
-        folders = sorted(os.path.basename(p) for p in
-                         glob.glob(os.path.join(RAW, "sweep_*"))
-                         if os.path.isdir(p))
+        folders = all_sweeps()
         if not folders:
             raise SystemExit(f"no sweep_* folders under {RAW}")
         rc, made = 0, 0
@@ -485,7 +510,12 @@ def run_group(sweeps, a):
     """Figures for ONE grid, which may span several folders. Returns how many
     were written."""
     sweeps = [os.path.basename(s.rstrip("/")) for s in sweeps]
-    missing = [s for s in sweeps if not os.path.isdir(os.path.join(RAW, s))]
+    missing = []
+    for s in sweeps:
+        try:
+            resolve_sweep(s)
+        except FileNotFoundError:
+            missing.append(s)
     if missing:
         raise SystemExit(f"no such folder(s) under data/raw: {', '.join(missing)}")
     if len(sweeps) > 1:

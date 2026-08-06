@@ -634,7 +634,8 @@ means wedged), `port live`, and `clock align: src=1/2 shifted +2.19 s`.
 ### After
 
 ```
-python operator_sweep_report.py data/raw/sweep_<stamp>   # ALWAYS, right after
+python operator_sweep_report.py data/raw/campaigns/<key>/sweep_<stamp>   # ALWAYS
+python analysis/make_index.py                            # refresh data/raw/INDEX.md
 python analysis/plot_drive_trajectory.py --sweep sweep_<stamp>   # the standard figure
 python analysis/analyze_raw.py          # add the sweep to CAMPAIGNS first
 python analysis/plot_envelope.py ../data/derived/heat_time_map_<campaign>_all.csv
@@ -648,6 +649,7 @@ place, so a fixed bug or a new sweep is one command away from updated outputs.
 
 ```
 cd analysis
+python make_index.py                  # capture folders -> data/raw/INDEX.md
 python analyze_raw.py                 # raw captures  -> per-cycle table (all campaigns)
 python plot_envelope.py               # per-cycle table -> envelope CSV + charts
 python plot_drive_trajectory.py --all # THE STANDARD PER-SWEEP FIGURE, any sweep
@@ -672,6 +674,7 @@ CWD — `cd analysis` is a convenience, not a requirement.
 | 2 | `plot_selfsensing.py` | per-cycle table + `energy_table.py` | `data/derived/self_sensing.html` |
 | 2 | `plot_transition.py` | per-cycle table + raw captures | `data/derived/transition_<heat>ms.html` |
 | 2 | `plot_r_bias.py` | per-cycle table + raw captures | `data/derived/r_bias_artifact.html` + `r_bias_points.csv` (cache) |
+| — | `make_index.py` | every capture folder + `CAMPAIGNS` | `data/raw/INDEX.md` (which folder holds what) |
 | — | `get_cycle.py` | one capture | one cycle's raw time series, on one clock |
 | — | `energy_table.py` | per-cycle table + raw captures | `data/derived/*_all_energy.csv` (cached ∫P dt) |
 | — | `plot_style.py` | — | shared chart chrome for the HTML figures |
