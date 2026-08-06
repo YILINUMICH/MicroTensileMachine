@@ -8,7 +8,7 @@ One campaign = one **wire + protocol**. Cold length is the axis that matters mos
 
 ### `campaigns/20260730_dynalloy_15mm_cool15s/`
 
-7 folders · 1.62 GB · merged table: — *(none)*
+7 folders · 1.67 GB · merged table: — *(none)*
 
 | folder | kind | captures | grid | cool | cycles | naming | registered |
 |---|---|---|---|---|---|---|---|
@@ -22,7 +22,7 @@ One campaign = one **wire + protocol**. Cold length is the axis that matters mos
 
 ### `campaigns/20260731_dynalloy_15mm_cool30s/`
 
-5 folders · 1.09 GB · merged table: `heat_time_map_20260731_all.csv`
+5 folders · 1.12 GB · merged table: `heat_time_map_20260731_all.csv`
 
 | folder | kind | captures | grid | cool | cycles | naming | registered |
 |---|---|---|---|---|---|---|---|
@@ -42,7 +42,7 @@ One campaign = one **wire + protocol**. Cold length is the axis that matters mos
 
 ### `campaigns/20260805_dynalloy_10mm/`
 
-2 folders · 0.88 GB · merged table: `heat_time_map_20260805_dynalloy_all.csv`
+2 folders · 0.91 GB · merged table: `heat_time_map_20260805_dynalloy_all.csv`
 
 | folder | kind | captures | grid | cool | cycles | naming | registered |
 |---|---|---|---|---|---|---|---|
@@ -51,7 +51,13 @@ One campaign = one **wire + protocol**. Cold length is the axis that matters mos
 
 ## Unfiled — loose in `data/raw/`
 
-*None — every capture is filed under a campaign.*
+`data/raw/` is an **inbox**. These runs record no wire (meta.json does not carry one), so file them under `campaigns/<key>/` while you still remember which wire was on the rig.
+
+| folder | kind | captures | grid | cool | naming |
+|---|---|---|---|---|---|
+| `console_20260713_115921_laserhiddenpattern` | aborted | 0 | — | — | — |
+| `pulse_20260729_001221` | aborted | 0 | — | — | — |
+| `pulse_20260731_122707` | aborted | 0 | — | — | — |
 
 ## `writeups/`
 
@@ -66,11 +72,25 @@ Folders named `sweep_*` that hold **no captures** — a README and figures from 
 
 Runs that produced no usable capture (opened and stopped, or killed before the first condition finished). Kept so the gap in the timestamp sequence is explained rather than mysterious.
 
-3 folders · 0.02 GB
+17 folders · 0.13 GB
 
+- `queue_20260805_210507`
+- `queue_20260805_211626`
+- `queue_20260805_212503`
+- `queue_20260805_213329`
+- `queue_20260805_214302`
+- `queue_20260805_214317`
 - `sweep_20260729_000147`
 - `sweep_20260731_123629`
 - `sweep_20260731_144100`
+- `sweep_20260805_210507`
+- `sweep_20260805_210933`
+- `sweep_20260805_211007`
+- `sweep_20260805_211626`
+- `sweep_20260805_212503`
+- `sweep_20260805_213329`
+- `sweep_20260805_214302`
+- `sweep_20260805_214317`
 
 ## `troubleshoot/`
 
@@ -104,9 +124,9 @@ Captures named `level_850mA_h400ms.csv` (no `cNN_` prefix). Every glob in `analy
 
 | folder | captures | grid | size |
 |---|---|---|---|
-| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_031337` | 19 | 150–950 mA × 100–300 ms (9×3) | 309 MB |
+| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_031337` | 19 | 150–950 mA × 100–300 ms (9×3) | 318 MB |
 | `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_040854` | 1 | 150 mA × 100 ms (1×1) | 17 MB |
-| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_132601` | 13 | 150–950 mA × 100–200 ms (9×2) | 206 MB |
-| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_135311` | 27 | 150–950 mA × 100–300 ms (9×3) | 451 MB |
-| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_145051` | 6 | 150–650 mA × 300 ms (6×1) | 95 MB |
-| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_150846` | 18 | 150–950 mA × 300–400 ms (9×2) | 294 MB |
+| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_132601` | 13 | 150–950 mA × 100–200 ms (9×2) | 212 MB |
+| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_135311` | 27 | 150–950 mA × 100–300 ms (9×3) | 463 MB |
+| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_145051` | 6 | 150–650 mA × 300 ms (6×1) | 98 MB |
+| `campaigns/20260730_dynalloy_15mm_cool15s/sweep_20260730_150846` | 18 | 150–950 mA × 300–400 ms (9×2) | 303 MB |

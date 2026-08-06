@@ -463,6 +463,16 @@ python operator_sweep_report.py  data/raw/sweep_<stamp>          # ALWAYS, right
   consecutive zero-capture profiles — the signature of a rig needing a
   power-cycle. See `profiles/night_profiles_20260805/README.md` for a worked
   campaign.
+- **`operator_sense_check.py [folder|capture]`** answers *is the SMA sense chain
+  healthy right now?* from any capture, in seconds — `sma_i` σ, cold R, and R
+  noise at the 200 ms window the analysis uses, against the measured healthy
+  baseline (σ ≈ 26 mA, R @200 ms ≈ 1.7–2.0 %). Exits non-zero on a fault.
+  **Run this before committing to a long unattended campaign, and after any work
+  on the SMA wiring.** It exists because the sweep's own sense guard reports a
+  *fraction of impossible samples*, so a wider noise floor trips it without
+  saying so: on 2026-08-05 a degraded clip contact tripled the sense noise and
+  aborted the overnight campaign, while the guard's message blamed a corrupted
+  sense or a stale `r_min` — neither of which it was.
 
 ### One pulse per condition (`cycles: 0`)
 
@@ -972,6 +982,9 @@ Experiment_SMAThermalCharacterization/
 │                               campaigns): validates all up front, reports after each,
 │                               --deadline, per-profile logs + queue_manifest.json
 ├── operator_pulse_capture.py   plain single-pulse capture tool
+├── operator_sense_check.py     is the SMA sense chain healthy? sma_i sigma / R / R@200ms
+│                               from any capture, vs the measured baseline. Run before any
+│                               long unattended run and after any SMA wiring work
 ├── profiles/                   JSON test profiles (grid + explicit-conditions forms)
 │                               night_profiles_*/ = a whole campaign + its generator
 │

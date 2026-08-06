@@ -71,7 +71,7 @@ def describe(path):
     meta = {}
     for f in sorted(glob.glob(os.path.join(path, "*.meta.json"))):
         try:
-            meta = json.load(open(f))
+            meta = json.load(open(f, encoding="utf-8"))
             break
         except Exception:
             continue
@@ -194,7 +194,8 @@ def build():
             if glob.glob(os.path.join(p, "*level_*mA_h*ms.csv")):
                 info = describe(p)
                 if info["naming"] != "cNN":
-                    blind.append((os.path.relpath(p, RAW), info))
+                    blind.append((os.path.relpath(p, RAW).replace(os.sep, "/"),
+                                  info))
                 dirs.remove(d)
     if blind:
         L += ["## Not readable by the pipeline", "",
@@ -219,13 +220,14 @@ def main():
     a = ap.parse_args()
     text = build()
     if a.check:
-        cur = open(INDEX).read() if os.path.exists(INDEX) else ""
+        cur = (open(INDEX, encoding="utf-8").read()
+               if os.path.exists(INDEX) else "")
         if cur != text:
             print("INDEX.md is STALE — run: python analysis/make_index.py")
             return 1
         print("INDEX.md up to date")
         return 0
-    with open(INDEX, "w") as fh:
+    with open(INDEX, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
     print(f"  -> {os.path.relpath(INDEX, os.path.join(_HERE, '..'))} "
           f"({len(text.splitlines())} lines)")

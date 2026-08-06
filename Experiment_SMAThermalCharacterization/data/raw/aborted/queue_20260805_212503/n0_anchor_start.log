@@ -1,0 +1,28 @@
+$ C:\Users\yilin\AppData\Local\Programs\Python\Python312\python.exe C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\operator_current_sweep.py --profile C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json
+
+
+current sweep -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\sweep_20260805_212503
+  2 explicit conditions from C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json
+  2 conditions, ~8 min total
+
+  force pull: drained 49.3 kB
+  port live (2679 bytes in probe)
+  calibration restored: vdd 5.067, offset 0.5, ioffset 0.0167
+--- [1/2] 650 mA / 300 ms ----------------------------
+  elapsed 0:02 Â· remaining ~7:36 Â· ETA 21:32:42
+  cold-start settle 40s ...
+  clock align: src=1/2 shifted +2.195 s onto the M7 clock
+  cyc   I[mA]   dx[um]    base    peak    rise   clip
+    1   652.1    449.0   1.914   2.279   0.365     no (bootstrap, excluded)
+    2   653.6    462.6   1.968   2.325   0.358     no
+    3   653.1    447.8   1.946   2.295   0.349     no
+    4   656.6   -686.9   1.959   2.310   0.351     no
+  NOTE: 4 pulses found, 6 commanded
+  !! SENSE WARNING: 1.24% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm â€” physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable â€” power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+  ABORT â€” 650 mA: 1.24% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm â€” physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable â€” power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+
+==============================================================
+  NO LEVEL PASSED â€” 650 mA: 1.24% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm â€” physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable â€” power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+  Lengthen --cool-s, or re-check the preload, then retry.
+  raw + summary -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\sweep_20260805_212503
+==============================================================

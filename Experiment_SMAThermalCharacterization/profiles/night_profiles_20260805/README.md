@@ -1,19 +1,32 @@
-# Overnight collection — 2026-08-05/06, ~9.2 h in a 12 h window
+# Overnight collection — ~9.2 h in a 12 h window
+
+> **STATUS: NOT YET COLLECTED.** Planned for 2026-08-05/06 and deferred — the
+> rig's SMA sense chain faulted during pre-flight and four attempts aborted on
+> the sense guard without collecting a single valid condition. The campaign,
+> profiles, run order and generator are unchanged and ready; it needs a healthy
+> rig and a fresh 12 h window. See pre-flight step 6, and the module `STATUS.md`
+> entry *2026-08-05 night* for the diagnosis. Dates in this file that read
+> "today" mean **2026-08-05**, when the envelope was measured.
 
 Built to `NN_SelfSensing_Baseline/DATA_COLLECTION_GUIDELINE.md` §9 (excitation
 protocol). Regenerate with `python gen_night_profiles.py`; that script's header
 documents how each §9 clause is satisfied.
 
-**Run the whole night with one command** (profiles execute in sorted order,
-which is the intended order):
+**Run the whole night with one command.** Sorted order is *not* the run order
+(see **Run order** below), so go through `run_night.ps1`, which passes the 13
+profiles to the queue as an explicit ordered list:
 
 ```
-# 1. ALWAYS dry-run first — validates all 13 profiles, opens no port
-python operator_profile_queue.py profiles/night_profiles_20260805 --dry-run
+# from the module root. 1. ALWAYS dry-run first — validates all 13, opens no port
+.\profiles\night_profiles_20260805\run_night.ps1 -DryRun
 
 # 2. the real run
-python operator_profile_queue.py profiles/night_profiles_20260805 --deadline 07:00
+.\profiles\night_profiles_20260805\run_night.ps1
 ```
+
+Passing the *folder* to `operator_profile_queue.py` still works and still
+validates, but it runs the sorted order and gives up the three properties in
+**Run order**.
 
 The queue runs each profile back-to-back, runs `operator_sweep_report.py` after
 each, writes `queue_<stamp>/queue_manifest.json` (which capture folder came from
@@ -21,25 +34,101 @@ which pre-registered role), and **treats a failed profile as one lost profile,
 not a lost night**. It abandons the queue only if two profiles in a row capture
 nothing — the signature of a rig that needs a power-cycle.
 
-| profile | cond | pulses | ~min | role (FROZEN) |
-|---|---|---|---|---|
-| n0_anchor_start | 2 | 12 | 8 | drift bracket — repeats at n3, n9 |
-| n1a_shuffle_train | 200 | 200 | 126 | **TRAINABLE** — randomized envelope draws |
-| n1b_shuffle_train | 200 | 200 | 128 | **TRAINABLE** — half B, different seed |
-| n2a_shuffle_test | 75 | 75 | 48 | **TEST-ONLY** — unseen sequence |
-| n2b_shuffle_test | 75 | 75 | 47 | **TEST-ONLY** — half B |
-| n3_anchor_mid | 2 | 12 | 8 | drift bracket |
-| n4a_shortcool_test | 110 | 110 | 30 | **TEST-ONLY** — 5–11 s cool, warm coil |
-| n4b_shortcool_test | 110 | 110 | 30 | **TEST-ONLY** — half B |
-| n5_longcool | 6 | 24 | 29 | trainable — 60 s deep cooling tails |
-| n6_repeats | 8 | 48 | 30 | **TEST-ONLY** — cross-session probe |
-| n7_ladder | 8 | 48 | 31 | trainable — 550–900 mA × 500 ms fill |
-| n8_threshold | 6 | 36 | 23 | trainable — sub-envelope stroke floor |
-| n9_anchor_end | 2 | 12 | 8 | drift bracket + morning health check |
+| # | profile | cond | pulses | ~min | role (FROZEN) |
+|---|---|---|---|---|---|
+| 1 | n0_anchor_start | 2 | 12 | 8 | drift bracket — repeats at n3, n9 |
+| 2 | n4a_shortcool_test | 110 | 110 | 30 | **TEST-ONLY** — 5–11 s cool, warm coil |
+| 3 | n1a_shuffle_train | 200 | 200 | 126 | **TRAINABLE** — randomized envelope draws |
+| 4 | n2a_shuffle_test | 75 | 75 | 48 | **TEST-ONLY** — unseen sequence |
+| 5 | n6_repeats | 8 | 48 | 30 | **TEST-ONLY** — cross-session probe |
+| 6 | n8_threshold | 6 | 36 | 23 | trainable — sub-envelope stroke floor |
+| 7 | n3_anchor_mid | 2 | 12 | 8 | drift bracket |
+| 8 | n1b_shuffle_train | 200 | 200 | 128 | **TRAINABLE** — half B, different seed |
+| 9 | n2b_shuffle_test | 75 | 75 | 47 | **TEST-ONLY** — half B |
+| 10 | n4b_shortcool_test | 110 | 110 | 30 | **TEST-ONLY** — half B |
+| 11 | n7_ladder | 8 | 48 | 31 | trainable — 550–900 mA × 500 ms fill |
+| 12 | n5_longcool | 6 | 24 | 29 | trainable — 60 s deep cooling tails |
+| 13 | n9_anchor_end | 2 | 12 | 8 | drift bracket + morning health check |
 
-**962 pulses, ~9.2 h.** Every pulse in n1/n2/n4 is a history-diverse sample.
+**962 pulses, ~9.2 h** (804 captures — the shuffle blocks are one capture per
+pulse). Every pulse in n1/n2/n4 is a history-diverse sample.
+
+## Run order
+
+The filename numbering is the *role* numbering from `gen_night_profiles.py`;
+the column above is the order to actually run.
+
+**n0 + n4a are the attended head — ~40 min, then you can leave.** n4a is the
+riskiest block in the campaign: 5–11 s cool is disjoint from every cool time
+this rig has run before, and an incompletely recovered coil ratchets its
+baseline instead of actuating. Running it first means the one block whose
+failure mode is unproven happens while someone is watching, and it is only
+30 min of the 9.2 h. `operator_sweep_report.py` runs automatically ~1 min
+after n4a finishes — read it before walking away:
+
+- **`!! base-jump: laser baseline moved`** on a growing fraction of conditions
+  is the ratcheting failure. A few is normal at short cool; a monotone climb
+  across all 110 is not.
+- **`!! load-clip: force at the 5 V rail`** means the cold re-baseline (pre-
+  flight 2) did not hold. n4a caps at 650 mA, so clipping *here* guarantees
+  clipping all night in n1/n7.
+- **dx should still scale with (I, t)** — collapsed stroke at high current
+  means the coil never fully released.
+- **`cc_pct` near 100 and `r_base` not climbing.** A drifting `r_base` with
+  physically impossible values is the intermittent-clip signature, not a
+  control problem — reseat and restart rather than letting it run.
+
+If any of that looks wrong, Ctrl-C: the queue forwards it, the running sweep
+disarms itself in its own `finally`, and n4a's captures are already on disk.
+By then the queue will have started n1a — that is fine, it is interruptible
+too.
+
+The rest of the reorder buys three things:
+
+1. **A failure at any hour leaves a usable night.** Sorted order puts both
+   TRAINABLE halves (n1a + n1b, 254 min — 46 % of the night) before the first
+   test block, so a rig that dies at 01:00 yields 400 training pulses and no
+   test set, no OOD set, and no cross-session tie to the 07-31 / 08-05
+   campaigns. Running one half of *each* pool first means the campaign is
+   complete-in-miniature by ~01:50 and everything after n3 is a second helping.
+   The A/B split already exists for exactly this reason — sorted order spends
+   it on adjacent halves, which is the one arrangement that wastes it.
+2. **n3 actually lands mid-night.** In sorted order it starts at 65 % of wall
+   clock (357 of 552 min), so the "bracket" measures drift over 0–65–100
+   instead of 0–50–100. Here it starts at 50.2 %.
+3. **Both n3 and n9 are preceded by a low-energy block** (n8, then n5's 60 s
+   cools) rather than by a randomized block that may have just fired 900 mA.
+   Anchors are only comparable if the coil state going in is comparable, and
+   the queue's 30 s inter-profile gap is not enough on its own. n0 gets this
+   for free from the pre-flight.
+
+A fourth, smaller effect: n4a and n4b no longer run back-to-back, so the B half
+of the short-cool OOD set does not start on the heat left by the A half. With
+n4a moved to the head the two halves now sit at opposite ends of the night —
+n4a on a coil that has done 12 pulses, n4b after ~7 h of cycling. That is a
+wider separation than the other pools get; it samples drift rather than
+confounding it (the anchors measure the drift independently), but pool n4a and
+n4b only after checking their anchors agree.
+
+n7 sits second-to-last because it is the most redundant block in the campaign —
+its 550–900 mA × 500 ms row is already covered by the attended 08-05 sweep, so
+it is the right thing to lose to an overrun.
+
+**On `--deadline`:** the queue skips *every* profile that would start after it,
+and it iterates in order, so a deadline does not protect n9 — it deletes it,
+along with whatever else is behind the clock. `run_night.ps1` therefore passes
+no deadline by default. Nominal finish is start + 9.2 h + ~10 min of reports;
+**start by 21:35 to be done before 07:00.** Pass `-Deadline 07:00` only if the
+rig must be idle at a fixed time and you accept losing the tail.
 
 ## Before starting (10 min, do not skip)
+
+> **2026-08-05: the first attempt at this campaign never started.** Four runs
+> aborted on the sense guard between 21:05 and 21:51 and the night was deferred.
+> Cause was a degraded SMA clip contact that **the pre-flight itself introduced**
+> — step 4 below — and which none of steps 1–5 can detect, because they check
+> baselines and levels, not noise. Step 6 is new and exists to close that gap.
+> Full write-up in the module `STATUS.md`, *2026-08-05 night*.
 
 1. **Power-cycle USB + EVM.** Non-negotiable after any upload, and it clears
    accumulated CRC storms (ADC2 dies silently first).
@@ -51,10 +140,35 @@ nothing — the signature of a rig that needs a power-cycle.
 3. **Confirm the laser cold baseline near the 5 V end** (~4.86 V today). The
    full contracting window must be available: n1 draws up to 900 mA × 500 ms,
    and 950 × 500 moved 7.6 mm today against a 10.0 mm window.
-4. **Reseat the SMA clips.** Intermittent contact latches `R_est` wrong and CC
-   overshoots up to 2×.
-5. **Disk:** ~962 captures at ~20 MB ≈ **19 GB**. 381 GB free, so the run fits —
-   but see *Committing the results* below before `git add`.
+4. **Reseat the SMA clips** — *only if they need it, and check afterwards.*
+   Intermittent contact latches `R_est` wrong and CC overshoots up to 2×. But on
+   2026-08-05 this step is what broke the rig: the reseat added ~0.3 Ω of
+   contact resistance and tripled the sense noise, and three further reseats
+   each left R **higher** (4.22 → 4.37 → 4.47 → 4.68 Ω). Disturbing a good
+   contact is not free. Clips must bite clean bare metal and the sense leads
+   must land on the wire, not the jaw.
+5. **Disk: ~2.6 GB**, not the 19 GB an earlier draft of this file claimed. That
+   figure multiplied 962 *pulses* by the size of a *condition* capture. A
+   capture covers one condition, and the shuffle blocks' conditions are one
+   ~30 s pulse, not six. Measured on `sweep_20260805_154528`: 18.4 MB for a
+   ~200 s capture = **92 kB/s of CSV**, and the night records ~7.9 h of that.
+   381 GB free.
+6. **Verify the sense chain — the gate on the whole night.** Fire one capture
+   and read its noise floor:
+
+   ```powershell
+   python operator_pulse_capture.py --i-ma 650 --heat-ms 300
+   python operator_sense_check.py            # newest capture; exits non-zero on a fault
+   ```
+
+   Wants **σ ≈ 26 mA** and **R @200 ms ≤ 2 %**, against the R transition of
+   ~3 % the self-sensing model has to see. At 2× that floor the payload channel
+   is buried, and the sweep's own guard starts straddling its 1 % limit — which
+   means **profiles abort one or two conditions in while still writing captures,
+   so the queue's circuit breaker never fires.** That failure mode runs the full
+   9 h and yields ~20 captures of 804, reported as `ok` and `partial`. Do not
+   start the night on a BAD or MARGINAL verdict; do not work around it by
+   loosening `r_min_ohm`.
 
 ## Why the protocol changed from the first draft
 
@@ -182,10 +296,9 @@ pulses already collected.
 
 ## Committing the results
 
-Module convention is that `data/` is tracked so results travel with a clone, but
-this campaign is ~19 GB against a 2.6 GB `.git` and 3.8 GB of existing
-`data/raw/`. **Decide before `git add`** — committing it as-is roughly
-sextuples the repository. Options: commit `cycles.csv` + reports + the merged
-derived table and keep the raw CSVs local; or commit raw for the trainable
-blocks only. This is a deliberate exception to the "always commit captures"
-rule, not an oversight.
+Module convention is that `data/` is tracked so results travel with a clone.
+At the corrected **~2.6 GB** (see pre-flight 5) this campaign is comparable to
+the 3.8 GB of `data/raw/` already committed, so the convention holds and the
+whole thing can be committed — it roughly doubles `data/raw/`, it does not
+sextuple the repo as an earlier draft of this section assumed. Commit it in
+per-profile chunks rather than one 2.6 GB commit.

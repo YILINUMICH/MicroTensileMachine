@@ -1,0 +1,50 @@
+{
+  "started": "2026-08-05T21:05:07.409380",
+  "logdir": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\data\\raw\\queue_20260805_210507",
+  "deadline": null,
+  "profiles": [
+    {
+      "profile": "n0_anchor_start.json",
+      "path": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\profiles\\night_profiles_20260805\\n0_anchor_start.json",
+      "order": 0,
+      "started": "2026-08-05T21:05:07.410381",
+      "ended": "2026-08-05T21:09:00.639140",
+      "exit_code": 0,
+      "sweep_dir": "sweep_20260805_210507",
+      "captures": 1,
+      "conditions": 2,
+      "status": "partial 1/2",
+      "why": "sweep ended early",
+      "report_exit_code": 0
+    },
+    {
+      "profile": "n4a_shortcool_test.json",
+      "path": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\profiles\\night_profiles_20260805\\n4a_shortcool_test.json",
+      "order": 1,
+      "started": "2026-08-05T21:09:33.551588",
+      "ended": "2026-08-05T21:09:37.318894",
+      "exit_code": 0,
+      "sweep_dir": "sweep_20260805_210933",
+      "captures": 0,
+      "conditions": 110,
+      "status": "no captures",
+      "why": "ERROR: COM8 is not streaming (0 bytes in 2s). Power-cycle USB + EVM and retry."
+    },
+    {
+      "profile": "n1a_shuffle_train.json",
+      "path": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\profiles\\night_profiles_20260805\\n1a_shuffle_train.json",
+      "order": 2,
+      "started": "2026-08-05T21:10:07.321964",
+      "ended": "2026-08-05T21:10:11.083177",
+      "exit_code": 0,
+      "sweep_dir": "sweep_20260805_211007",
+      "captures": 0,
+      "conditions": 200,
+      "status": "no captures (rig appears down)",
+      "why": "ERROR: COM8 is not streaming (0 bytes in 2s). Power-cycle USB + EVM and retry."
+    }
+  ],
+  "aborted": "two consecutive profiles produced no captures \u2014 rig down",
+  "ended": "2026-08-05T21:10:11.085175",
+  "wall_s": 303.7
+}

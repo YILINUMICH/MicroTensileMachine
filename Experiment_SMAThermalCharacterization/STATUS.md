@@ -390,6 +390,133 @@ column. `--by heat` transposes the colour axis onto pulse length for
 single-current rows; `--by auto` (default) emits by-level figures and falls back
 to by-heat only for cells those cannot show.
 
+## 2026-08-05 night — CAMPAIGN NOT RUN. SMA sense chain degraded during pre-flight
+
+**The overnight campaign did not start.** Four attempts between 21:05 and 21:51
+all aborted on the sense guard; the rig was powered off at ~22:00 and the
+campaign deferred. **Nothing is wrong with the campaign, the profiles, or the
+guard — the rig's SMA sense chain is faulted, and it was faulted before the
+first pulse.**
+
+### The measurement
+
+Quiet-window numbers (cold-start settle, wire at the 0.5 V idle bias), from
+`operator_sense_check.py`:
+
+| capture | sma_i σ | R | R @200 ms |
+|---|---|---|---|
+| `sweep_20260804_213705` | 26.5 mA | 1.74 Ω | 1.65 % |
+| `sweep_20260805_105318` (10:53) | 26.0 mA | 4.22 Ω | 1.85 % |
+| `sweep_20260805_154528` (15:45) | 25.2 mA | 4.23 Ω | 2.03 % |
+| `sweep_20260805_210507` (21:05) | 85.7 mA | 4.37 Ω | 4.01 % |
+| `sweep_20260805_211626` (21:16, post power-cycle) | 86.6 mA | 4.47 Ω | 3.89 % |
+| `sweep_20260805_212503` (21:25, post reseat) | 87.6 mA | 4.45 Ω | 3.80 % |
+| `sweep_20260805_213329` (21:33, post reseat) | 86.6 mA | 4.68 Ω | 4.15 % |
+| `sweep_20260805_214317` (21:43, c00 / c01) | 85.9 / 77.6 mA | 4.53 / 4.51 Ω | 3.71 / 3.56 % |
+
+**Stable for two days across two wires, then a 3.3× step while the rig sat idle
+between 16:10 and 21:05.** The only event in that window is the campaign
+pre-flight, whose step 4 is *reseat the SMA clips*.
+
+### What it is, and what it is not
+
+- **Confined to the SMA sense chain.** On the same quiet window the ADS1263 side
+  is unchanged: laser 44.6 → 40.3 mV, load 67.6 → 63.6 mV. Only `sma_v`
+  (194.8 → 325.1 mV) and `sma_i` (54.0 → 96.5 mA) moved, both ~1.75× — they
+  share the H7's internal ADC, and nothing else does. *(An earlier read of this
+  said all channels had doubled; that was measured over the whole record, so the
+  laser and load figures were counting the pulse motion itself. On the quiet
+  window they are clean.)*
+- **It does not cancel in R = V/I.** The added noise is broadband above 100 Hz
+  (77.6 % of `sma_i` variance vs 13.0 % in the afternoon capture) and
+  *incoherent* between V and I — corr(V,I) fell 0.815 → 0.572 on the same
+  condition. Coherent noise divides out; this does not. R noise at the 200 ms
+  window the analysis actually uses roughly doubled, 1.9 % → ~3.9 %.
+- **Mechanical, and progressive.** A full USB + EVM power cycle changed nothing
+  (86.6 mA after). Three clip reseats changed nothing *except* that R climbed
+  each time — 4.22 → 4.37 → 4.47 → 4.68 Ω, ~+11 % of added series resistance —
+  so the interface appears to be degrading as it is disturbed. Added series R
+  plus incoherent broadband noise appearing the moment the clips were touched is
+  a micro-contact, not an electrical or firmware state.
+- **Secondary symptom, same night:** COM8 intermittently returned
+  `not streaming (0 bytes in 2s)` with `force pull: drained 0.0 kB` (so not the
+  known full-CDC-buffer case), twice, recovering on the next launch.
+
+### The guard is NOT too tight — do not relax `r_min`
+
+`r_min_ohm 1.6` sets the limit at `0.5/1.6` = 312 mA. At the healthy σ ≈ 26 mA
+that sits **7.5σ** above the ~121 mA idle mean and never fires. At tonight's
+σ ≈ 86 mA it sits **~2σ** out, where ~1 % of samples land by construction. The
+five fractions measured tonight — 1.24, 1.12, 1.11, 0.99, 1.07 % — are one
+distribution straddling the 1 % `max_frac`, which is why one condition "passed".
+Passing `r_min ≈ 1.4` would clear the guard and record a degrading contact into
+the one channel the campaign exists to measure.
+
+**Had the night been launched in this state it would have looked like it worked.**
+`abort_on_bad_sense: true` stops a sweep at its first failing condition, and
+~1 condition in 10 passes, so each profile would have died after its first or
+second capture — but each *would* write captures, so the queue's
+two-consecutive-zero-capture circuit breaker never trips. Expected yield: **~20
+captures of 804**, over a full 9 h, reported as a mix of `ok` and `partial`.
+The one profile that completed tonight (`sweep_20260805_214317`) shows exactly
+this: `1 ok, 0 not ok, 2 captures` with the sense fault on one of its two
+conditions.
+
+### New: `operator_sense_check.py` (module root, `operator_` = run directly)
+
+The guard reports a *fraction of impossible samples*, which is a threshold
+crossing on a noisy quantity — it fires on a wider noise floor without saying
+so, and its message names two causes (corrupted sense / stale `r_min`) that were
+both wrong here. Nothing printed the number that actually diagnoses the rig.
+This reads it from any capture in seconds: `sma_i` σ, R, R at the 200 ms
+analysis window, and a verdict against the measured 08-04/08-05 baseline
+(~26 mA, ~1.7–2.0 %). Validated on a known-good capture (26.0 mA → HEALTHY) and
+tonight's (86.6 mA → BAD). `corr(V,I)` is printed but is **informational only** —
+its absolute value swings with pulse level (+0.09 healthy at 250 mA, +0.45
+faulted at 650 mA), so the verdict uses σ and R @200 ms alone.
+
+### Next session
+
+1. **Localize with a meter before touching anything.** Wire end-to-end should
+   read ~4.2 Ω; the extra ~0.3–0.5 Ω is in one junction. Measure each
+   clip-to-wire contact and the lead run to the driver. Four blind
+   power-cycle/reseat attempts did not find it and R rose each time.
+2. **Verify with `operator_sense_check.py`, not an 8-minute anchor** — target
+   σ ≈ 26 mA and R @200 ms ≤ 2 %.
+3. Then run the campaign unchanged: `.\profiles\night_profiles_20260805\run_night.ps1`.
+
+### Also settled tonight (survives the deferral)
+
+- **Run order changed and is no longer sorted order** — see *Run order* in
+  `profiles/night_profiles_20260805/README.md`. Sorted order ran both TRAINABLE
+  halves back-to-back before any test block, put the "mid" anchor at 65 % of
+  wall clock, and ran n4a/n4b adjacent. New order runs one half of each pool
+  first, so the campaign is complete-in-miniature at the midpoint;
+  `n4a_shortcool_test` is second as the attended head. Driven by
+  `run_night.ps1`, which passes the queue an explicit ordered list — no profile
+  was renamed, so `gen_night_profiles.py` remains the source of truth.
+- **`--deadline` does not protect the end anchor.** The queue skips every
+  profile that would start after it and iterates in order, so a deadline deletes
+  `n9_anchor_end` along with the rest of the tail. `run_night.ps1` passes none.
+- **Campaign disk is ~2.6 GB, not the 19 GB the campaign README claimed** — that
+  figure multiplied 962 *pulses* by the size of a *condition* capture, but a
+  shuffle-block condition is one ~30 s pulse. Measured 92 kB/s of CSV over ~7.9 h
+  recorded. The "committing this sextuples the repo" note was corrected with it;
+  the module's commit-the-captures convention holds.
+- **Report cost is not a scheduling factor:** `operator_sweep_report.py` runs at
+  ~0.13 s/MB (30.7 s on a 230 MB sweep), so all 13 reports add ~10 min to the
+  9.2 h queue.
+
+### Data on disk from tonight
+
+Eight `sweep_20260805_21*` folders and six `queue_20260805_21*` folders, ~108 MB
+total. `_210933`, `_211007` and `_214302` are empty (the COM8 dropouts); the
+rest hold one or two captures each. Only `_214317` c00 passed the guard, at
+0.99 % against a 1.00 % limit. **None of it is campaign data** — do not add
+these to `analyze_raw.py`'s CAMPAIGNS. They are kept as the diagnostic record
+behind this entry, and they are what `operator_sense_check.py` was validated
+against.
+
 ## Analysis findings
 
 - **Delivered energy E = ∫P dt is the state variable, not power** (2026-08-02,

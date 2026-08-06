@@ -1,0 +1,47 @@
+$ C:\Users\yilin\AppData\Local\Programs\Python\Python312\python.exe C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\operator_current_sweep.py --profile C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json
+
+
+current sweep -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\sweep_20260805_214317
+  2 explicit conditions from C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json
+  2 conditions, ~8 min total
+
+  force pull: drained 1.5 kB
+  port live (2260 bytes in probe)
+  calibration restored: vdd 5.067, offset 0.5, ioffset 0.0167
+--- [1/2] 650 mA / 300 ms ----------------------------
+  elapsed 0:04 Â· remaining ~7:36 Â· ETA 21:50:58
+  cold-start settle 40s ...
+  clock align: src=1/2 shifted +2.195 s onto the M7 clock
+  cyc   I[mA]   dx[um]    base    peak    rise   clip
+    1   652.5    430.2   2.048   2.398   0.349     no (bootstrap, excluded)
+    2   651.3    424.4   2.084   2.433   0.348     no
+    3   661.2    426.8   2.077   2.420   0.342     no
+    4   657.7    450.0   2.100   2.463   0.363     no
+    5   652.9    415.1   2.072   2.407   0.335     no
+    6   655.3    435.8   2.102   2.453   0.352     no
+  sense check: 0.99% impossible cool samples (limit 1%)
+  achieved current 656 mA of 650 mA commanded (101%)
+  force: mean rise +0.3481 V, baseline drift +0.0173 V over 6 cycles
+  laser: +430.4 um mean signed / 430.4 rectified (coherent)
+
+--- [2/2] 450 mA / 400 ms ----------------------------
+  elapsed 3:54 Â· remaining ~3:55 Â· ETA 21:51:07 Â· pacing 1.03x plan
+  cold-start settle 40s ...
+  clock align: src=1/2 shifted +2.195 s onto the M7 clock
+  cyc   I[mA]   dx[um]    base    peak    rise   clip
+    1   457.4    243.3   2.056   2.261   0.206     no (bootstrap, excluded)
+    2   448.4    252.7   2.092   2.310   0.217     no
+    3   456.5    237.4   2.075   2.277   0.202     no
+    4   448.8    239.6   2.080   2.279   0.200     no
+    5   451.2    230.2   2.106   2.302   0.197     no
+    6   452.2    230.8   2.097   2.289   0.192     no
+  !! SENSE WARNING: 1.07% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm â€” physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable â€” power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+  ABORT â€” 450 mA: 1.07% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm â€” physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable â€” power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+
+==============================================================
+  LAST CLEAN CONDITION: 650 mA / 300 ms
+  stopped because: 450 mA: 1.07% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm â€” physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable â€” power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+  cool 30 s â€” any limit found is a PAIR with the
+  duty cycle; a shorter cool lowers it.
+  raw + summary -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\sweep_20260805_214317
+==============================================================
