@@ -2,11 +2,32 @@
 
     python plot_drive_trajectory.py                          # newest sweep, auto-grouped
     python plot_drive_trajectory.py --sweep sweep_20260805_105318
+    python plot_drive_trajectory.py --sweep sweep_A sweep_B  # MERGE two folders
     python plot_drive_trajectory.py --heat 400               # just one pulse length
     python plot_drive_trajectory.py --by heat --level 200    # one current, all pulse lengths
 
 Writes  drive_<sweep>_<400ms|200mA>.png — 4 channels x 2 time scales, series
 overlaid and colour-ramped.
+
+═══ MERGING SEVERAL CAPTURE FOLDERS ═══════════════════════════════════════
+`--sweep A B ...` treats the folders as ONE grid. A campaign is often split by
+the bench: 2026-08-05 ran a 250-950 mA x 100-400 ms block in the morning and
+the EXTREMES (a 200 mA row, a 500 ms column) after lunch, so neither folder
+alone spans the operating envelope — the 200 mA row is a single current and
+degenerates to one trace per figure. Merged, every pulse length carries the
+full 200-950 mA ramp and the envelope is readable in one figure per row.
+
+The merge is a UNION OVER CELLS, never over repeats of one cell. If two
+folders both hold the same (current, pulse length) they are different sessions
+on a wire that has since cycled; averaging them would blend two wire states.
+The newer folder wins and the drop is PRINTED — nothing is dropped silently.
+
+Cross-session merging is safe for the plotted quantities because every channel
+is referenced to its OWN cycle's pre-fire baseline (dR/R0 to that cycle's R0,
+stroke and force to that cycle's pre-fire mean), so a baseline that drifted
+between sessions cancels rather than showing up as an offset between traces.
+Absolute R0 varies, and the right-hand ohm axis prints the median across the
+merged set — read it as a scale, not as a per-trace value.
 
 ═══ WHICH AXIS THE COLOUR RUNS OVER ═══════════════════════════════════════
 A full heat-time map wants one figure per pulse length coloured by CURRENT
@@ -99,25 +120,58 @@ CHANNELS = [
 _NAME = re.compile(r"c\d+_level_([\d.]+)mA_h(\d+)ms\.csv$")
 
 
-def discover(sweep):
-    """{heat_ms: [levels]} straight off the capture filenames."""
-    grid = {}
-    for f in sorted(glob.glob(os.path.join(RAW, sweep, "c*_level_*mA_h*ms.csv"))):
-        m = _NAME.search(os.path.basename(f))
-        if m:
-            grid.setdefault(int(m.group(2)), []).append(float(m.group(1)))
-    return {h: sorted(v) for h, v in sorted(grid.items())}
+def discover(sweeps):
+    """({heat_ms: [levels]}, {(level, heat): sweep}) off the capture filenames,
+    over one or more folders.
+
+    The owner map is what lets a merged grid stay honest: each cell remembers
+    which folder it came from, so the trace is read from that capture and its
+    provenance can be printed. Duplicate cells resolve to the newest folder
+    (the stamped names sort chronologically) with a printed note."""
+    grid, owner = {}, {}
+    for sweep in sweeps:
+        for f in sorted(glob.glob(os.path.join(RAW, sweep, "c*_level_*mA_h*ms.csv"))):
+            m = _NAME.search(os.path.basename(f))
+            if not m:
+                continue
+            lv, heat = float(m.group(1)), int(m.group(2))
+            prev = owner.get((lv, heat))
+            if prev is not None:
+                keep, drop = max(prev, sweep), min(prev, sweep)
+                print(f"  note: {lv:.0f} mA / {heat} ms is in both {prev} and "
+                      f"{sweep} — reading {keep}, ignoring the copy in {drop}")
+                owner[(lv, heat)] = keep
+                continue
+            owner[(lv, heat)] = sweep
+            grid.setdefault(heat, []).append(lv)
+    return {h: sorted(v) for h, v in sorted(grid.items())}, owner
 
 
-def commanded_cool_s(sweep, default=30.0):
-    """The COMMANDED cool time, off the first meta.json. Not the same as
-    POST_S, which is only how much of it this figure draws."""
-    for f in sorted(glob.glob(os.path.join(RAW, sweep, "c*.meta.json"))):
-        try:
-            return float(json.load(open(f))["cool_s"])
-        except Exception:
-            continue
-    return default
+def cool_label(sweeps, default=30.0):
+    """The COMMANDED cool time as a title string. Not the same as POST_S, which
+    is only how much of it this figure draws. Merged folders can disagree, so
+    a spread is reported as a range rather than silently taking the first."""
+    vals = []
+    for sweep in sweeps:
+        for f in sorted(glob.glob(os.path.join(RAW, sweep, "c*.meta.json"))):
+            try:
+                vals.append(float(json.load(open(f))["cool_s"]))
+                break
+            except Exception:
+                continue
+    vals = sorted(set(vals)) or [default]
+    return (f"{vals[0]:.0f} s cool" if len(vals) == 1
+            else f"{vals[0]:.0f}–{vals[-1]:.0f} s cool")
+
+
+def group_label(sweeps):
+    """Filename/title stem for one or many folders. Repeating the shared
+    `sweep_` prefix on every member makes the name unreadable, so only the
+    first carries it."""
+    if len(sweeps) == 1:
+        return sweeps[0]
+    rest = [s[len("sweep_"):] if s.startswith("sweep_") else s for s in sweeps[1:]]
+    return "+".join([sweeps[0]] + rest)
 
 
 def latest_sweep():
@@ -203,7 +257,7 @@ def condition_trace(sweep, level_mA, heat_ms, grid):
     return out or None
 
 
-def build(sweep, by, fixed, series):
+def build(sweeps, owner, by, fixed, series):
     """One figure. `by` names the axis the SERIES (and colour) runs over:
 
         by="level"  fixed = heat_ms, series = current levels   (the usual view)
@@ -216,18 +270,25 @@ def build(sweep, by, fixed, series):
     lvl_axis = (by == "level")
     grid = np.arange(-PRE_S, POST_S, 1.0 / GRID_HZ)
     unit = "mA" if lvl_axis else "ms"
-    traces = {}
+    merged = len(sweeps) > 1
+    traces, srcs = {}, {}
     for s in series:
         lv, heat_ms = (s, fixed) if lvl_axis else (fixed, s)
-        tr = condition_trace(sweep, lv, heat_ms, grid)
+        src = owner[(lv, heat_ms)]
+        tr = condition_trace(src, lv, heat_ms, grid)
+        # Where each cell came from, printed per series when merging: the
+        # figure claims one grid built out of several sessions and the reader
+        # is entitled to see which trace came from which.
+        from_ = f"  [{src}]" if merged else ""
         if tr:
             traces[s] = tr
+            srcs[s] = src
             r = tr.get("_rail", {})
             flag = "  RAILED: " + ", ".join(k for k, n in r.items() if n) \
                 if any(r.values()) else ""
-            print(f"     {s:>5.0f} {unit}  ok  ({tr.get('_n', 0)} cycles){flag}")
+            print(f"     {s:>5.0f} {unit}  ok  ({tr.get('_n', 0)} cycles){flag}{from_}")
         else:
-            print(f"     {s:>5.0f} {unit}  --  no usable cycles")
+            print(f"     {s:>5.0f} {unit}  --  no usable cycles{from_}")
     if not traces:
         return None
 
@@ -338,11 +399,25 @@ def build(sweep, by, fixed, series):
     # Both anchored va="top" from an explicit y. Without va the default is
     # "baseline", which puts a multi-line block's FIRST line ABOVE its y and
     # straight through the title.
+    # Name every folder in the figure, and say plainly that the grid was
+    # assembled from more than one session — the merge must not read as a
+    # single continuous run.
+    # Three lines, each kept under the ~150-character width the figure can hold
+    # at this font size — the provenance line grows with every merged folder and
+    # will run off the canvas if it is packed in with the method line.
+    provenance = " + ".join(sweeps)
+    if merged:
+        n_from = [(sw.split("_")[-1], sum(1 for v in srcs.values() if v == sw))
+                  for sw in sweeps]
+        provenance += ("  ·  merged grid — "
+                       + ", ".join(f"{n} from {tail}" for tail, n in n_from if n)
+                       + "; each trace referenced to its own pre-fire baseline")
     fig.text(0.075, 0.990,
-             f"SMA electrical drive — {head}, {commanded_cool_s(sweep):.0f} s cool",
+             f"SMA electrical drive — {head}, {cool_label(sweeps)}",
              ha="left", va="top", fontsize=16, weight="semibold", color=INK)
     fig.text(0.075, 0.966,
-             f"{sweep} · {len(lv_sorted)} {what} · RAW, no temporal "
+             f"{provenance}\n"
+             f"{len(lv_sorted)} {what} · RAW, no temporal "
              f"filtering · {how} · shaded = heat pulse\n"
              f"physical units — stroke in mm, force in grams-force; power "
              f"deliberately NOT normalized, its spread is the independent "
@@ -350,7 +425,7 @@ def build(sweep, by, fixed, series):
              ha="left", va="top", fontsize=10.5, color=INK_MUTED)
 
     tag = f"{fixed}ms" if lvl_axis else f"{fixed:.0f}mA"
-    out = os.path.join(DERIVED, f"drive_{sweep}_{tag}.png")
+    out = os.path.join(DERIVED, f"drive_{group_label(sweeps)}_{tag}.png")
     fig.savefig(out, dpi=140, facecolor=SURFACE)
     plt.close(fig)
     print(f"  -> {os.path.basename(out)}  ({len(lv_sorted)} series)")
@@ -360,7 +435,13 @@ def build(sweep, by, fixed, series):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sweep", default=None, help="capture folder under data/raw")
+    ap.add_argument("--sweep", nargs="+", default=None,
+                    help="capture folder(s) under data/raw. Several folders "
+                         "are MERGED into one grid — a campaign split across "
+                         "sessions (a main block plus an extremes run) only "
+                         "spans its operating envelope when read together. "
+                         "Duplicate cells resolve to the newest folder, with "
+                         "a printed note.")
     ap.add_argument("--by", choices=["level", "heat", "auto"], default="auto",
                     help="what the colour ramp runs over. 'level' = one figure "
                          "per pulse length, coloured by current (the usual "
@@ -387,7 +468,7 @@ def main():
         for f in folders:
             print(f"\n=== {f}")
             try:
-                made += run_one(f, a)
+                made += run_group([f], a)
             except SystemExit as e:            # keep going over a bad folder
                 print(f"  skipped — {e}")
                 rc = 1
@@ -396,14 +477,22 @@ def main():
                 rc = 1
         print(f"\n{made} figure(s) over {len(folders)} sweep folder(s)")
         return rc
-    return 0 if run_one(a.sweep or latest_sweep(), a) else 1
+    sweeps = sorted(a.sweep) if a.sweep else [latest_sweep()]
+    return 0 if run_group(sweeps, a) else 1
 
 
-def run_one(sweep, a):
-    """Figures for ONE sweep folder. Returns how many were written."""
-    gridmap = discover(sweep)
+def run_group(sweeps, a):
+    """Figures for ONE grid, which may span several folders. Returns how many
+    were written."""
+    sweeps = [os.path.basename(s.rstrip("/")) for s in sweeps]
+    missing = [s for s in sweeps if not os.path.isdir(os.path.join(RAW, s))]
+    if missing:
+        raise SystemExit(f"no such folder(s) under data/raw: {', '.join(missing)}")
+    if len(sweeps) > 1:
+        print(f"  merging {len(sweeps)} folders: {', '.join(sweeps)}")
+    gridmap, owner = discover(sweeps)
     if not gridmap:
-        raise SystemExit(f"no captures found in data/raw/{sweep}")
+        raise SystemExit(f"no captures found in data/raw/{', '.join(sweeps)}")
 
     # by-level groups: heat_ms -> levels.   by-heat groups: level_mA -> heats.
     by_lvl = {h: v for h, v in gridmap.items()}
@@ -444,10 +533,10 @@ def run_one(sweep, a):
     made = 0
     for h in sorted(by_lvl):
         print(f"  {h} ms pulse:")
-        made += bool(build(sweep, "level", h, by_lvl[h]))
+        made += bool(build(sweeps, owner, "level", h, by_lvl[h]))
     for lv in sorted(by_heat):
         print(f"  {lv:.0f} mA drive:")
-        made += bool(build(sweep, "heat", lv, by_heat[lv]))
+        made += bool(build(sweeps, owner, "heat", lv, by_heat[lv]))
     if not made:
         print("  no figure written — no condition yielded a usable trace")
     return made

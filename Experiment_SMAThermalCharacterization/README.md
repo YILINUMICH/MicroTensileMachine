@@ -666,7 +666,7 @@ CWD — `cd analysis` is a convenience, not a requirement.
 |---|---|---|---|
 | 1 | `analyze_raw.py` | `data/raw/sweep_*/c*_level_*.csv` + `.console.log` + `.meta.json` | `data/raw/sweep_*/cycles.csv`, `data/derived/heat_time_map_<date>_all.csv` |
 | 2 | `plot_envelope.py` | `data/derived/heat_time_map_<date>_all.csv` | `data/derived/*_envelope.csv`, `*_stroke.png`, `*_force.png` |
-| 2 | `plot_drive_trajectory.py` | raw captures (discovers the grid off filenames — **no table needed**) | `data/derived/drive_<sweep>_<400ms\|200mA>.png` |
+| 2 | `plot_drive_trajectory.py` | raw captures, one or more sweep folders (discovers the grid off filenames — **no table needed**) | `data/derived/drive_<sweep[+stamp…]>_<400ms\|200mA>.png` |
 | 2 | `plot_trajectory.py` | per-cycle table + raw captures | `data/derived/trajectory_<heat>ms_<norm>.png` |
 | 2 | `plot_energy.py` | per-cycle table + `energy_table.py` | `data/derived/energy_collapse.html` |
 | 2 | `plot_selfsensing.py` | per-cycle table + `energy_table.py` | `data/derived/self_sensing.html` |
@@ -686,6 +686,7 @@ stroke in **mm**, force in **grams-force**.
 ```
 python analysis/plot_drive_trajectory.py                       # newest sweep
 python analysis/plot_drive_trajectory.py --sweep sweep_<stamp>
+python analysis/plot_drive_trajectory.py --sweep sweep_A sweep_B   # MERGE folders
 python analysis/plot_drive_trajectory.py --all                 # every sweep folder
 ```
 
@@ -699,6 +700,21 @@ July long-wire campaign through a hardcoded `SRC_MAP`.
   coloured by current (`drive_<sweep>_400ms.png`) for a heat-time map, plus one
   figure per current coloured by pulse length (`drive_<sweep>_200mA.png`) for a
   single-current row, which would otherwise be one trace per figure.
+- **`--sweep A B ...` merges folders into ONE grid**, which is how the
+  *operating envelope* gets read when a campaign was split across sessions.
+  2026-08-05 is the case: `sweep_20260805_105318` holds the 250–950 mA ×
+  100–400 ms block and `sweep_20260805_154528` holds the **extremes** (a 200 mA
+  row, a 500 ms column). Neither spans the envelope alone — the 200 mA row is a
+  single current and degenerates to one trace per figure. Merged, every pulse
+  length carries the full **200–950 mA** ramp:
+  `drive_sweep_20260805_105318+20260805_154528_{100,200,300,400,500}ms.png`.
+  The merge is a **union over cells, never over repeats of one cell**: a cell
+  present in two folders resolves to the newer one and the drop is printed.
+  Cross-session merging is sound here because every channel is referenced to
+  **its own cycle's pre-fire baseline** (ΔR/R₀ to that cycle's R₀, stroke and
+  force to that cycle's pre-fire mean), so drift between sessions cancels
+  instead of showing up as an offset between traces. The subtitle names every
+  folder and how many series came from each.
 - **Rails are annotated, not hidden.** A channel that touched 0 or 5 V is drawn
   **dotted** and called out in red (`dotted = amp railed at 0/5 V — 750, 850,
   950 mA`), because a flat top there is the amplifier, not the wire.

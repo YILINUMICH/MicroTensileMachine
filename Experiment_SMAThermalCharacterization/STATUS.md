@@ -8,6 +8,49 @@
 | **Owner** | Yilin |
 | **Quick test (no hardware)** | `python -c "import config, workers, recording_core, sma_console, analyze_sma"` then run the analyzer on a synthetic console session (see README). GUI: `QT_QPA_PLATFORM=offscreen` + `run_gui(..., _build_only=True)`. |
 
+## 2026-08-06 — `plot_drive_trajectory.py` merges sweep folders; 08-05 envelope figures
+
+`--sweep A B ...` now reads several capture folders as ONE grid. The 2026-08-05
+campaign was split by the bench: `sweep_20260805_105318` is the 250–950 mA ×
+100–400 ms block, `sweep_20260805_154528` is the **extremes** — a 200 mA row and
+a 500 ms column. Plotted separately neither shows the operating envelope; the
+200 mA row is one current, so its figure was a single trace per channel and the
+`--by heat` transpose was standing in for a current ramp it did not have.
+
+Merged, the grid is 200–950 mA × 100–500 ms and every pulse length gets 8–9
+current traces. Written:
+
+```
+data/derived/drive_sweep_20260805_105318+20260805_154528_{100,200,300,400,500}ms.png
+```
+
+What the merge does and does not do:
+
+- **Union over CELLS, never over repeats of one cell.** Two folders holding the
+  same `(current, pulse length)` are different sessions on a wire that has since
+  cycled; averaging them would blend two wire states. The newer folder wins and
+  the drop is **printed**, not silent. (No overlap in the 08-05 pair.)
+- Each cell remembers its source folder, and the subtitle names every folder
+  with how many series came from each. Per-series provenance prints to stdout.
+- Cross-session merging is sound for these channels because each is referenced
+  to **its own cycle's pre-fire baseline** — ΔR/R₀ to that cycle's R₀, stroke and
+  force to that cycle's pre-fire mean — so drift between sessions cancels rather
+  than appearing as an offset between traces. Absolute R₀ still varies; the
+  right-hand ohm axis prints the median over the merged set, read it as a scale.
+- Nothing else changed: no filtering, no selection, rails still dotted.
+
+Superseded and removed: the five single-folder 08-05 figures
+(`drive_sweep_20260805_105318_{100..400}ms.png`,
+`drive_sweep_20260805_154528_{200mA,500ms}.png`) — every cell they showed is in
+the merged set with the missing end of the current axis filled in. Regenerate
+either form at any time; the script is deterministic.
+
+Reading the merged 400 ms figure: stroke is monotone in current out to 4.8 mm at
+950 mA with no sign of saturating, while the **load cell rails at 0/5 V from
+850 mA** (750 mA at 500 ms) — those force traces are dotted and their flat tops
+are the amplifier, not the wire. Force headroom, not wire capability, is what
+currently bounds the top of the envelope.
+
 ## 2026-08-03 — module reorganized into four buckets
 
 Main code, one-off diagnostics, raw data and derived data are now separated. The
