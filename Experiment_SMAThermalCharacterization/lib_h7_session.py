@@ -10,6 +10,8 @@ Everything here is UI-agnostic and hardware-facing. No plotting, no analysis.
 from __future__ import annotations
 
 import json
+import re
+import socket
 import sys
 import time
 from dataclasses import dataclass, field
@@ -37,6 +39,22 @@ DEFAULT_CAL = ("vdd 5.067", "offset 0.5", "ioffset 0.0167")
 # Firmware heat watchdog is 5000 ms; ping well inside it.
 PING_PERIOD_S = 1.0
 
+# ── UDP transport (docs/UDP_stream_migration_plan.md) ────────────────────────
+# Samples arrive as UDP datagrams; commands, [STATUS] and all other text stay
+# on the serial port. Requires an M7 image built with -D H7_TRANSPORT_UDP
+# (env portenta_m7_nbtx_udp) — against a USB-only image `netcfg` is rejected
+# and open() says so rather than hanging on an empty socket.
+UDP_PORT_DEFAULT = 7777
+UDP_RCVBUF = 4 * 1024 * 1024
+STATUS_KV = re.compile(r"(\w+)=(-?\d+(?:\.\d+)?)")
+
+
+def parse_status(line: str) -> dict:
+    """[STATUS] frame -> {key: float}. {} for any other line."""
+    if "[STATUS]" not in line:
+        return {}
+    return {k: float(v) for k, v in STATUS_KV.findall(line)}
+
 
 @dataclass
 class Sample:
@@ -51,6 +69,20 @@ class Sample:
 class Capture:
     samples: list = field(default_factory=list)
     console: list = field(default_factory=list)   # (t_rel, text)
+    # UDP transport only. lost = per-src samples missing from the `seq` run
+    # (UDP has no retransmit BY DESIGN — see §7 of the migration plan: detect,
+    # never retransmit, because any ACK re-couples the M7 to host scheduling).
+    # Loss degrades resolution, not correctness: every surviving sample keeps
+    # its exact hw_us. Counted within ONE capture — the first sample per src
+    # sets the baseline, so a gap between captures is not miscounted as loss.
+    lost: dict = field(default_factory=dict)      # {src: n_missing}
+    pkts: int = 0                                 # datagrams received
+    reverts: int = 0                              # udp_on=0 seen -> netcfg resent
+
+    def loss_pct(self, src: int) -> float:
+        got = len(self.by_src(src))
+        miss = self.lost.get(src, 0)
+        return 100.0 * miss / (got + miss) if (got + miss) else 0.0
 
     def by_src(self, src: int) -> "list[Sample]":
         return [s for s in self.samples if s.src == src]
@@ -66,12 +98,32 @@ class Capture:
 
 
 class H7:
-    """One owner of the serial port. Open it once, keep it, always disarm."""
+    """One owner of the serial port. Open it once, keep it, always disarm.
 
-    def __init__(self, port: str, baud: int = 115200, verbose: bool = True):
+    Two transports (docs/UDP_stream_migration_plan.md §2):
+      transport="usb" (default) — everything on the serial port, as before.
+      transport="udp"           — SAMPLES arrive as UDP datagrams; commands,
+                                  [STATUS] and all other text stay on serial.
+    The split is symmetrical with the firmware's: text never rides UDP and
+    samples never ride CDC, so each channel has exactly one kind of traffic.
+    """
+
+    def __init__(self, port: str, baud: int = 115200, verbose: bool = True,
+                 *, transport: str = "usb", pc_ip: Optional[str] = None,
+                 udp_port: int = UDP_PORT_DEFAULT):
+        if transport not in ("usb", "udp"):
+            raise ValueError(f"transport must be 'usb' or 'udp', got {transport!r}")
+        if transport == "udp" and not pc_ip:
+            raise ValueError("transport='udp' needs pc_ip — the address the H7 "
+                             "sends datagrams to (this PC's NIC on the H7's "
+                             "segment, e.g. '169.254.245.100')")
         self.port, self.baud, self.verbose = port, baud, verbose
+        self.transport, self.pc_ip, self.udp_port = transport, pc_ip, udp_port
         self.ser: Optional[serial.Serial] = None
-        self._buf = b""
+        self.sock: Optional[socket.socket] = None
+        self._buf = b""          # partial serial line
+        self._ubuf = b""         # partial UDP line (a datagram CAN split a line)
+        self._seq: dict = {}     # per-src last seq, for gap counting
 
     # ---------------------------------------------------------------- open --
     def open(self, force_pull_s: float = 1.0, probe_s: float = 2.0,
@@ -94,7 +146,22 @@ class H7:
         self.ser.reset_input_buffer()
         self._say(f"force pull: drained {pulled/1024:.1f} kB")
 
-        # Refuse to start a run against a dead port.
+        if self.transport == "udp":
+            self._open_udp(probe_s)
+        else:
+            self._probe_usb(probe_s)
+
+        for c in cal:
+            self.send(c)
+            time.sleep(0.25)
+        self._say(f"calibration restored: {', '.join(cal)}")
+
+    # ------------------------------------------------------------ open: usb --
+    def _probe_usb(self, probe_s: float) -> None:
+        """Byte-rate gate. Valid ONLY while samples are on the serial port —
+        with the stream on UDP the port carries ~400 B/s of text and this
+        would reject a perfectly healthy board. See _open_udp for that case."""
+        assert self.ser is not None
         n, t0 = 0, time.time()
         while time.time() - t0 < probe_s and n < 2000:
             n += len(self.ser.read(65536))
@@ -114,15 +181,118 @@ class H7:
                 f"  2. Otherwise power-cycle USB + EVM and retry. If the "
                 f"[STATUS] line then shows rate1=0 rate2=0 prod1=0 prod2=0 "
                 f"with crc_err=0, nothing is entering the ring at all — that "
-                f"is the M4/ADC side, not the link.")
+                f"is the M4/ADC side, not the link.\n"
+                f"  3. Is the board on a UDP build with the stream already "
+                f"moved off serial? Then this gate is simply the wrong test — "
+                f"open with transport='udp'. Check [STATUS] for udp_on=1.")
         self._say(f"port live ({n} bytes in probe)")
 
-        for c in cal:
-            self.send(c)
-            time.sleep(0.25)
-        self._say(f"calibration restored: {', '.join(cal)}")
+    # ------------------------------------------------------------ open: udp --
+    def _read_status(self, timeout_s: float) -> dict:
+        """Wait for one [STATUS] frame on serial. {} on timeout. Text lines seen
+        on the way are kept in _buf for the first capture(), so nothing is lost."""
+        assert self.ser is not None
+        t0 = time.time()
+        while time.time() - t0 < timeout_s:
+            chunk = self.ser.read(65536)
+            if not chunk:
+                continue
+            self._buf += chunk
+            # Peek at complete lines without consuming the tail.
+            *lines, tail = self._buf.split(b"\n")
+            for raw in lines:
+                st = parse_status(raw.decode("utf-8", "replace"))
+                if st:
+                    self._buf = tail
+                    return st
+        return {}
+
+    def _open_udp(self, probe_s: float) -> None:
+        """Move the sample stream to UDP and prove it arrived.
+
+        The liveness gate here is a [STATUS] frame, NOT a byte count: [STATUS]
+        comes at 1 Hz in BOTH transports, so it is the one signal that means
+        the same thing either way — and it carries udp_on, which tells us what
+        the board is actually doing instead of making us infer it.
+        """
+        assert self.ser is not None
+        # 1 Hz frame — give it at least ~3 s regardless of the byte-probe budget.
+        wait_s = max(probe_s, 3.0)
+        st = self._read_status(wait_s)
+        if not st:
+            raise RuntimeError(
+                f"{self.port} opened but no [STATUS] frame in {wait_s:.0f}s.\n"
+                f"  1. Is another reader holding it? The H7 is SINGLE-OWNER: a "
+                f"second handle opens fine and receives nothing.\n"
+                f"  2. Otherwise power-cycle USB + EVM and retry.")
+        if "udp_on" not in st:
+            raise RuntimeError(
+                "This firmware predates the transport split — its [STATUS] has "
+                "no udp_on field, so the stream cannot be moved off serial.\n"
+                "  Flash env portenta_m7_nbtx_udp, or open with transport='usb'.")
+
+        # Bind BEFORE netcfg so no datagram is missed in the gap. Bind to the
+        # wildcard: the H7 sends to whatever pc_ip we hand it, which may not be
+        # the interface the OS would pick for an outbound route.
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, UDP_RCVBUF)
+        self.sock.bind(("0.0.0.0", self.udp_port))
+        got = self.sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+        self.sock.setblocking(False)
+        self._say(f"UDP bound :{self.udp_port} (SO_RCVBUF={got/1024:.0f} kB)")
+
+        # Always (re)send netcfg, even if udp_on is already 1: it re-points the
+        # stream at THIS host, so a board left armed for a previous session or a
+        # different PC lands here instead of streaming into the void.
+        self.send(f"netcfg {self.pc_ip} {self.udp_port}")
+
+        deadline = time.time() + wait_s
+        armed = False
+        while time.time() < deadline:
+            st = self._read_status(1.5)
+            if st.get("udp_on") == 1.0:
+                armed = True
+                break
+        if not armed:
+            self._close_sock()
+            raise RuntimeError(
+                f"netcfg was sent but [STATUS] still reports udp_on=0.\n"
+                f"  The M7 image was almost certainly built WITHOUT "
+                f"-D H7_TRANSPORT_UDP, so `netcfg` is not a command it knows.\n"
+                f"  Flash env portenta_m7_nbtx_udp, or open with transport='usb'.")
+
+        # udp_on=1 means the board is SENDING. If nothing arrives, the loss is
+        # between here and there — a different failure with different causes,
+        # so it gets its own message.
+        deadline = time.time() + wait_s
+        while time.time() < deadline:
+            try:
+                self.sock.recv(65535)
+                self._say(f"UDP stream live -> {self.pc_ip}:{self.udp_port}")
+                return
+            except BlockingIOError:
+                time.sleep(0.02)
+        self._close_sock()
+        raise RuntimeError(
+            f"Board reports udp_on=1 but no datagram reached "
+            f"{self.pc_ip}:{self.udp_port} in {wait_s:.0f}s — it is sending "
+            f"somewhere this host is not listening.\n"
+            f"  1. Is pc_ip right? It must be THIS PC's address on the H7's "
+            f"segment (the H7 is static 169.254.245.50/16).\n"
+            f"  2. Windows Firewall drops unsolicited inbound UDP — allow "
+            f"python.exe on the link, or send one datagram out from this "
+            f"socket first to open the stateful mapping.\n"
+            f"  3. Confirm the link: ping 169.254.245.50.")
+
+    def _close_sock(self) -> None:
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            finally:
+                self.sock = None
 
     def close(self) -> None:
+        self._close_sock()
         if self.ser and self.ser.is_open:
             self.ser.close()
 
@@ -143,13 +313,47 @@ class H7:
             print(f"  WARNING: disarm failed: {e}", file=sys.stderr)
 
     # ------------------------------------------------------------- capture --
+    def _ingest(self, raw: bytes, cap: Capture, t0: float,
+                on_console, count_loss: bool) -> None:
+        """One wire line -> a Sample or a console line. Identical for both
+        transports: the firmware emits the SAME TSV on UDP as on serial (§5 of
+        the migration plan), so there is exactly one parser to keep correct."""
+        line = raw.rstrip(b"\r")
+        f = line.split(b"\t")
+        if len(f) >= 6:
+            try:
+                s = Sample(int(f[1]), int(f[4]), float(f[3]), int(f[2]), int(f[5]))
+                cap.samples.append(s)
+                if count_loss:
+                    prev = self._seq.get(s.src)
+                    # First sample of a src sets the baseline — never counted.
+                    if prev is not None and s.seq > prev + 1:
+                        cap.lost[s.src] = cap.lost.get(s.src, 0) + (s.seq - prev - 1)
+                    self._seq[s.src] = s.seq
+                return
+            except ValueError:
+                pass
+        txt = line.decode("utf-8", "replace").strip()
+        if txt and "PGAL" not in txt and txt != "LM":
+            cap.console.append((time.time() - t0, txt))
+            if on_console:
+                on_console(time.time() - t0, txt)
+
     def capture(self, secs: float, ping: bool = True,
                 on_console: Optional[Callable[[float, str], None]] = None
                 ) -> Capture:
         """Read the stream for `secs`, feeding the watchdog. Non-sample lines
-        are kept separately so `[ACT] heat` / `[CC] FAULT` stay visible."""
+        are kept separately so `[ACT] heat` / `[CC] FAULT` stay visible.
+
+        transport='udp': samples are drained from the socket and text from
+        serial, in the same loop. The socket is drained FIRST and to exhaustion
+        each pass — a UDP receive buffer that overflows drops samples silently,
+        whereas serial text is flow-controlled and simply waits.
+        """
         assert self.ser is not None
+        udp = self.transport == "udp"
         cap = Capture()
+        self._seq.clear()          # loss is per-capture; see Capture.lost
         t0 = last_ping = time.time()
         while time.time() - t0 < secs:
             if ping and time.time() - last_ping >= PING_PERIOD_S:
@@ -158,27 +362,45 @@ class H7:
                 except Exception:
                     pass
                 last_ping = time.time()
-            chunk = self.ser.read(65536)
-            if not chunk:
-                continue
-            self._buf += chunk
-            *lines, self._buf = self._buf.split(b"\n")
-            for raw in lines:
-                line = raw.rstrip(b"\r")
-                f = line.split(b"\t")
-                if len(f) >= 6:
+
+            busy = False
+            if udp and self.sock is not None:
+                while True:                     # drain to exhaustion
                     try:
-                        cap.samples.append(Sample(int(f[1]), int(f[4]),
-                                                  float(f[3]), int(f[2]),
-                                                  int(f[5])))
-                        continue
-                    except ValueError:
-                        pass
-                txt = line.decode("utf-8", "replace").strip()
-                if txt and "PGAL" not in txt and txt != "LM":
-                    cap.console.append((time.time() - t0, txt))
-                    if on_console:
-                        on_console(time.time() - t0, txt)
+                        dgram = self.sock.recv(65535)
+                    except BlockingIOError:
+                        break
+                    except OSError:
+                        break
+                    cap.pkts += 1
+                    busy = True
+                    self._ubuf += dgram
+                    *lines, self._ubuf = self._ubuf.split(b"\n")
+                    for raw in lines:
+                        self._ingest(raw, cap, t0, on_console, True)
+
+            chunk = self.ser.read(65536)
+            if chunk:
+                busy = True
+                self._buf += chunk
+                *lines, self._buf = self._buf.split(b"\n")
+                for raw in lines:
+                    self._ingest(raw, cap, t0, on_console, not udp)
+                    if udp:
+                        # A: the board can revert to CDC without warning (a
+                        # self-heal MCU reset clears udp_on), which would leave
+                        # this capture silently empty. Catch it and re-arm.
+                        st = parse_status(raw.decode("utf-8", "replace"))
+                        if st and st.get("udp_on") == 0.0:
+                            cap.reverts += 1
+                            self._say("WARNING: board reverted to USB "
+                                      "transport — re-sending netcfg")
+                            try:
+                                self.send(f"netcfg {self.pc_ip} {self.udp_port}")
+                            except Exception:   # noqa: BLE001
+                                pass
+            if not busy:
+                time.sleep(0.002)   # nothing on either channel — yield the CPU
         return cap
 
     def _say(self, msg: str) -> None:
@@ -374,6 +596,20 @@ def window_stats(cap: Capture, src: int, t0: float, t1: float):
 
 
 def save_capture(cap: Capture, path: Path, meta: dict) -> None:
+    # §7 of the migration plan: UDP loss is DETECTED and REPORTED, never
+    # retransmitted. Recorded here so every caller gets it without threading the
+    # numbers through — a capture's loss belongs with the capture, not in a log
+    # someone has to remember to read.
+    if cap.pkts:
+        meta = dict(meta)          # never mutate the caller's dict
+        srcs = sorted({s.src for s in cap.samples})
+        meta["transport"] = {
+            "kind": "udp",
+            "datagrams": cap.pkts,
+            "reverts": cap.reverts,
+            "loss_pct": {str(s): round(cap.loss_pct(s), 4) for s in srcs},
+            "lost_samples": {str(k): v for k, v in sorted(cap.lost.items())},
+        }
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as fh:
         fh.write("src,hw_us,value,raw_code,seq\n")
