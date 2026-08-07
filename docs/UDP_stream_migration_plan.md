@@ -18,8 +18,25 @@ Two deviations from this plan were found and fixed in firmware; see
   Fixed by treating a delivering UDP link as idle-CDC, plus a new `udp_on=0|1`
   field in `[STATUS]` so the host can detect a revert.
 
-Remaining before Step 3: host-side §6 work — `UdpReader` into
-`lib_h7_session.H7.capture()`, and `H7.open()`'s serial-byte gate.
+**STEP 3 (cutover) DONE for the sweep/pulse path.** `lib_h7_session` now
+defaults to `transport="udp"` (`DEFAULT_TRANSPORT`, env-overridable via
+`H7_TRANSPORT` / `H7_PC_IP` / `H7_UDP_PORT`), so all five `H7(...)` call sites
+moved together without edits; `operator_current_sweep.py` and
+`operator_pulse_capture.py` gained `--transport` / `--pc-ip`.
+§11 rollback is VERIFIED, not just described: flashing `portenta_m7_nbtx`
+(no UDP) and re-running with the host still defaulting to udp produced a loud
+warning and an automatic fall back to serial, capturing 4199 samples. The
+fallback is deliberately narrow — it fires only when UDP is impossible on the
+running image, never when the board is streaming and datagrams are not
+arriving, because silently restoring the flow-controlled path would hand back
+the stalls this plan exists to remove.
+
+**Still on serial: the recorder path.** `lib_workers.H7Worker` +
+`lib_config.H7Config` (used by `operator_console.py` via
+`lib_recording_core.py`) is a separate threaded architecture and was NOT
+cut over — it needs its own bench validation. §6's `h7.transport` /
+`h7.pc_ip` / `h7.udp_bind_port` config keys belong with that work and are
+deliberately not added yet rather than left as config nothing reads.
 **Scope:** `Firmware_SMASensorHub_PIO` (M7) + host `Experiment_SMAThermalCharacterization` / `Calibrate_LaserHead/portenta_reader.py`.
 
 ## 1. Why

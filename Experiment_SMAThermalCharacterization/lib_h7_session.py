@@ -10,6 +10,7 @@ Everything here is UI-agnostic and hardware-facing. No plotting, no analysis.
 from __future__ import annotations
 
 import json
+import os
 import re
 import socket
 import sys
@@ -47,6 +48,24 @@ PING_PERIOD_S = 1.0
 UDP_PORT_DEFAULT = 7777
 UDP_RCVBUF = 4 * 1024 * 1024
 STATUS_KV = re.compile(r"(\w+)=(-?\d+(?:\.\d+)?)")
+
+# ── STEP 3 CUTOVER (plan §8): udp is the DEFAULT transport ───────────────────
+# Validated 2026-08-07: 0.000% loss, no hw_us gaps, and the M7 control loop no
+# longer hostage to host scheduling — which is the entire point (a slow host
+# used to stretch a 3 s cool to 7 s through USB-CDC flow control).
+#
+# Every H7() that does not name a transport picks these up, so the five
+# existing call sites move together and none of them needed editing. Overrides,
+# in order of precedence: the H7(...) kwarg, then these environment variables.
+# The env hooks matter because the IP is host-specific — on another machine, or
+# with the Ethernet link unplugged, `set H7_TRANSPORT=usb` reverts everything
+# without touching code.
+#
+# pc_ip is THIS PC's address on the H7's segment. The firmware hardcodes no PC
+# address (plan §3) — the host announces itself with `netcfg`.
+DEFAULT_TRANSPORT = os.environ.get("H7_TRANSPORT", "udp").lower()
+DEFAULT_PC_IP = os.environ.get("H7_PC_IP", "169.254.245.100")
+DEFAULT_UDP_PORT = int(os.environ.get("H7_UDP_PORT", UDP_PORT_DEFAULT))
 
 
 def parse_status(line: str) -> dict:
@@ -109,14 +128,20 @@ class H7:
     """
 
     def __init__(self, port: str, baud: int = 115200, verbose: bool = True,
-                 *, transport: str = "usb", pc_ip: Optional[str] = None,
-                 udp_port: int = UDP_PORT_DEFAULT):
+                 *, transport: Optional[str] = None, pc_ip: Optional[str] = None,
+                 udp_port: Optional[int] = None):
+        # None => take the module default (udp since the Step 3 cutover), so a
+        # caller that names no transport follows the default without editing.
+        transport = (transport or DEFAULT_TRANSPORT).lower()
+        pc_ip = pc_ip or DEFAULT_PC_IP
+        udp_port = udp_port or DEFAULT_UDP_PORT
         if transport not in ("usb", "udp"):
             raise ValueError(f"transport must be 'usb' or 'udp', got {transport!r}")
         if transport == "udp" and not pc_ip:
             raise ValueError("transport='udp' needs pc_ip — the address the H7 "
                              "sends datagrams to (this PC's NIC on the H7's "
-                             "segment, e.g. '169.254.245.100')")
+                             "segment, e.g. '169.254.245.100'). Set it with "
+                             "H7_PC_IP=... or pass transport='usb'.")
         self.port, self.baud, self.verbose = port, baud, verbose
         self.transport, self.pc_ip, self.udp_port = transport, pc_ip, udp_port
         self.ser: Optional[serial.Serial] = None
@@ -226,10 +251,14 @@ class H7:
                 f"second handle opens fine and receives nothing.\n"
                 f"  2. Otherwise power-cycle USB + EVM and retry.")
         if "udp_on" not in st:
-            raise RuntimeError(
-                "This firmware predates the transport split — its [STATUS] has "
-                "no udp_on field, so the stream cannot be moved off serial.\n"
-                "  Flash env portenta_m7_nbtx_udp, or open with transport='usb'.")
+            # Firmware predates the split. UDP is not merely unreachable, it is
+            # IMPOSSIBLE on this image — so serial is the correct transport and
+            # falling back masks nothing. This is what makes the documented
+            # rollback (flash the USB build) work with no host change (plan §11).
+            self._fallback_to_usb(
+                "firmware predates the transport split (no udp_on in [STATUS])",
+                probe_s)
+            return
 
         # Bind BEFORE netcfg so no datagram is missed in the gap. Bind to the
         # wildcard: the H7 sends to whatever pc_ip we hand it, which may not be
@@ -254,12 +283,14 @@ class H7:
                 armed = True
                 break
         if not armed:
+            # netcfg went unanswered: the image was built without
+            # -D H7_TRANSPORT_UDP, so `netcfg` is not a command it knows. Same
+            # reasoning as above — UDP is impossible here, serial is correct.
             self._close_sock()
-            raise RuntimeError(
-                f"netcfg was sent but [STATUS] still reports udp_on=0.\n"
-                f"  The M7 image was almost certainly built WITHOUT "
-                f"-D H7_TRANSPORT_UDP, so `netcfg` is not a command it knows.\n"
-                f"  Flash env portenta_m7_nbtx_udp, or open with transport='usb'.")
+            self._fallback_to_usb(
+                "M7 image built without -D H7_TRANSPORT_UDP (netcfg ignored)",
+                probe_s)
+            return
 
         # udp_on=1 means the board is SENDING. If nothing arrives, the loss is
         # between here and there — a different failure with different causes,
@@ -283,6 +314,23 @@ class H7:
             f"python.exe on the link, or send one datagram out from this "
             f"socket first to open the stateful mapping.\n"
             f"  3. Confirm the link: ping 169.254.245.50.")
+
+    def _fallback_to_usb(self, why: str, probe_s: float) -> None:
+        """Degrade to the serial transport when the BOARD cannot do UDP.
+
+        Deliberately narrow. This fires only when UDP is impossible on the
+        running image, never when the board is streaming and the datagrams are
+        not arriving — that is a host/network fault, and silently dropping back
+        to serial would hand back the flow-controlled path whose stalls stretch
+        a 3 s cool to 7 s, while looking like everything is fine. A loud warning
+        beats a quietly distorted session.
+        """
+        self.transport = "usb"
+        print(f"  WARNING: UDP unavailable — {why}.\n"
+              f"           Falling back to the serial transport. Timing is then "
+              f"hostage to host scheduling again (see the migration plan §1).",
+              file=sys.stderr)
+        self._probe_usb(probe_s)
 
     def _close_sock(self) -> None:
         if self.sock is not None:

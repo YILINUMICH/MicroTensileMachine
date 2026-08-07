@@ -160,6 +160,13 @@ def main() -> int:
                         "abort_on_bad_sense, stop_on_fail. See "
                         "profiles/heat_time_map.json.")
     p.add_argument("--port", default="COM8")
+    p.add_argument("--transport", choices=("usb", "udp"), default=None,
+                   help="sample-stream transport (default: udp since the "
+                        "2026-08-07 cutover; H7_TRANSPORT env overrides). Use "
+                        "usb to fall back to the serial stream.")
+    p.add_argument("--pc-ip", default=None,
+                   help="THIS PC's address on the H7's segment, for UDP "
+                        "(default 169.254.245.100; H7_PC_IP env overrides)")
     p.add_argument("--levels", default="150,250,350,450,550",
                    help="CC setpoints in mA, ascending (default 150..550)")
     p.add_argument("--heat-ms", default="100",
@@ -332,7 +339,7 @@ def main() -> int:
     print(f"  {len(conditions)} conditions, ~{sum(per_cond)/60:.0f} min total\n")
 
     t_start = time.time()           # wall clock the ETA below paces against
-    h7 = H7(a.port)
+    h7 = H7(a.port, transport=a.transport, pc_ip=a.pc_ip)
     rows, ceiling, stop_reason = [], None, "all levels passed"
     try:
         h7.open()

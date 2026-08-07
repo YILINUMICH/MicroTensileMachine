@@ -205,6 +205,12 @@ def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--port", default="COM8")
+    p.add_argument("--transport", choices=("usb", "udp"), default=None,
+                   help="sample-stream transport (default: udp since the "
+                        "2026-08-07 cutover; H7_TRANSPORT env overrides)")
+    p.add_argument("--pc-ip", default=None,
+                   help="THIS PC's address on the H7's segment, for UDP "
+                        "(default 169.254.245.100; H7_PC_IP env overrides)")
     p.add_argument("--ma", type=float, default=300.0)
     p.add_argument("--heat-ms", type=int, default=100)
     p.add_argument("--cool-s", type=float, default=3.0)
@@ -234,7 +240,7 @@ def main():
           f"{a.cycles} cycles | i_low {a.i_low:.0f} mA")
     print(f"  -> {out}   (~{run_s + a.settle_s:.0f} s total)\n")
 
-    h7 = H7(a.port)
+    h7 = H7(a.port, transport=a.transport, pc_ip=a.pc_ip)
     try:
         h7.open()
         h7.send("disarm")
