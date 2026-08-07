@@ -1,38 +1,74 @@
-# Overnight collection — ~9.2 h in a 12 h window
+# The 13-profile collection — ~9.2 h, unattended or step by step
 
-> **STATUS: NOT YET COLLECTED.** Planned for 2026-08-05/06 and deferred — the
-> rig's SMA sense chain faulted during pre-flight and four attempts aborted on
-> the sense guard without collecting a single valid condition. The campaign,
-> profiles, run order and generator are unchanged and ready; it needs a healthy
-> rig and a fresh 12 h window. See pre-flight step 6, and the module `STATUS.md`
-> entry *2026-08-05 night* for the diagnosis. Dates in this file that read
-> "today" mean **2026-08-05**, when the envelope was measured.
+> **STATUS: NOT YET COLLECTED — three attempts, all ended by the rig.**
+> 08-05: sense chain faulted in pre-flight, four aborts. 08-06: runners rebuilt
+> (sequential default, shared `run_order.txt`). 08-07: fault localized to the
+> driver-board/harness side (coil, clips and BOTH H7 boards exonerated by
+> direct test); the payload was shown median-recoverable, so
+> **`abort_on_bad_sense` is flipped to `false` in all 13 profiles** — the
+> conditions, seeds, roles and order are untouched. The 03:31 launch then died
+> in 15 min on a SECOND, unrelated fault (ADC2 death + USB-CDC wedge). Before
+> attempt 4, work the **Restart checklist** in `STATUS.md` *2026-08-07 03:46* —
+> and if using `run_night.ps1`, pass `-BetweenS 300` (port reopens ≤2 min after
+> a close can wedge the H7's USB TX; only a power cycle recovers it). Dates in
+> this file that read "today" mean **2026-08-05**, when the envelope was
+> measured.
 
 Built to `NN_SelfSensing_Baseline/DATA_COLLECTION_GUIDELINE.md` §9 (excitation
 protocol). Regenerate with `python gen_night_profiles.py`; that script's header
 documents how each §9 clause is satisfied.
 
-**Run the whole night with one command.** Sorted order is *not* the run order
-(see **Run order** below), so go through `run_night.ps1`, which passes the 13
-profiles to the queue as an explicit ordered list:
+## Two ways to run it
+
+Sorted order (n0..n9) is *not* the run order — that is the role numbering from
+the generator. The real order lives in **`run_order.txt`**, which both runners
+read, so it cannot drift between them.
+
+**Sequential, one profile per invocation (default — start here).** Each launch
+fires a fixed 650 mA × 300 ms sense probe, grades it with
+`operator_sense_check.py`, and **will not start the profile on a BAD verdict**.
+Progress lives in `data/raw/campaigns/<key>/steps/ledger.json`, so the campaign
+can span several sessions and picks up where it left off:
 
 ```
-# from the module root. 1. ALWAYS dry-run first — validates all 13, opens no port
-.\profiles\night_profiles_20260805\run_night.ps1 -DryRun
+# from the module root
+python profiles\night_profiles_20260805\run_step.py            # board: what has run, what is next
+python profiles\night_profiles_20260805\run_step.py next --dry-run
+python profiles\night_profiles_20260805\run_step.py next       # run the next step
+```
 
-# 2. the real run
-.\profiles\night_profiles_20260805\run_night.ps1
+A bare invocation never drives the rig. `next` is the word that fires pulses.
+Step 3 (`n1a`) and step 8 (`n1b`) are ~2 h each — those two want a sitting, the
+rest are 8–48 min.
+
+**Unattended, all 13 back-to-back (~9.2 h).** Only worth it on a rig whose
+sense chain is proven, because the queue *cannot* detect the failure that
+wasted 2026-08-05 (see pre-flight 6):
+
+```
+.\profiles\night_profiles_20260805\run_night.ps1 -DryRun   # ALWAYS first — opens no port
+.\profiles\night_profiles_20260805\run_night.ps1           # the real run
 ```
 
 Passing the *folder* to `operator_profile_queue.py` still works and still
 validates, but it runs the sorted order and gives up the three properties in
 **Run order**.
 
-The queue runs each profile back-to-back, runs `operator_sweep_report.py` after
-each, writes `queue_<stamp>/queue_manifest.json` (which capture folder came from
-which pre-registered role), and **treats a failed profile as one lost profile,
-not a lost night**. It abandons the queue only if two profiles in a row capture
-nothing — the signature of a rig that needs a power-cycle.
+Either way each profile is followed by `operator_sweep_report.py`, and a failed
+profile is one lost profile rather than a lost night. The queue writes
+`queue_<stamp>/queue_manifest.json`; the stepper writes `steps/ledger.json`,
+which additionally carries both sense verdicts per step.
+
+**What sequential mode changes about the data.** Nothing inside a capture: a
+profile is self-contained (settle, conditions, cool times) and runs byte-identical
+either way. What changes is *between* profiles — the anchors `n0/n3/n9` bracket
+the whole sequence rather than one night, so power cycles, re-clipping and
+ambient swings land between them. They still measure drift, over days instead of
+hours, and the ledger timestamps are what keep that interpretable. Run the
+anchors in their pre-registered positions and do not re-run them casually. The
+per-step probe also puts two identical 650 mA pulses in front of every block,
+including each anchor — that is uniform preconditioning, and it is closer to
+equal-state-going-in than the night's 30 s inter-profile gap was.
 
 | # | profile | cond | pulses | ~min | role (FROZEN) |
 |---|---|---|---|---|---|
@@ -56,7 +92,13 @@ pulse). Every pulse in n1/n2/n4 is a history-diverse sample.
 ## Run order
 
 The filename numbering is the *role* numbering from `gen_night_profiles.py`;
-the column above is the order to actually run.
+the column above is the order to actually run, and it lives in
+**`run_order.txt`** — one file, read by `run_night.ps1` and `run_step.py` alike.
+Both refuse to start unless every `n*.json` on disk appears there exactly once,
+so a profile added by a later `gen_night_profiles.py` run cannot be silently
+dropped. Sequential mode does not change the order: the reasons below are about
+what the coil has just been through, and they hold whether the gap between two
+blocks is 30 seconds or a day.
 
 **n0 + n4a are the attended head — ~40 min, then you can leave.** n4a is the
 riskiest block in the campaign: 5–11 s cool is disjoint from every cool time
@@ -153,22 +195,30 @@ rig must be idle at a fixed time and you accept losing the tail.
    ~30 s pulse, not six. Measured on `sweep_20260805_154528`: 18.4 MB for a
    ~200 s capture = **92 kB/s of CSV**, and the night records ~7.9 h of that.
    381 GB free.
-6. **Verify the sense chain — the gate on the whole night.** Fire one capture
-   and read its noise floor:
+6. **Verify the sense chain — the gate on the whole campaign.** `run_step.py`
+   does this for you before every step and stops on a BAD verdict; run it by
+   hand only before `run_night.ps1`, or after any work on the SMA wiring:
 
    ```powershell
-   python operator_pulse_capture.py --i-ma 650 --heat-ms 300
-   python operator_sense_check.py            # newest capture; exits non-zero on a fault
+   python operator_pulse_capture.py --ma 650 --heat-ms 300 --i-low 0 --cool-s 30 --cycles 2
+   python operator_sense_check.py data\raw\pulse_<stamp>\h7.csv
    ```
 
-   Wants **σ ≈ 26 mA** and **R @200 ms ≤ 2 %**, against the R transition of
+   Wants **σ ≈ 25 mA** and **R @200 ms ≤ 2 %**, against the R transition of
    ~3 % the self-sensing model has to see. At 2× that floor the payload channel
    is buried, and the sweep's own guard starts straddling its 1 % limit — which
    means **profiles abort one or two conditions in while still writing captures,
    so the queue's circuit breaker never fires.** That failure mode runs the full
    9 h and yields ~20 captures of 804, reported as `ok` and `partial`. Do not
-   start the night on a BAD or MARGINAL verdict; do not work around it by
-   loosening `r_min_ohm`.
+   start on a BAD or MARGINAL verdict; do not work around it by loosening
+   `r_min_ohm`.
+
+   **Name the capture file.** Three details make the obvious short form wrong:
+   the flag is `--ma`, not `--i-ma`; a pulse folder holds `h7.csv`, not
+   `cNN_level_*.csv`, so a bare `operator_sense_check.py` used to skip it
+   silently and grade a *stale sweep* instead; and `--i-low 0` is what parks
+   the wire at the idle bias the campaign runs at. (The check now searches both
+   capture shapes, but pointing at the file is what makes it unambiguous.)
 
 ## Why the protocol changed from the first draft
 
@@ -267,15 +317,20 @@ so a randomized campaign is reproducible from the captures alone (§9.3, §7).
    instead of downstream — but the filter should be revisited before training on
    randomized campaigns.
 
-## In the morning — the standard figure set
+## When the campaign is complete — the standard figure set
 
-The queue already runs `operator_sweep_report.py` after each profile. Then:
+Both runners already run `operator_sweep_report.py` after each profile. Then
+register the campaign once — `run_step.py` files every capture under
+`data/raw/campaigns/<key>/`, and its `steps/ledger.json` lists exactly which
+sweep folder came from which pre-registered role, which is the `runs` list a
+`CAMPAIGNS` entry needs:
 
 ```
 cd analysis
 python plot_drive_trajectory.py --all        # 4 channels x 2 time scales, per sweep
-python analyze_raw.py                        # add the night's folders to CAMPAIGNS first
+python analyze_raw.py                        # add the campaign's folders to CAMPAIGNS first
 python plot_envelope.py ../data/derived/heat_time_map_<campaign>_all.csv
+python make_index.py                          # refresh data/raw/INDEX.md
 ```
 
 `plot_drive_trajectory.py` handles this campaign's one-pulse conditions: it uses
@@ -286,13 +341,22 @@ randomized blocks draw ~200 distinct conditions, so expect a dense figure there
 rather than a clean ordinal ramp — the envelope charts and `cycles.csv` are the
 better read for n1/n2/n4.
 
-## If something goes wrong overnight
+## If something goes wrong
 
-Read `data/raw/queue_<stamp>/queue_manifest.json` first — per profile it records
-the sweep folder, capture count vs conditions commanded, status, and the reason
-the sweep printed. Then the per-profile logs in the same folder. Every capture is
-written to disk *before* it is analysed, so a mid-profile abort never loses the
-pulses already collected.
+Sequential: `python profiles\night_profiles_20260805\run_step.py` — the board
+shows every step's status and capture count, the reason the sweep printed, and
+the sense-probe trend across the campaign (σ and R per step; **R climbing step
+over step is the clip-contact signature**, +0.3 to +0.5 Ω on 2026-08-05). A step
+that did not finish `ok` stays on the list, so `next` offers it again once the
+cause is fixed — nothing to un-record by hand. Per-step logs sit in
+`data/raw/campaigns/<key>/steps/`.
+
+Unattended: read `data/raw/queue_<stamp>/queue_manifest.json` first — per profile
+it records the sweep folder, capture count vs conditions commanded, status, and
+the reason the sweep printed. Then the per-profile logs in the same folder.
+
+Either way, every capture is written to disk *before* it is analysed, so a
+mid-profile abort never loses the pulses already collected.
 
 ## Committing the results
 

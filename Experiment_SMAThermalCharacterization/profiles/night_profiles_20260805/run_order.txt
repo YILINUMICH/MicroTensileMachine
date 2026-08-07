@@ -1,0 +1,29 @@
+# RUN ORDER for the 2026-08-05 campaign — the single source of truth.
+#
+# Read by BOTH runners, so the order cannot drift between them:
+#   run_night.ps1   unattended, all 13 back-to-back  (~9.2 h)
+#   run_step.py     one profile per invocation, attended  <- the sequential mode
+#
+# Sorted order (n0..n9) is the ROLE numbering from gen_night_profiles.py and is
+# NOT the run order. The rationale for this ordering is in README.md ("Run
+# order"): one half of each pool before the midpoint anchor, a low-energy block
+# before each anchor, and the riskiest block (n4a) at the head.
+#
+# Format: <filename>  # role. Text after '#' is a comment; blank lines ignored.
+# Every n*.json in this folder must appear here exactly once — both runners
+# refuse to start otherwise, so a profile added by a later gen_night_profiles.py
+# run cannot be silently dropped.
+
+n0_anchor_start.json      # drift bracket — repeats at n3, n9
+n4a_shortcool_test.json   # TEST-ONLY — 5-11 s cool, the riskiest block
+n1a_shuffle_train.json    # TRAINABLE — randomized envelope draws
+n2a_shuffle_test.json     # TEST-ONLY — unseen sequence
+n6_repeats.json           # TEST-ONLY — cross-session probe
+n8_threshold.json         # trainable — sub-envelope stroke floor
+n3_anchor_mid.json        # drift bracket — the midpoint
+n1b_shuffle_train.json    # TRAINABLE — half B, different seed
+n2b_shuffle_test.json     # TEST-ONLY — half B
+n4b_shortcool_test.json   # TEST-ONLY — half B
+n7_ladder.json            # trainable — 550-900 mA x 500 ms fill
+n5_longcool.json          # trainable — 60 s cooling tails
+n9_anchor_end.json        # drift bracket + end-of-campaign health check

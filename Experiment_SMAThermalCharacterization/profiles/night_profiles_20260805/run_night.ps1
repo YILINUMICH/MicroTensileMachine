@@ -22,7 +22,10 @@ param(
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $root = Split-Path -Parent (Split-Path -Parent $here)
 
-# ── RUN ORDER (see README.md "Run order" for the rationale) ─────────────────
+# ── RUN ORDER ───────────────────────────────────────────────────────────────
+# From run_order.txt, which run_step.py (the sequential runner) reads too — one
+# file so the two runners cannot drift apart. See README.md "Run order" for the
+# rationale:
 #  n0 + n4a   : the ATTENDED head, ~40 min. n4a is the riskiest block (5-11 s
 #               cool -> baseline ratcheting) and it runs while you are still
 #               at the rig; its report lands ~1 min after it finishes.
@@ -31,21 +34,11 @@ $root = Split-Path -Parent (Split-Path -Parent $here)
 #  n3         : lands at ~50 % of wall clock, not 65 % as sorted order gives
 #  second half: the B halves + the two most redundant structured blocks
 #  n5 before n9 for the same reason n8 sits before n3
-$order = @(
-    "n0_anchor_start.json",
-    "n4a_shortcool_test.json",
-    "n1a_shuffle_train.json",
-    "n2a_shuffle_test.json",
-    "n6_repeats.json",
-    "n8_threshold.json",
-    "n3_anchor_mid.json",
-    "n1b_shuffle_train.json",
-    "n2b_shuffle_test.json",
-    "n4b_shortcool_test.json",
-    "n7_ladder.json",
-    "n5_longcool.json",
-    "n9_anchor_end.json"
-)
+$orderFile = Join-Path $here "run_order.txt"
+if (-not (Test-Path $orderFile)) { throw "missing $orderFile" }
+$order = Get-Content $orderFile |
+    ForEach-Object { ($_ -split '#')[0].Trim() } |
+    Where-Object { $_ }
 
 $paths = $order | ForEach-Object {
     $p = Join-Path $here $_

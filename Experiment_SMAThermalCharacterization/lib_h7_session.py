@@ -99,9 +99,22 @@ class H7:
         while time.time() - t0 < probe_s and n < 2000:
             n += len(self.ser.read(65536))
         if n < 2000:
+            # ORDER MATTERS. On Windows a second handle on this CDC port OPENS
+            # FINE and simply receives nothing — the other reader drains the
+            # stream — so "port opened, no bytes" looks exactly like dead
+            # hardware and reads as a rig fault. Cost 20 min on 2026-08-07,
+            # chasing an M4 that was producing perfectly. Check the cheap,
+            # reversible cause first.
             raise RuntimeError(
-                f"{self.port} is not streaming ({n} bytes in {probe_s:.0f}s). "
-                f"Power-cycle USB + EVM and retry.")
+                f"{self.port} opened but is not streaming ({n} bytes in "
+                f"{probe_s:.0f}s).\n"
+                f"  1. Is another reader holding it? pio device monitor, the "
+                f"Arduino IDE monitor, sma_console, another script. The H7 is "
+                f"SINGLE-OWNER: a second handle opens and gets 0 bytes.\n"
+                f"  2. Otherwise power-cycle USB + EVM and retry. If the "
+                f"[STATUS] line then shows rate1=0 rate2=0 prod1=0 prod2=0 "
+                f"with crc_err=0, nothing is entering the ring at all — that "
+                f"is the M4/ADC side, not the link.")
         self._say(f"port live ({n} bytes in probe)")
 
         for c in cal:

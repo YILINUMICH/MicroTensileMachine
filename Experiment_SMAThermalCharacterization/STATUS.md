@@ -8,6 +8,432 @@
 | **Owner** | Yilin |
 | **Quick test (no hardware)** | `python -c "import config, workers, recording_core, sma_console, analyze_sma"` then run the analyzer on a synthetic console session (see README). GUI: `QT_QPA_PLATFORM=offscreen` + `run_gui(..., _build_only=True)`. |
 
+## 2026-08-07 03:46 — third campaign attempt: 15 min, killed by the RIG (twice over). Night closed
+
+The queue launched at 03:31 (NOTE: with the default 30 s gap — `-BetweenS 300`
+was not on the command, so the wedge mitigation below was never actually in
+play) and ended 15 minutes later, correctly:
+
+| profile | outcome |
+|---|---|
+| n0_anchor_start | **1/2** — the 650 mA anchor landed (`sweep_20260807_033117`), then **ADC2 died mid-profile** at the 450 mA condition |
+| n4a | 0 captures — port fully silent on open |
+| n1a | 0 captures — **circuit breaker fired, queue abandoned** |
+
+n0's one capture is questionable beyond the known sense fault: the pulse finder
+sees 10 heat windows where 6 pulses were commanded, with ΔR outliers (−17 %,
+−10.6 %) — the rig was degrading *during* the capture. Anchors are re-run at
+campaign restart anyway; the partial stays filed under the queue manifest.
+
+**The rig now carries two independent faults:**
+1. The sense-lead glitching (σ ≈ 66 mA) — stable, characterized, payload
+   median-recoverable. Livable (see the 03:30 decision below).
+2. **ADC2 dying + total port silence — twice in ~90 min tonight**, against an
+   occasional historical rate. Not livable: no estimator recovers data that was
+   never captured. Likely the same bench disturbance as (1): EVM power/SPI
+   seating is the first suspect.
+
+### The USB wedge, mechanism found (and the heartbeat checks exonerated)
+
+The operator suggested the heartbeat. Checked: `wdt` (HEAT-only) and `hb`
+(armed-only, and disabled all night) both do exactly one thing — `disarm()` —
+and cannot mute TX. But the check NEXT DOOR is the story. `hostUp()` gates
+every stream write on a 250 ms-cached `(bool)Serial`, i.e. mbed's
+terminal-connected flag, maintained by USB callbacks. The chain that fits every
+observation:
+
+1. Every session close abandons a live ~500 Hz stream (there is NO command to
+   pause the src=1/2 sensor stream — checked).
+2. If the stack misses the close's DTR-drop callback (a race → randomness),
+   `hostUp()` keeps answering "host present".
+3. The firmware keeps writing into a dead endpoint until the CDC buffer fills
+   and `Serial.write` BLOCKS FOREVER — the same mbed per-write blocking this
+   firmware fights everywhere else.
+4. The M7 loop is hung inside one write: no samples, no `[STATUS]`, no command
+   replies (RX never read again), immune to DTR toggles and reopens. Only a
+   power cycle recovers. Verified signature at 01:45: total silence including
+   `info`, which bypasses the stream gate.
+
+Consistent with: strikes only after closes; random; identical on two different
+H7 boards; gaps of 6–10 min between sessions survived while ≤2 min gaps
+wedged; and the 08-05 log's two pre-runner occurrences.
+
+**Fix path (firmware, before campaign attempt 4):** make the stream write
+truly non-blocking — `USBCDC::send_nb` if ArduinoCore-mbed exposes it — with
+an RX-freshness (`ping`) gate as belt-and-braces; then a torture test of ~50
+rapid open/close cycles counting wedges before/after. A polling gate alone
+cannot close the race; the write itself must be unable to block.
+
+### Restart checklist (in order, daylight)
+
+1. Reseat EVM ribbon + supply (the ADC2 deaths).
+2. `diagnostics/wiggle_monitor.py` on the sense leads / ground return / INA296A
+   supply (the σ 66 mA fault) — both faults may share one loose ground.
+3. One `corner_probe_reseat` sweep: want 3/3 conditions and ADC2 alive
+   end-to-end. (σ ≈ 25 mA if the wiggle test found the fault; σ ≈ 66 mA is
+   acceptable-by-decision otherwise.)
+4. Firmware wedge fix + torture test, or accept wedge risk and space port
+   opens: `run_night.ps1 -BetweenS 300` — actually passing the flag this time.
+
+## 2026-08-07 03:30 — DECISION: run the campaign THROUGH the fault. The payload is median-recoverable
+
+With the fault pinned to the driver-board/harness side and stable at σ ≈ 66 mA
+across two H7s and four power cycles, the operator decided to collect anyway.
+That decision is backed by a measurement, not hope: **the corruption is
+impulsive (single-sample, 20–30 % of samples), and a median estimator's 50 %
+breakdown point shrugs that off.** Same conditions, healthy 08-05 capture vs
+three faulted 08-07 captures, ΔR per cycle:
+
+| condition | healthy, mean est | faulted, mean est | **faulted, median est** |
+|---|---|---|---|
+| 750 mA × 400 ms | −7.2 ± 0.7 % | −1.7 … −3.3 % (unstable) | **−7.0 … −8.7, ± 0.5** |
+| 950 mA × 300 ms | −8.0 ± 0.4 % | −3.4 ± 0.8 % | **−8.6 ± 0.2** |
+
+`median(V)/median(I)` per window lands on the healthy value with healthy-grade
+scatter in every faulted capture. Mean-based estimates are destroyed (wrong by
+2–4×, sign-flips at low energy) — which is also why `operator_pulse_capture`'s
+in-run ΔR read wrong all night.
+
+**What was changed to let the night run (2026-08-07 03:30):**
+- `abort_on_bad_sense` flipped `true → false` in all 13 night profiles. The
+  conditions, seeds, roles and run order are UNTOUCHED — only the guard no
+  longer kills a profile at its first straddling condition (the glitch
+  population sits right at the guard's 1 % limit, so it fires on a coin flip).
+  The sense WARNING still prints per condition; quality is still recorded.
+- Steps run via `run_step.py next --force` (the ledger's last-sense gate is
+  BAD by design — the override is the documented decision, and the ledger
+  records `--force` runs like any other).
+
+**Debt this creates, to pay before training:**
+1. `analyze_raw.py` window stats use means → its `r_hot`/`r_base`/ΔR columns
+   are WRONG for every capture taken in this state. Patch stage 1 to
+   median-based window estimators + add a per-window glitch-fraction column
+   (quality as a column, per the NO DATA SELECTION rule). Raw CSVs keep every
+   sample, so nothing is lost by collecting first and patching after.
+2. Firmware `R_est` / CC telemetry still average internally — treat `src=7`
+   as approximate for these captures. Achieved current is unaffected (CC
+   tracked 99–101 % all night; the loop's 7 ms tau rides through 1 ms spikes).
+3. The anchors (n0/n3/n9) measure drift on the SAME estimator — fine, as long
+   as the median patch lands before anyone reads them.
+
+## 2026-08-07 02:08 — board swap A/B: the fault SURVIVES a brand-new H7
+
+Old H7 replaced with a new board (new serial, reassigned to COM8; both cores
+flashed fresh from `Firmware_SMAConstantCurrent_PIO`, boot verified clean —
+`rate1/2=prod1/2=512`, `crc_err=0`, `dac_err=0`; note the fresh M7 image also
+publishes `m4_us`, which the old board's stale image never did). Same
+`corner_probe_reseat` sweep on each board, minutes apart:
+
+| | old H7 (`sweep_20260807_015514`) | new H7 (`sweep_20260807_020840`) |
+|---|---|---|
+| σ idle | 69.4 mA | **66.8 mA** |
+| R @200 ms | 3.72 % | 3.57 % |
+| guard abort | 1.30 % > 1 % | 1.28 % > 1 % |
+| actuation | 755 mA, ~1.2 mm | 755 mA, ~1.2 mm |
+
+**The Portenta is exonerated entirely — board, ADC, reference, and its
+USB/ground path** (the one thing the AGND test could not rule out). Combined
+with the disconnect and AGND tests below, the fault can only live in the
+**driver board's analog section and the two sense leads**: INA296A OUT → A1,
+the 10k/10k FB divider → A0, their supply, and the ground return they share.
+The 08-05 16:10–21:05 window now reads as the pre-flight physically disturbing
+that harness, not anything on any H7.
+
+Next: wiggle test with a live glitch-rate monitor (leads, ground return, INA
+supply), and meter the INA296A rail.
+
+## 2026-08-07 01:19 — AGND test: the fault is UPSTREAM of the ADC
+
+`pulse_20260807_011920` was taken with **A0 and A1 jumpered to GND** — the split
+test from the entry below, not a repaired rig. With both ADC inputs held at a
+hard 0 V:
+
+| capture | median I | σ I | max I | sd V |
+|---|---|---|---|---|
+| 08-05 "healthy" baseline | 124.7 mA | 25.0 mA | 241 mA | 0.073 V |
+| 08-07 00:45 faulted, coil attached | 119.7 mA | 63.5 mA | 442 mA | 0.189 V |
+| 08-07 01:11 coil disconnected | −4.6 mA | 62.8 mA | 322 mA | 0.201 V |
+| **08-07 01:19 A0+A1 to GND** | 103.7 mA | **7.0 mA** | **128.3 mA** | **0.048 V** |
+
+**Every glitch disappears when the inputs are grounded.** σ collapses 62.8 → 7.0
+mA and the maximum idle sample lands 3σ off the median instead of +200 mA out.
+
+**So the Portenta's ADC, its reference and its analog supply are all EXONERATED.
+The fault is upstream of the ADC pins** — the INA296A, the 10k/10k FB divider,
+or the two leads and their ground return. Combined with the finding below that
+the ADS1263 is clean and that the glitches survive with the coil disconnected,
+what is left is: the driver board's analog section and the harness between it
+and the Portenta. Independent glitches on two separate channels that share only
+that path point at the shared **ground return** first.
+
+**7.0 mA is the grounded-input noise floor, not an achievable operating figure.**
+It is what the ADC does with no source attached; any real source adds its own
+noise. It does NOT mean the rig can run at 7 mA, and it does not revise the
+25 mA figure of the 08-05 campaign — the correct reading is that the ADC itself
+has ~7 mA of intrinsic noise, so the 25 mA seen on 08-05 was already ~3.5× the
+floor and consistent with this same fault at 1/100 the glitch rate.
+
+Nothing about the coil can be read from this capture: with both inputs grounded,
+the 4.30 Ω "R", the 103.7 mA "current" and the two "pulses" in `pulses.csv` are
+all fixed artifacts of the calibration mapping 0 V. The capture confirms as
+much — current never exceeded 128 mA against a 650 mA command with `u` driven to
+3.16 V, and the laser moved 10 mV, i.e. the coil never actuated.
+
+### Next: which side of the harness
+
+1. **Reconnect A0 and A1 and confirm the glitches return.** The control for the
+   above.
+2. **Then add a solid, short ground strap between the driver board's analog GND
+   and the Portenta GND.** If the glitches go, it is the ground return — the
+   single most likely cause given two independent channels are affected.
+3. If not, ground ONE input at a time (A1 grounded / A0 live, then the reverse).
+   If the still-connected channel keeps glitching on its own, each channel picks
+   up independently and the harness or the board's ground is implicated rather
+   than one component; if the glitching follows one specific lead, that lead or
+   its source (INA296A vs divider) is the culprit.
+
+### The USB-CDC wedge — why steps kept dying on `0 bytes in 2s`, and the fix
+
+Every failed step tonight shares one signature: the port OPENS fine, `force
+pull: drained 0.0 kB`, then 0 bytes — while successful opens drain 47–77 kB
+(that is ~1 s of live stream, i.e. the firmware writing normally). Measured at
+01:45 with the rig untouched: **total CDC silence — no samples, no [STATUS],
+and no reply to `info`, which bypasses the `hostUp()` stream gate entirely.**
+DTR toggles, baud changes, and reopen cycles held 30 s did not revive it; only
+a power cycle does. So this is not the firmware's DTR cache (`HOST_CHECK_MS` is
+250 ms) and not a host-side reader conflict: the mbed USB-CDC TX path wedges
+outright. **The trigger is rapid close→reopen cycles.** Tonight: reopens ≤10 s
+after a close failed 6/6; reopens ≥90 s after succeeded. The 08-05 log carries
+the same signature twice (`0 bytes in 2s` / `drained 0.0 kB`, recovering on a
+later launch) — it pre-dates the step runner, but the runner's probe-then-sweep
+pattern (two opens per step) multiplied the exposure and the sweep child's
+open-fail-close retries rolled the dice faster.
+
+`run_step.py` changes (2026-08-07):
+- **The separate sense probe is now opt-in (`--probe`).** The default path is
+  ONE port open per step — exactly the standalone-sweep flow that never hit
+  this. The gate survives without it: the LAST recorded sense verdict in the
+  ledger blocks a new step, each step's own first capture is graded in as
+  `sense_after` for free, and every night profile carries
+  `abort_on_bad_sense`, live at every condition.
+- Silent-port retries: one retry after **90 s** (6 s retries are pure dice).
+- A sweep mints its folder before opening the port, so each silent attempt
+  leaves an EMPTY `sweep_*` folder (`sweep_20260807_0120*/0137*/0141*` — no
+  pulse fired in any); the runner names them rather than deleting from
+  `data/raw/`.
+
+Meanwhile the 01:40 probe (A0/A1 reconnected) is the **control result for the
+AGND test**: 660 mA achieved, coil actuated, and the glitches returned exactly
+(σ 68.0 mA, R @200 ms 3.84 %). Fault confirmed upstream of the ADC pins, in
+the harness / driver-board analog section.
+
+## 2026-08-07 — the sense fault is NOT the SMA clips. It is the H7 analog front end
+
+The 2026-08-05 fault reproduced exactly on the first sequential step
+(`pulse_20260807_004530`: σ 65.4 mA, R @200 ms 4.00 %, verdict BAD, step
+correctly blocked before any profile ran). Re-analysed with the corrected
+metric, **the mechanical diagnosis in the 2026-08-05 entry is wrong.** Nothing
+is wrong with the wire or the clips.
+
+### What the capture actually shows
+
+| | healthy 08-05 16:07 | tonight 08-07 00:45 |
+|---|---|---|
+| wire R (mean V / mean I) | 4.01 Ω | **3.88 Ω — unchanged** |
+| idle current samples > 200 mA | 42 (0.2 %) | **4232 (21.3 %)** |
+| glitch duration | 1 sample | 1 sample (median), 7 max |
+| interval | 434 ms | **4.7 ms, CV 0.87 — Poisson, not periodic** |
+| V during a current glitch | — | **0.609 V, implying 2.37 Ω** |
+
+The last row is the whole diagnosis. When `sma_i` reads 257 mA, `sma_v` still
+reads 0.54–0.61 V. A real 257 mA through a 4 Ω coil is 1.03 V. **The current is
+not physically happening** — the glitch is in the measurement. A series contact
+in the power loop cannot do this: it would raise R (lowering I) and move V and I
+together. R is unchanged and the two channels glitch *independently* (1.62×
+chance coincidence, so 84 % of current glitches have no voltage glitch at all).
+
+Both `sma_v` and `sma_i` are read by the **H7's internal ADC, and nothing else
+is** — the ADS1263 channels (laser, load) are clean in the same captures, and
+the mechanical trace of this very capture is textbook. Independent single-sample
+glitches on two channels sharing one ADC point at that shared path: the analog
+ground return, AREF, or the analog supply. Not the SMA clips, not the coil.
+
+Firmware is identical across healthy and faulted captures (`n_cycle=4`,
+`aref=3.145`, `vdd=5.067`, 981 vs 940 Hz stream rate), so this is not a build
+difference.
+
+**The healthy captures already carry the same defect at 1/100 the rate** (42
+events per 20 s on 08-05 at 16:07, versus 4232). It is progressive, which is
+why it read as a step change appearing between 16:10 and 21:05.
+
+### Two estimator artifacts that produced the wrong diagnosis
+
+1. **"R climbed +0.3–0.5 Ω with every reseat" is not real.** The check computed
+   `mean(V/I)`, and `E[V/I] ≈ R(1 + σ_I²/I²)` — a channel that only gets NOISIER
+   reports a HIGHER R. At 20 % noise that is +4 %, at 46 % it is +20 %. By
+   `mean(V)/mean(I)` the wire sat at 4.01–4.06 Ω healthy and 3.79–4.00 Ω
+   faulted: **it never moved.** Fixed — `measure()` now blocks the channels and
+   then divides. *(`analyze_raw.py` computes window R the same way; at the
+   healthy 20 % idle noise the bias is ~4 % and roughly common-mode across
+   cells, but it is worth a look before R is used quantitatively.)*
+2. **"corr(V,I) fell 0.815 → 0.572" was measured over the whole record**, so it
+   was dominated by the heat pulses. On the idle window corr is ≈ 0 in healthy
+   AND faulted captures alike (−0.02 vs +0.14) — the noise is incoherent in both,
+   which is itself evidence it is instrumentation rather than the wire.
+
+Of the three pillars of the 08-05 write-up, only the σ rise survives, and it is
+2.6× rather than 3.3×.
+
+### Next session — do NOT reseat the SMA clips
+
+Four reseats on 08-05 could not have helped, and the R rise that justified each
+one was an artifact.
+
+**CONFIRMED the same night by an open-circuit probe.** `pulse_20260807_010155`,
+run with the **SMA disconnected**:
+
+| | median I | sigma I | max I | glitched |
+|---|---|---|---|---|
+| healthy 08-05, coil attached | 124.7 mA | 25.0 mA | 241 mA | 0.7 % |
+| 08-07 00:45, coil attached | 119.7 mA | 63.5 mA | 442 mA | 21.0 % |
+| **08-07 01:01, DISCONNECTED** | **−4.7 mA** | **61.0 mA** | **+320.8 mA** | **28.4 %** |
+
+The current channel reports excursions to **+320 mA with no circuit attached**,
+and removing the coil changed the noise by 4 % (63.5 → 61.0 mA). The wire, the
+clips and every contact in the SMA loop are exonerated outright. `sma_v` behaves
+the same (sd 0.203 V disconnected vs 0.189 V attached). Reproduced immediately
+in `pulse_20260807_011108` (σ 60.7 mA against 60.5).
+
+**And it is confined to the H7's own ADC.** The ADS1263 channels in the SAME
+captures are untouched — laser and load show a **0.00 % glitch rate** in all
+three (healthy, faulted-attached, faulted-disconnected), and are quieter now
+than on 08-05. So this is not the bench ground, not the EVM, not the supply
+everything shares: it is specifically the Portenta's internal ADC path, which
+reads `FB_PIN`/`A0` (SMA_P via the 10k/10k divider) and `ISENSE_PIN`/`A1`
+(INA296A OUT) and nothing else. The remaining question is only *where* in that
+path:
+
+1. **Lift A0 and A1 off the driver board and jumper them to the Portenta's GND,
+   then re-probe.** Both inputs then read a hard 0 V. Glitches that SURVIVE are
+   inside the Portenta (its ADC, AREF, the analog supply); glitches that VANISH
+   are upstream — the INA296A, the 10k/10k divider, or the two leads. That is
+   the next split, and as cheap as the disconnect test was.
+2. Then, in order: the ground return between the SMA driver board and the
+   Portenta analog ground, AREF and its decoupling, the INA296A supply and its
+   lead to A1, the FB divider lead. Wiggle each while streaming — the glitch
+   rate should respond to the culprit. Independent glitches on two separate
+   channels sharing one ADC is a shared-ground / reference signature.
+3. Also worth trying: a different USB port. The ADS1263 staying clean argues
+   against a bench-wide ground problem, but the Portenta's own analog ground
+   rides its USB ground.
+4. What changed physically around 2026-08-05 16:10–21:05 is still the best lead;
+   it is now a question about the two analog inputs and their supply, not the
+   clips.
+
+`operator_sense_check.py` handles the disconnect test directly: below a 30 mA
+median it reports R as `n/a` and judges on sigma alone. Without that guard the
+`i > 0.02` divide guard kept only the GLITCH samples and reported a confident
+**5.51 ohm** for an open circuit.
+
+**Data taken in this state is not worthless, but the campaign's payload is.**
+Laser and load ride a different ADC and are unaffected — stroke and force would
+be fine. Self-sensing R is exactly what the 21 % corrupted current samples
+destroy, and that is what the campaign exists to measure. Keep the gate closed.
+
+## 2026-08-06 — the campaign runs SEQUENTIALLY; `operator_sense_check` rewritten
+
+The 2026-08-05 campaign is now collected **one profile per invocation** rather
+than as one unattended 9.2 h queue. Building the gate that makes that worthwhile
+turned up two measurement bugs in `operator_sense_check.py`, so the numbers in
+the *2026-08-05 night* entry below are restated here — **its conclusion stands,
+its headline number was not measuring what it claimed.**
+
+### `profiles/night_profiles_20260805/run_step.py` (new)
+
+```
+python profiles\night_profiles_20260805\run_step.py            # board — runs nothing
+python profiles\night_profiles_20260805\run_step.py next       # run the next step
+python profiles\night_profiles_20260805\run_step.py 7|n3       # a specific step
+```
+
+- **The order is unchanged and now lives in `run_order.txt`**, read by
+  `run_night.ps1` too, so the two runners cannot drift. Both refuse to start
+  unless every `n*.json` on disk is listed exactly once.
+- **Every step is gated on the sense chain before it starts**: a fixed
+  650 mA × 300 ms probe capture, graded by `operator_sense_check.verdict()`, and
+  a non-HEALTHY verdict stops the step (`--force` overrides). This is the check
+  the night did not have, and the probe being *identical at every step* makes
+  its σ/R series a degradation trend across the campaign — R climbing step over
+  step is the clip-contact signature.
+- **Progress is derived from `steps/ledger.json`, not stored as a cursor.** One
+  appended record per attempt (sweep folder, captures vs conditions, both sense
+  verdicts, times). A step that did not finish `ok` is simply offered again;
+  nothing has to be un-recorded by hand. The ledger is also the `runs` list a
+  `CAMPAIGNS` entry needs.
+- Captures are filed into `data/raw/campaigns/<key>/` (key discovered, not
+  hardcoded, so it cannot go stale if collection starts a day late). The queue
+  passes no `--campaign` and still lands in the inbox.
+- **A bare invocation never drives the rig** — it prints the board. `next` is
+  the word that fires pulses.
+
+**What sequential mode changes about the data:** nothing inside a capture. A
+profile is self-contained, so it runs byte-identical either way. What changes is
+between profiles — the anchors `n0/n3/n9` bracket the whole sequence rather than
+one night, so they measure drift over days, with power cycles and re-clipping
+inside the bracket. The ledger timestamps are what keep that interpretable.
+
+### The sense check was reading a heat pulse, not the noise floor
+
+`operator_sense_check.py` measured "the first 30 s, the cold-start settle,
+before any pulse". **The settle is not in the capture** — both
+`operator_current_sweep.py` and `operator_pulse_capture.py` discard the settle
+capture and save `lead(2 s) + run`. So the window was 2 s of idle plus a heat
+pulse and its cool tail, and pulse amplitude rode straight into σ:
+
+| same healthy sweep, one hour apart | old σ |
+|---|---|
+| `c00_level_250mA_h100ms` | 26.0 mA |
+| `c20_level_650mA_h300ms` | 57.5 mA |
+
+One rig, 2.2× apart, straddling the script's own 35 mA HEALTHY limit — **any
+campaign probed at ≥ 450 mA would have been graded MARGINAL or BAD while
+perfectly healthy.** Second bug: `hw_us` is a 32-bit µs counter that wraps every
+71.6 min, and the script sorted the raw counter (`analyze_raw.py` has unwrapped
+per src since 2026-07-31). On a capture straddling a wrap, "the first 30 s" was
+an arbitrary mid-capture span — `c20` above is exactly such a capture.
+
+**Rewritten to measure the idle samples of the whole capture**, unwrapped, with
+every pulse and 3 s of its thermal recovery excised (the recovery is signal: R
+falls ~3 % during a fire). ~180 000 samples over ~186 s instead of ~27 000 over
+one pulse. The result is level-independent, which is what a threshold needs:
+
+| | σ (mA) | R (Ω) | R @200 ms (%) |
+|---|---|---|---|
+| healthy 08-05, 6 captures, 200–950 mA × 100–500 ms | 24.9–25.1 | 4.18–4.24 | 1.80–2.05 |
+| 08-05 night fault, 6 captures, 2 conditions | 68.3–70.5 | 4.37–4.69 | 3.07–3.74 |
+
+σ varies by 0.2 mA across a 4.75× range of commanded current, so limits moved to
+`SIGMA_OK/BAD 30/40` and `RPCT_OK/BAD 2.3/2.8`. Raising the excision from 3 s to
+10 s moves σ by 0.1 mA — the check that no pulse tail is left in the window.
+
+**The 08-05 diagnosis survives, with corrected magnitudes.** The fault was real
+and about the size reported: **2.8× the noise floor** (not 3.3×, and not the
+1.4× a naive level-matched comparison suggests — that estimate clips the very
+distribution it is measuring). R rose 4.20 → 4.37–4.69 Ω and R @200 ms 1.9 →
+3.2–3.7 %, both level-independent and both moved. What was wrong was the number
+it was read off: it compared a 250 mA healthy capture against a 650 mA night
+one, so it could not have distinguished a fault from a change of probe current.
+
+### Also fixed
+
+- **Pre-flight step 6's command could not work**: `--i-ma` is not a flag (it is
+  `--ma`), and a pulse folder holds `h7.csv`, not `cNN_level_*.csv`, so a bare
+  `operator_sense_check.py` skipped it silently and graded a *stale sweep*. The
+  check now searches both capture shapes and recurses into `campaigns/`, which
+  the old one-level glob could not see. The README now names the file explicitly.
+- `verdict()` / `explain()` are importable, so the runner gates on exactly the
+  thresholds the script prints.
+
 ## 2026-08-06 — `data/raw/` grouped by campaign; generated capture INDEX
 
 20 `sweep_*` folders named by timestamp and nothing else, 3.8 GB, and no way to
@@ -400,6 +826,13 @@ first pulse.**
 
 ### The measurement
 
+> **Restated 2026-08-06 — see the entry above.** The σ column below is not a
+> noise floor: the window it was read from contains a heat pulse, so it also
+> tracks the commanded current, and the healthy rows here were taken at 250 mA
+> against the night's 650 mA. The fault is real and the conclusions in this
+> entry stand; on the corrected metric it is 2.8× (69 vs 25 mA), R 4.20 →
+> 4.37–4.69 Ω, R @200 ms 1.9 → 3.2–3.7 %.
+
 Quiet-window numbers (cold-start settle, wire at the 0.5 V idle bias), from
 `operator_sense_check.py`:
 
@@ -482,8 +915,12 @@ faulted at 650 mA), so the verdict uses σ and R @200 ms alone.
    clip-to-wire contact and the lead run to the driver. Four blind
    power-cycle/reseat attempts did not find it and R rose each time.
 2. **Verify with `operator_sense_check.py`, not an 8-minute anchor** — target
-   σ ≈ 26 mA and R @200 ms ≤ 2 %.
-3. Then run the campaign unchanged: `.\profiles\night_profiles_20260805\run_night.ps1`.
+   σ ≈ 25 mA and R @200 ms ≤ 2 % *(2026-08-06: on the rewritten metric; the
+   verdict is now built into the runner, so this is the check you get for free
+   before each step)*.
+3. Then run the campaign unchanged, **sequentially**:
+   `python profiles\night_profiles_20260805\run_step.py next` — the profiles and
+   the order are the same; see the 2026-08-06 entry.
 
 ### Also settled tonight (survives the deferral)
 
