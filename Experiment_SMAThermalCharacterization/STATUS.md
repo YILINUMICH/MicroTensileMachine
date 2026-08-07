@@ -8,6 +8,40 @@
 | **Owner** | Yilin |
 | **Quick test (no hardware)** | `python -c "import config, workers, recording_core, sma_console, analyze_sma"` then run the analyzer on a synthetic console session (see README). GUI: `QT_QPA_PLATFORM=offscreen` + `run_gui(..., _build_only=True)`. |
 
+## 2026-08-07 — USB wedge: fix path from the 03:46 entry EXECUTED (firmware built, awaiting bench)
+
+The wedge fix proposed below is implemented on branch **`fix/usb-cdc-wedge`**,
+with the mechanism now confirmed by reading the installed ArduinoCore-mbed
+source rather than inferred: the blocking chain is
+`Serial.write → USBSerial::write → per-64-byte blocking USBCDC::send()`, and
+`send_nb()` exists and is reachable — details, artifacts, bench sequence and
+rollback are in **`Firmware_SMAConstantCurrent_PIO/STATUS.md` (2026-08-07
+entry)**. Summary:
+
+- `[env:portenta_m7_nbtx]` — the fix: ALL M7 serial output through a
+  time-bounded `send_nb` sender; the loop (and therefore `wdt`/`hb`/disarm)
+  can no longer hang on a dead CDC endpoint. Wire format unchanged.
+- `[env:portenta_m7_wedgeled]` — baseline stock-TX build + a loop-liveness
+  LED, so the wedge remains reproducible and the LED discriminates
+  loop-hung vs endpoint-dead at a glance.
+- `Firmware_SMAConstantCurrent_PIO/tools/torture_open_close.py` — the
+  ~rapid-open/close torture harness (the ≤10 s reopen pattern that failed
+  6/6 on 08-07), the before/after yardstick.
+- The default `portenta_m7` env rebuilds **byte-identical** (sha256 checked)
+  — flashing it is the rollback at any point.
+
+The three suspects from the fault hunt, settled by code reading: the M4→M7
+ring cannot hang (non-blocking by construction, overflow = counted drops);
+the always-on stream is the *exposure* (no pause command exists — every close
+abandons a live stream into the CDC endpoint) but not the mechanism; the
+`wdt`/`hb` heartbeats only `disarm()` and are exonerated — the load-bearing
+check was `hostUp()`'s stale-able DTR cache next door, which the bounded
+sender now makes non-load-bearing.
+
+**Step 4 of the restart checklist below is therefore ready to run** — bench
+sequence in the firmware STATUS entry (wedgeled A/B → nbtx torture + soak →
+one full sweep with `tx_drop=0` before the campaign trusts it).
+
 ## 2026-08-07 03:46 — third campaign attempt: 15 min, killed by the RIG (twice over). Night closed
 
 The queue launched at 03:31 (NOTE: with the default 30 s gap — `-BetweenS 300`
