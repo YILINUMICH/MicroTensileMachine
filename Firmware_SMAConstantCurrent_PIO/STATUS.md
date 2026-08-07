@@ -8,6 +8,33 @@
 | **Owner** | Yilin |
 | **Quick test** | `pio run -e portenta_m7 -t upload`, power-cycle (USB + EVM supply), `pio device monitor` @ 115200. Expect the `[M7] Firmware_SMAConstantCurrent_PIO` banner and `[SMA] CC loop: 1000 Hz, tau=7.0 ms`. Then `arm` → `cc 200 2000` → watch `[SMA] [CC] start` and the `src=6/7` rows appear in the stream. |
 
+## 2026-08-07 session close — UDP migration adopted; board left on `portenta_m7_nbtx_udp` (UDP dormant, UNTESTED)
+
+Decision at session end: the stream moves to UDP per
+`docs/UDP_stream_migration_plan.md` — the wedge self-heal (below) makes
+CDC survivable, but UDP removes the high-rate stream from the fragile
+path entirely. Work continues on branch **`feat/udp-stream`**.
+
+State as left: `[env:portenta_m7_nbtx_udp]` (full nbtx fix stack +
+`H7_TRANSPORT_UDP=1`) is **built and flashed but the link is untested** —
+no `netcfg` has ever been sent, so the stream still rides USB-CDC and the
+board behaves exactly like nbtx until the UDP bring-up. Link readiness
+was verified host-side: the PC dongle (`Ethernet 5`, Realtek USB 2.5GbE)
+is Up at 10 Mbps on APIPA `169.254.245.100/16` — the same link-local
+segment as the firmware's static `169.254.245.50/16`, so the plan's
+zero-host-config path applies. First moves for the UDP branch:
+1. Boot-banner `[NET]` check + ping `169.254.245.50`, then
+   `netcfg 169.254.245.100 7777` and count datagrams/lines on UDP :7777.
+2. Host ingest: `UdpReader` exists in `Calibrate_LaserHead/portenta_reader.py`;
+   the thermal module's `lib_h7_session.H7.capture()` path is serial-only.
+3. **Rework the host open-gate**: `H7.open()` aborts on <2000 serial bytes
+   in 2 s — with the stream on UDP that gate must move to the UDP socket.
+4. Self-heal refinement for UDP mode: with the stream off CDC, a
+   closed-port idle window looks "dead" to the byte-count trigger; after a
+   real session (`usb_had_link` set) the second idle window causes one
+   spurious self-reset. Harmless but ugly — gate the dead-window verdict
+   on UDP-armed state or count UDP sends as link evidence.
+
 ## 2026-08-07 evening — WEDGE SOLVED: it is a HOST-side driver fault, and the firmware now self-heals it (VERIFIED twice on the bench)
 
 **Supersedes the diagnosis in the entry below.** The blocking-write mechanism

@@ -1,6 +1,14 @@
 # Plan — move the H7 sensor/SMA stream to UDP
 
-**Status:** Proposed (2026-07-15). **Owner:** Yilin.
+**Status:** ADOPTED 2026-08-07 (branch `feat/udp-stream`); was Proposed 2026-07-15. **Owner:** Yilin.
+**2026-08-07 update:** the USB wedge investigation (see
+`Firmware_SMAConstantCurrent_PIO/STATUS.md`) proved the CDC path can wedge
+HOST-side (usbser.sys) — the firmware now self-heals that, but this plan is
+the structural fix and is now in motion. `[env:portenta_m7_nbtx_udp]`
+(wedge-fix stack + UDP transport) is built and flashed, link readiness
+verified (PC `Ethernet 5` Up at 10 Mbps, APIPA 169.254.245.100/16 matching
+the H7's static 169.254.245.50/16 — the zero-host-config variant of §3).
+First UDP datagram not yet observed; bring-up steps in the firmware STATUS.
 **Scope:** `Firmware_SMASensorHub_PIO` (M7) + host `Experiment_SMAThermalCharacterization` / `Calibrate_LaserHead/portenta_reader.py`.
 
 ## 1. Why
