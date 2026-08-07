@@ -2064,6 +2064,23 @@ static void dispatch(String in) {
         Serial.println(wdt_timeout_ms ? F("") : F(" (watchdog DISABLED)"));
         return;
     }
+    if (low == "adcreset") {
+        // Recover a dead ADS1263 WITHOUT a power cycle. The chip can fail
+        // mid-run (ADC2 first, then ADC1): prod2 drops to 0 and crc_err storms
+        // at the poll rate, and because adc.begin() only ever ran from M4's
+        // setup() the sole recovery was physically power-cycling the EVM.
+        // Seen three times on 2026-08-07 alone.
+        //
+        // M4 owns the chip, so this posts a command word into the shared ring
+        // and M4 re-runs the bring-up. Fire-and-forget by nature — the reply
+        // ([M4] ADC RESET OK/FAILED with the device ID) comes back through the
+        // RPC passthrough a moment later, NOT from this handler.
+        SAMPLE_RING->cmd = RING_CMD_ADC_RESET;
+        smaTag(); Serial.println(F("[ADC] reset posted to M4 — watch for "
+                                   "'[M4] ADC RESET OK, ID=0x2x' (~0.5 s). "
+                                   "If it says FAILED, power-cycle the EVM."));
+        return;
+    }
     if (low == "reset" || low == "reboot") {
         digitalWrite(MOSFET_PIN, LOW);
         setDACraw(0);
@@ -2999,6 +3016,45 @@ ADS1263_Driver adc;
     RPC.print("[M4 cp "); RPC.print(n); RPC.print("] "); RPC.println(msg); \
 } while (0)
 
+// ── ADS1263 bring-up — boot AND runtime recovery ──────────────────────────
+// Factored out of setup() so RING_CMD_ADC_RESET can re-run the EXACT same
+// sequence without a power cycle. Everything needed to take the chip from cold
+// (or wedged) to streaming lives here and nowhere else, so the boot path and
+// the recovery path can never drift apart.
+//
+// adc.begin() pulses hardware RESET# (PC_7 / silkscreen PWM2) low 10 ms and
+// then also issues the SPI reset command 0x06, so this is a genuine chip-level
+// reset, not just a re-configure. That matters: the failure being recovered
+// leaves the chip's registers in an unknown state producing checksum garbage.
+static bool adcBringUp() {
+    if (!adc.begin(ADS1263_POWER_CFG)) return false;
+
+#if ENABLE_ADC1
+    adc.configureADC1(
+        /*inpmux     =*/ 0x45,                       // AIN4(+) / AIN5(-) — laser
+        /*refmux     =*/ ADS1263_REFMUX_EXT_AIN01,   // 0x09 — REF7050 on AIN0/AIN1
+        /*vref_V     =*/ 5.0f,
+        /*rate       =*/ ADS1263_400SPS,
+        /*pga_bypass =*/ false                        // PGA in path, gain=1 (set true if PGAL_ALM)
+    );
+    adc.startADC1();
+#endif
+
+#if ENABLE_ADC2
+    adc.configureADC2(
+        /*adc2mux =*/ 0x23,                           // AIN2(+) / AIN3(-) — load cell
+        /*ref2    =*/ ADS1263_ADC2_REF_AIN01,         // external REF7050 on AIN0/AIN1
+        /*vref_V  =*/ 5.0f,
+        /*rate    =*/ ADS1263_ADC2_400SPS,
+        /*gain    =*/ ADS1263_ADC2_GAIN_1
+    );
+    adc.startADC2();
+#endif
+
+    delay(100);
+    return true;
+}
+
 void setup() {
     RPC.begin();
     delay(500);
@@ -3023,9 +3079,9 @@ void setup() {
 
     // CS/RESET/DRDY pin modes, their idle levels, and SPI.begin() are all
     // owned by adc.begin() (ADS1263_Driver) — don't duplicate them here.
-    CP(7, "calling adc.begin()");
-    bool ok = adc.begin(ADS1263_POWER_CFG);
-    CP(8, ok ? "adc.begin returned TRUE" : "adc.begin returned FALSE");
+    CP(7, "calling adcBringUp()");
+    bool ok = adcBringUp();
+    CP(8, ok ? "adcBringUp returned TRUE" : "adcBringUp returned FALSE");
 
     if (!ok) {
         RPC.println("[M4] FATAL: ADS1263 init failed");
@@ -3034,32 +3090,9 @@ void setup() {
 
     RPC.print("[M4] ADC ready, ID=0x");
     RPC.println(adc.getDeviceID(), HEX);
+    CP(9, "ADC1 on AIN4/AIN5 (laser), REF7050 on AIN0/AIN1, PGA in path gain=1");
+    CP(10, "ADC2 on AIN2/AIN3 (load), REF7050 shared with ADC1, 400 SPS gain=1");
 
-#if ENABLE_ADC1
-    adc.configureADC1(
-        /*inpmux     =*/ 0x45,                       // AIN4(+) / AIN5(-) — laser
-        /*refmux     =*/ ADS1263_REFMUX_EXT_AIN01,   // 0x09 — REF7050 on AIN0/AIN1
-        /*vref_V     =*/ 5.0f,
-        /*rate       =*/ ADS1263_400SPS,
-        /*pga_bypass =*/ false                        // PGA in path, gain=1 (set true if PGAL_ALM)
-    );
-    adc.startADC1();
-    CP(9, "ADC1 started on AIN4/AIN5 (laser), REF7050 on AIN0/AIN1, PGA in path gain=1");
-#endif
-
-#if ENABLE_ADC2
-    adc.configureADC2(
-        /*adc2mux =*/ 0x23,                           // AIN2(+) / AIN3(-) — load cell
-        /*ref2    =*/ ADS1263_ADC2_REF_AIN01,         // external REF7050 on AIN0/AIN1
-        /*vref_V  =*/ 5.0f,
-        /*rate    =*/ ADS1263_ADC2_400SPS,
-        /*gain    =*/ ADS1263_ADC2_GAIN_1
-    );
-    adc.startADC2();
-    CP(10, "ADC2 started on AIN2/AIN3 (load), REF7050 shared with ADC1, 400 SPS gain=1");
-#endif
-
-    delay(100);
     adc.printConfig();
 
     // ── Raw ADC register dump (bench diagnostic, 2026-06-26) ──────────────
@@ -3092,6 +3125,31 @@ void setup() {
 }
 
 void loop() {
+    // ── M7 → M4 command word ──────────────────────────────────────────────
+    // The one exception to "M4 is a pure producer". M4 owns the ADS1263 but
+    // only M7 can hear the operator, so a runtime ADC recovery has to arrive
+    // this way. Read-and-clear: M7 posts, M4 consumes exactly once. Checked
+    // first so a wedged ADC is recovered before the poll blocks read attempts
+    // against it, and cheap enough to run every pass (one SRAM4 word).
+    if (SAMPLE_RING->cmd != RING_CMD_NONE) {
+        const uint32_t c = SAMPLE_RING->cmd;
+        SAMPLE_RING->cmd = RING_CMD_NONE;   // clear FIRST — never re-run on fault
+        __DMB();
+        if (c == RING_CMD_ADC_RESET) {
+            RPC.println("[M4] ADC RESET requested — re-running bring-up");
+            const bool ok = adcBringUp();
+            // Zero the error counters: they describe the DEAD chip, and leaving
+            // them would make a successful recovery look like a live fault.
+            // dropped/seq are NOT touched — those describe the ring, which is
+            // still valid, and seq continuity is what the host counts loss on.
+            SAMPLE_RING->crc_err = 0;
+            SAMPLE_RING->overrun = 0;
+            RPC.print("[M4] ADC RESET ");
+            RPC.print(ok ? "OK, ID=0x" : "FAILED, ID=0x");
+            RPC.println(adc.getDeviceID(), HEX);
+        }
+    }
+
     // ── M4 = PURE SENSOR PRODUCER ─────────────────────────────────────────
     // M4 reads the ADS1263 and ring_pushes — nothing else. No housekeeping
     // writes into the shared ring header (clock/status are derived on M7), so

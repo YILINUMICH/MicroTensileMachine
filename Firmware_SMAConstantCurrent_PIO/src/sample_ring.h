@@ -133,6 +133,19 @@ static_assert(sizeof(AdcSample) == 32, "AdcSample must be 32 bytes (one M7 cache
 static const uint32_t RING_CAPACITY = 256;
 static const uint32_t RING_MASK     = RING_CAPACITY - 1;
 
+// ── M7 → M4 commands (SampleRing::cmd) ────────────────────────────────────
+// M7 writes a command word; M4 reads it in its poll loop and clears it. Kept
+// deliberately tiny — this is not a general RPC, it exists because M4 owns the
+// ADS1263 and only M7 can hear the operator.
+//
+// RING_CMD_ADC_RESET re-runs the full ADS1263 bring-up (hardware RESET# pulse
+// + SPI reset + reconfigure + restart both ADCs). It exists because the chip
+// can die mid-run — ADC2 first, then ADC1 — leaving prod2=0 with a crc_err
+// storm, and until now the ONLY recovery was a physical power cycle because
+// adc.begin() ran solely from setup(). Observed three times on 2026-08-07.
+static const uint32_t RING_CMD_NONE      = 0;
+static const uint32_t RING_CMD_ADC_RESET = 1;
+
 struct SampleRing {
     // Producer-only fields (M4 writes, M7 reads-only)
     volatile uint32_t write_idx;          // M4 increments after slot write
@@ -150,6 +163,10 @@ struct SampleRing {
 
     // Consumer-only fields (M7 writes, M4 reads-only)
     volatile uint32_t read_idx;           // M7 increments after slot consume
+    volatile uint32_t cmd;                // M7 posts, M4 reads-and-CLEARS. 0 = idle.
+                                          //   The only M7→M4 control path: RPC is
+                                          //   boot-only and M4 never reads it.
+                                          //   See RING_CMD_* below.
 
     // samples[] is 32-byte (cache-line) aligned so slot N sits at a line
     // boundary and never straddles. The compiler inserts padding here to push
@@ -162,6 +179,19 @@ struct SampleRing {
 // 8 192 B. Total ≈ 8 288 B ≈ 8 KB.
 static_assert(sizeof(SampleRing) <= 32768,
               "SampleRing must fit in SRAM4");
+
+// samples[] MUST stay at offset 96. sample_ring.h is shared BY COPY across
+// Firmware_SMAConstantCurrent_PIO / _SMARateTest_PIO / _SMASensorHub_PIO /
+// Firmware_stable, and images built from different copies may run on the two
+// cores of the same board. Header fields added in one copy are safe ONLY while
+// the padding to the 32-byte-aligned samples[] absorbs them: slot offsets then
+// match across copies, and an image that predates a field simply never reads
+// it (M7 zeroes the whole ring before booting M4, so it reads 0, not garbage).
+// Adding a field that pushes samples[] past 96 breaks that and every copy must
+// then be updated in lockstep.
+static_assert(sizeof(SampleRing) == 96 + 32 * RING_CAPACITY,
+              "samples[] moved off offset 96 — the ring header outgrew its "
+              "padding; update every sample_ring.h copy in lockstep");
 
 // ── Ring base address — ACCEPTED PLACEMENT (2026-06-29) ───────────────────
 // SRAM4 is 0x38000000–0x3800FFFF (64 KB). The linker reserves ALL of it for

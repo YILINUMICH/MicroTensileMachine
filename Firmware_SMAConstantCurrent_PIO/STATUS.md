@@ -8,6 +8,43 @@
 | **Owner** | Yilin |
 | **Quick test** | `pio run -e portenta_m7 -t upload`, power-cycle (USB + EVM supply), `pio device monitor` @ 115200. Expect the `[M7] Firmware_SMAConstantCurrent_PIO` banner and `[SMA] CC loop: 1000 Hz, tau=7.0 ms`. Then `arm` → `cc 200 2000` → watch `[SMA] [CC] start` and the `src=6/7` rows appear in the stream. |
 
+## 2026-08-07 — `adcreset`: recover a dead ADS1263 without a power cycle (mechanism VERIFIED, recovery TO-TEST)
+
+ADC2 died three times on 2026-08-07 (`prod2=0`, `crc_err` storming at the poll
+rate, `[ADC2] checksum mismatch`). Until now the only fix was physically
+power-cycling the EVM, because `adc.begin()` ran solely from M4's `setup()`.
+
+M4 owns the chip but only M7 hears the operator, so this adds the first
+**M7 → M4 control path**: a `cmd` word in the shared ring header
+(`sample_ring.h`), posted by M7 and read-and-cleared by M4 at the top of its
+loop. `adcreset` on the serial console posts `RING_CMD_ADC_RESET`; M4 re-runs
+the bring-up — now factored into `adcBringUp()` so the boot path and the
+recovery path are literally the same code and cannot drift. That pulses
+hardware RESET# (PC_7 / silkscreen PWM2) **and** issues SPI reset `0x06`, so it
+is a real chip-level reset, not a re-configure — which matters, because the
+failure leaves the registers in an unknown state. `crc_err`/`overrun` are
+zeroed on success (they describe the dead chip); `dropped` and `seq` are NOT
+touched, since the ring is still valid and the host counts loss on `seq`.
+
+**Ring-header safety.** `cmd` lands in the padding before the 32-byte-aligned
+`samples[]`, so slot offsets do not move and this copy stays layout-compatible
+with the three sibling `sample_ring.h` copies. A new `static_assert` pins
+`sizeof(SampleRing) == 96 + 32*RING_CAPACITY` so the next field that would push
+`samples[]` past offset 96 fails the build instead of silently corrupting a
+mixed-image board. **Both cores must be flashed** for `adcreset` to work — an
+old M4 ignores the word and the command silently does nothing.
+
+⚠ **What is and is not proven.** Verified end-to-end on the bench: command →
+ring word → M4 → bring-up → `ID=0x23` → both ADCs reconfigured and producing
+512/s with `crc_err=0`, run straight after a DFU upload with no power cycle.
+But the ADC was **already healthy** when tested, so this proves the mechanism
+runs and does not disturb a working chip — **not** that it revives a dead one.
+That waits for the next spontaneous ADC2 failure. If it does work there, the
+"power-cycle after every upload" gotcha may also become unnecessary.
+
+TODO: propagate `cmd` + the assert to the other three `sample_ring.h` copies
+once the recovery case is proven here.
+
 ## 2026-08-07 later — UDP BRING-UP DONE: Steps 1+2 pass, transport SPLIT, 0.000% loss (VERIFIED on the bench)
 
 Supersedes the "UDP dormant, UNTESTED" entry below. `netcfg` was sent for the
