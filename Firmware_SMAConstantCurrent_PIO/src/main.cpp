@@ -2708,9 +2708,19 @@ void loop() {
             // corrupted stack hangs/crashes in here, the IWDG resets the
             // chip — same recovery, one level harder.
             usb_heal_n++;
-            PluggableUSBD().disconnect();   // detach D+ (host sees unplug)
-            delay(100);
-            PluggableUSBD().connect();      // re-attach → full re-enumeration
+            // Detach D+ LONG enough for the host to register the unplug and
+            // tear down its driver instance. Bench 2026-08-07 16:06: the wedge
+            // is HOST-side (usbser.sys instance wedges; a manual driver
+            // disable/enable revived the port with the board untouched), and
+            // six heals with a 100 ms detach were never even seen by Windows
+            // (zero open failures while polling through them). The heal must
+            // look like a real unplug — that is the same state rebuild a
+            // manual power cycle or driver restart performs. The loop stalls
+            // for the detach, which is fine: the link is provably dead and
+            // the IWDG (4 s) still bounds this block.
+            PluggableUSBD().disconnect();
+            delay(1500);
+            PluggableUSBD().connect();
             usb_last_alive_ms = now_ms;     // restart the window
         }
     }
