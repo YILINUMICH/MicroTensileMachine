@@ -8,6 +8,53 @@
 | **Owner** | Yilin |
 | **Quick test (no hardware)** | `python -c "import config, workers, recording_core, sma_console, analyze_sma"` then run the analyzer on a synthetic console session (see README). GUI: `QT_QPA_PLATFORM=offscreen` + `run_gui(..., _build_only=True)`. |
 
+## 2026-08-07 — sweep/pulse path CUT OVER to the UDP sample transport (console recorder NOT)
+
+`lib_h7_session.H7` now defaults to **`transport="udp"`**: samples arrive as UDP
+datagrams, while commands, `[STATUS]` and all other text stay on the serial
+port. Full write-up in `docs/UDP_stream_migration_plan.md` and
+`Firmware_SMAConstantCurrent_PIO/STATUS.md`. Requires the M7 image built with
+`-D H7_TRANSPORT_UDP` (env `portenta_m7_nbtx_udp`), flashed on the rig.
+
+**Why:** USB-CDC has flow control, so a slow host used to block the M7's
+`Serial.write`, delay `serviceSma()` and stretch a 3 s cool to 7 s — real
+actuation distortion, not a plot artifact. UDP is fire-and-forget, so the
+control loop can no longer be stalled by the GUI, the camera or the plot.
+Measured: **0.000 % loss**, no `hw_us` gaps, `loop_hz` 12.8–14.5 k.
+
+**What changed here**
+- `H7(...)` with no `transport=` follows `DEFAULT_TRANSPORT`, so all five call
+  sites moved without edits. Override order: kwarg → `H7_TRANSPORT` /
+  `H7_PC_IP` / `H7_UDP_PORT` env vars. On another host, or with the Ethernet
+  link unplugged, `set H7_TRANSPORT=usb` reverts everything with no code change.
+- `operator_current_sweep.py` / `operator_pulse_capture.py`: `--transport`,
+  `--pc-ip`.
+- `H7.open()`'s old gate (2000 serial bytes in 2 s) is USB-only now — with the
+  stream on UDP the port carries ~400 B/s of text and that gate rejects a
+  HEALTHY board (seen: 976 B). In UDP mode the gate is a `[STATUS]` frame,
+  which arrives at 1 Hz under both transports and carries `udp_on`.
+- `capture()` drains socket + serial in one loop; per-src `seq` gaps become
+  `Capture.lost` / `loss_pct`, and `save_capture()` writes them into
+  `meta.json`. Loss is detected, never retransmitted (plan §7).
+- Mid-capture `udp_on=0` (a firmware self-heal can clear it) is caught and
+  re-armed; counted as `Capture.reverts`.
+
+**Rollback is verified, not just documented:** flashing `portenta_m7_nbtx`
+(no UDP) with the host still defaulting to udp produced a loud warning and an
+automatic fall back to serial (4199 samples at 525/s per src). The fallback is
+narrow ON PURPOSE — it fires only when UDP is impossible on the running image,
+never when the board says `udp_on=1` and datagrams are not arriving. That stays
+a hard error, because silently restoring the flow-controlled path would hand
+back the stalls the migration removes while looking like success.
+
+⚠ **The console recorder is still SERIAL-ONLY.** `lib_workers.H7Worker` +
+`lib_config.H7Config` (used by `operator_console.py` through
+`lib_recording_core.py`) is a separate threaded architecture and was not cut
+over — it needs its own bench validation. §6's `h7.transport` / `h7.pc_ip` /
+`h7.udp_bind_port` config keys belong with that work and are deliberately not
+added yet rather than shipped as config nothing reads. So: **sweeps and pulse
+captures are on UDP; the console is not.**
+
 ## 2026-08-07 evening — USB wedge SOLVED and self-healing (verified); EVM hardware fault is now the campaign blocker
 
 The wedge is **not** firmware-side and **not** the blocking-write mechanism
