@@ -125,6 +125,28 @@
 #define DBG_LOOP_LED 0
 #endif
 
+// ── Hardware loop watchdog (-D H7_LOOP_WDT_S=<seconds>, 0 = off) ──────────
+// Bench 2026-08-07 (RGB build): a wedge left the RED LED in mbed-os's
+// death-blink — the M7 CRASHED inside the USB stack (error handler spins
+// forever, USB stays enumerated but unserviced). Same night, an earlier wedge
+// left the loop ALIVE with the CDC data path dead. Two different end states,
+// identical over USB: silent port, power-cycle-only. Software cannot recover
+// either from inside (the crash handler never returns). The STM32 IWDG
+// recovers BOTH: loop() kicks it every pass; a crashed or hung core stops
+// kicking and the chip self-resets after H7_LOOP_WDT_S seconds, re-enumerates,
+// and comes back streaming. IWDG is disabled by hardware after any reset until
+// the app restarts it, so DFU uploads and the bootloader are unaffected.
+// Timeout choice: longest legitimate loop stall ever measured is ~0.72 s (CDC
+// back-pressure); 4 s clears that 5x while bounding how long a crash can leave
+// the coil energized at its last DAC code.
+#ifndef H7_LOOP_WDT_S
+#define H7_LOOP_WDT_S 0
+#endif
+#if H7_LOOP_WDT_S
+#include <drivers/Watchdog.h>
+#include <drivers/ResetReason.h>
+#endif
+
 #if TX_NONBLOCK
 #include "USB/PluggableUSBSerial.h"   // _SerialUSB: the real CDC device object
 
@@ -2480,6 +2502,27 @@ void setup() {
     while (!Serial && (millis() - t0) < 2000) {}
 
     RPC.begin();     // boots M4 core
+#if H7_LOOP_WDT_S
+    // Report WHY we booted — an IWDG line here means the previous session
+    // ended in a wedge (crash or hang) and the watchdog auto-recovered it.
+    // Count these lines in the host console logs to track the wedge rate.
+    {
+        const reset_reason_t rr = mbed::ResetReason::get();
+        Serial.print("[M7] reset cause: ");
+        switch (rr) {
+            case RESET_REASON_WATCHDOG:
+                Serial.println("IWDG WATCHDOG — previous run wedged (crash/hang), auto-recovered");
+                break;
+            case RESET_REASON_LOCKUP:
+                Serial.println("CORE LOCKUP — unrecoverable exception last run");
+                break;
+            case RESET_REASON_POWER_ON:   Serial.println("power-on");      break;
+            case RESET_REASON_SOFTWARE:   Serial.println("software reset"); break;
+            case RESET_REASON_PIN_RESET:  Serial.println("reset pin");     break;
+            default:  Serial.print("other (");  Serial.print((int)rr);  Serial.println(")");
+        }
+    }
+#endif
     Serial.println("[M7] Firmware_SMAConstantCurrent_PIO — bridge + SMA controller + CC loop");
     Serial.println("[M7] sensor TSV: t_ms\\t[src\\t]raw\\tV\\thw_us\\tseq   (src=1 laser, 2 load)");
     Serial.println("[M7] [STATUS] line once/sec; SMA I/O tagged [SMA]");
@@ -2569,6 +2612,17 @@ void setup() {
     Serial.print(F(" Hz, tau=")); Serial.print(cc_tau_s * 1000.0f, 1);
     Serial.println(F(" ms; stream adds src=6 (u cmd) + src=7 (R_est)"));
 
+#if H7_LOOP_WDT_S
+    // Start LAST so setup time never counts against the timeout. Once started
+    // the IWDG cannot be stopped; loop() kicks it every pass.
+    {
+        mbed::Watchdog &wdt_hw = mbed::Watchdog::get_instance();
+        wdt_hw.start(H7_LOOP_WDT_S * 1000UL);
+        smaTag(); Serial.print(F("loop watchdog (IWDG): "));
+        Serial.print(H7_LOOP_WDT_S); Serial.println(F(" s — wedge auto-reset armed"));
+    }
+#endif
+
 #if H7_TRANSPORT_UDP
     // Bring up Ethernet (static IP, no DHCP). The src=1..5 stream stays on
     // USB-CDC until the host sends 'netcfg <pc_ip> <port>'.
@@ -2590,6 +2644,11 @@ uint32_t loop_dt_max = 0;
 uint32_t loop_n      = 0;
 
 void loop() {
+#if H7_LOOP_WDT_S
+    // Every pass. step/sweep/actuation are all state machines advanced from
+    // this loop, so nothing legitimate can outlast the timeout.
+    mbed::Watchdog::get_instance().kick();
+#endif
 #if DBG_LOOP_LED
     // RGB wedge diagnostic (LEDs are ACTIVE LOW). Read a silent port at a
     // glance — bench result 2026-08-07 15:20: GREEN kept blinking through a
