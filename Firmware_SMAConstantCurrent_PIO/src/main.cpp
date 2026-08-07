@@ -94,6 +94,67 @@
 #include <EthernetUdp.h>
 #endif
 
+// ══════════════════════════════════════════════════════════════════════
+//  USB-CDC wedge fix (2026-08-07) — flag-gated, default build UNCHANGED
+// ══════════════════════════════════════════════════════════════════════
+// THE BUG (see Experiment_SMAThermalCharacterization/STATUS.md, 2026-08-07
+// entries): rapid host close→reopen can leave mbed's terminal-connected flag
+// stale-TRUE. Every Serial.write/print then blocks forever inside
+// USBCDC::send() waiting on a 64-byte endpoint the host never drains — the
+// M7 loop hangs inside ONE write: no samples, no [STATUS], no command
+// replies, watchdogs dead, coil frozen at its last DAC code. Only a power
+// cycle recovers. hostUp() cannot close the race: it is a 250 ms-cached
+// read of the very flag that goes stale.
+//
+// THE FIX (-D TX_NONBLOCK=1, [env:portenta_m7_nbtx]):
+//   1. txEmit() sends via USBCDC::send_nb() in a TIME-BOUNDED retry loop —
+//      healthy-host throughput is unchanged (same wait, now with a ceiling);
+//      a dead endpoint costs at most the budget, then the chunk is dropped
+//      (tx_drop) and a 250 ms stall latch backs off. The loop CANNOT hang.
+//   2. The NbSerialShim below reroutes EVERY Serial.print/println/write in
+//      this TU into the accumulate buffer → bounded sender. This covers the
+//      ~40 unguarded [STATUS] prints and every command reply — each was its
+//      own blocking entry point (a reply racing a port close is a suspected
+//      wedge trigger).
+// -D DBG_LOOP_LED=1 adds a loop-liveness LED (see loop()) so a wedge is
+// distinguishable from a dead CDC endpoint at a glance.
+#ifndef TX_NONBLOCK
+#define TX_NONBLOCK 0
+#endif
+#ifndef DBG_LOOP_LED
+#define DBG_LOOP_LED 0
+#endif
+
+#if TX_NONBLOCK
+#include "USB/PluggableUSBSerial.h"   // _SerialUSB: the real CDC device object
+
+// Defined in the tx section below; declared here because the shim must
+// textually precede the first Serial use in this TU (smaTag) to catch it.
+static void streamWrite(const uint8_t* buf, size_t len);
+static void txFlush();
+
+// Print-derived shim: the write path goes to streamWrite (accumulate buffer,
+// flushed once per pass by txEmit's bounded sender); everything else forwards
+// to the object `Serial` resolved to before this #define (_UART_USB_), so
+// begin/available/read/bool keep stock semantics. Formatting is Print's own
+// printNumber/printFloat — output stays byte-identical to direct
+// Serial.print, so no host parser changes.
+class NbSerialShim : public Print {
+public:
+    size_t write(uint8_t c) override { streamWrite(&c, 1); return 1; }
+    size_t write(const uint8_t* b, size_t n) override { streamWrite(b, n); return n; }
+    using Print::write;
+    void begin(unsigned long baud) { _UART_USB_.begin(baud); }
+    int  available()               { return _UART_USB_.available(); }
+    int  read()                    { return _UART_USB_.read(); }
+    void flush()                   { txFlush(); }   // used by `reset` pre-reboot
+    operator bool()                { return (bool)_UART_USB_; }
+};
+static NbSerialShim NbSerial;
+#undef Serial
+#define Serial NbSerial
+#endif  // TX_NONBLOCK
+
 // ──────────────────────────────────────────────────────────────────────
 //  SMA drive-path hardware (ported verbatim from Firmware_SMADriver_PIO)
 // ──────────────────────────────────────────────────────────────────────
@@ -813,7 +874,45 @@ static inline void txEmit(const uint8_t* buf, size_t len) {
     // _dtr_state = True and none of them override it) — but a host that opens
     // with dtr=False will see a silent stream, so change that at your peril.
     if (!hostUp()) { tx_drop += len; return; }
-#if DBG_LOOP_PROFILE
+#if TX_NONBLOCK
+    // BOUNDED sender (wedge fix — see the TX_NONBLOCK block up top). send_nb
+    // copies into the 64 B CDC endpoint buffer only when the previous packet
+    // has completed, so a healthy host drains this loop at USB line rate —
+    // same wait as the old blocking write, now with a ceiling. Budget is
+    // ~2 us/byte (FS bulk ≈ 1 B/us incl. overhead, measured ~60 us per 64 B
+    // packet) + slack; a healthy write never comes near it.
+    //
+    // On budget expiry the REMAINDER of the chunk is dropped (tx_drop) — one
+    // possibly-partial line on the wire, which every host parser tolerates.
+    // One expiry can be a transient host hiccup (GC pause, USB scheduling),
+    // so the 250 ms back-off latch engages only after 3 CONSECUTIVE
+    // failures; a dead endpoint then costs one bounded spin per 250 ms
+    // instead of a stream of them, and the first successful retry (host
+    // reopened and reading) clears everything — well inside H7.open()'s
+    // 2 s / 2000-byte probe gate.
+    static uint8_t  tx_fail_streak = 0;
+    static uint32_t tx_stall_ms    = 0;
+    if (tx_fail_streak >= 3) {
+        if ((uint32_t)(millis() - tx_stall_ms) < 250) { tx_drop += len; return; }
+        tx_stall_ms = millis();          // window over — one retry per 250 ms
+    }
+    const uint32_t budget_us = 200u + 2u * (uint32_t)len;
+    const uint32_t t0 = micros();
+    size_t sent = 0;
+    while (sent < len) {
+        uint32_t a = 0;
+        _SerialUSB.send_nb((uint8_t*)buf + sent, (uint32_t)(len - sent), &a, true);
+        sent += a;
+        if (sent >= len) break;
+        if ((uint32_t)(micros() - t0) > budget_us) {
+            tx_drop += (uint32_t)(len - sent);
+            if (tx_fail_streak < 3) tx_fail_streak++;
+            tx_stall_ms = millis();
+            return;
+        }
+    }
+    tx_fail_streak = 0;
+#elif DBG_LOOP_PROFILE
     const uint32_t t_wr = micros();
     Serial.write(buf, len);
     prof_write_us += micros() - t_wr;
@@ -2397,6 +2496,9 @@ void setup() {
     digitalWrite(MOSFET_PIN, LOW);          // load OFF until operator enables
     pinMode(TRIG_PIN, OUTPUT);
     digitalWrite(TRIG_PIN, LOW);            // scope trigger idle LOW
+#if DBG_LOOP_LED
+    pinMode(LEDG, OUTPUT);                  // loop-liveness blink (see loop())
+#endif
 
     analogReadResolution(ADC_RES_BITS);
     for (int i = 0; i < 10; i++) analogRead(FB_PIN);
@@ -2484,6 +2586,15 @@ uint32_t loop_dt_max = 0;
 uint32_t loop_n      = 0;
 
 void loop() {
+#if DBG_LOOP_LED
+    // Loop-liveness LED, ~4 Hz square wave off millis(). THE DISCRIMINATOR for
+    // the USB wedge: after a silent-port event, LED FROZEN = the loop is hung
+    // inside a blocking CDC write (the wedge mechanism; TX_NONBLOCK is the
+    // fix). LED still BLINKING while the port is silent = the loop is alive
+    // and the CDC endpoint itself is dead — a different bug, and TX_NONBLOCK
+    // would keep the rig safe but not recover the port.
+    digitalWrite(LEDG, ((millis() >> 7) & 1) ? HIGH : LOW);
+#endif
     static uint32_t last_loop_us = 0;
     uint32_t now_us = micros();
     if (last_loop_us) {
