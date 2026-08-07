@@ -870,13 +870,19 @@ static inline bool hostUp() {
 }
 
 #if H7_USB_SELFHEAL_S
-static uint32_t usb_heal_n        = 0;  // re-enumerations since boot ([STATUS])
-// Time of the last EVIDENCE the link works: a send_nb that accepted bytes, or
-// a received byte. Deliberately NOT the connected()/DTR flag — bench 2026-08-07
-// 16:01 showed the flag can wedge stale-TRUE, and under TX_NONBLOCK the loop
-// then survives happily dropping chunks forever, so a flag-gated window never
-// starts. Progress cannot lie: a wedged endpoint accepts nothing.
-static uint32_t usb_last_alive_ms = 0;
+static uint32_t usb_heal_n        = 0;  // heal actions since boot ([STATUS])
+// WINDOWED link-health accounting. Two prior triggers failed on the bench
+// (2026-08-07): the connected()/DTR flag wedges stale in either direction,
+// and a "time since last accepted byte" stamp is defeated by the host
+// merely REOPENING the wedged port — each open lets the dead driver
+// instance swallow one 64 B endpoint buffer, which looked like life. A
+// working link moves ~1 MB per 30 s window (the stream is never off);
+// a wedged one accepts <1 KB even under reopen polling. So: count bytes
+// the endpoint accepted (+ any RX) per window and judge the WINDOW.
+static uint32_t usb_win_bytes    = 0;   // accepted TX + RX evidence this window
+static uint32_t usb_win_start_ms = 0;   // window start
+static uint8_t  usb_dead_windows = 0;   // consecutive dead windows
+static bool     usb_had_link     = false; // a healthy window since boot
 #endif
 
 // ── ONE USB write per loop pass ───────────────────────────────────────────
@@ -964,14 +970,14 @@ static inline void txEmit(const uint8_t* buf, size_t len) {
             if (tx_fail_streak < 3) tx_fail_streak++;
             tx_stall_ms = millis();
 #if H7_USB_SELFHEAL_S
-            if (sent > 0) usb_last_alive_ms = millis();   // partial = link alive
+            usb_win_bytes += (uint32_t)sent;   // partial acceptance counts
 #endif
             return;
         }
     }
     tx_fail_streak = 0;
 #if H7_USB_SELFHEAL_S
-    usb_last_alive_ms = millis();       // endpoint accepted bytes: link works
+    usb_win_bytes += (uint32_t)sent;    // endpoint accepted the whole chunk
 #endif
 #elif DBG_LOOP_PROFILE
     const uint32_t t_wr = micros();
@@ -2697,31 +2703,43 @@ void loop() {
 #endif
 #if H7_USB_SELFHEAL_S
     {
-        // EVIDENCE-based trigger: usb_last_alive_ms advances on send_nb
-        // progress (txEmit) and on received bytes (here). NOT on the
-        // connected()/DTR flag, which wedges stale in either direction.
         const uint32_t now_ms = millis();
-        if (Serial.available()) usb_last_alive_ms = now_ms;
-        if (now_ms - usb_last_alive_ms > H7_USB_SELFHEAL_S * 1000UL) {
-            // A full window with zero link evidence: idle board (harmless to
-            // re-enumerate) or wedged stack (this is the cure). If the
-            // corrupted stack hangs/crashes in here, the IWDG resets the
-            // chip — same recovery, one level harder.
-            usb_heal_n++;
-            // Detach D+ LONG enough for the host to register the unplug and
-            // tear down its driver instance. Bench 2026-08-07 16:06: the wedge
-            // is HOST-side (usbser.sys instance wedges; a manual driver
-            // disable/enable revived the port with the board untouched), and
-            // six heals with a 100 ms detach were never even seen by Windows
-            // (zero open failures while polling through them). The heal must
-            // look like a real unplug — that is the same state rebuild a
-            // manual power cycle or driver restart performs. The loop stalls
-            // for the detach, which is fine: the link is provably dead and
-            // the IWDG (4 s) still bounds this block.
-            PluggableUSBD().disconnect();
-            delay(1500);
-            PluggableUSBD().connect();
-            usb_last_alive_ms = now_ms;     // restart the window
+        if (Serial.available()) usb_win_bytes += 64;    // RX is evidence too
+        if (now_ms - usb_win_start_ms >= H7_USB_SELFHEAL_S * 1000UL) {
+            // Judge the closing window. Healthy streams move ~1 MB/window;
+            // a wedged link accepts <1 KB even while the host reopen-polls
+            // the dead driver instance (each open swallows one 64 B buffer —
+            // that fooled the previous time-since-last-byte trigger).
+            if (usb_win_bytes >= 4096) {
+                usb_had_link     = true;
+                usb_dead_windows = 0;
+            } else {
+                usb_dead_windows++;
+                usb_heal_n++;
+                if (usb_dead_windows >= 2 && usb_had_link) {
+                    // A soft re-enum did not produce a healthy next window.
+                    // Escalate: a full MCU reset provably re-enumerates
+                    // (every flash does) and rebuilds the host driver
+                    // instance — the automated equivalent of the power
+                    // cycle that has fixed every wedge to date. Gated on
+                    // usb_had_link so an idle no-host board soft-heals
+                    // quietly instead of reboot-looping.
+                    disarm();                    // park the coil first
+                    delay(10);
+                    NVIC_SystemReset();
+                }
+                // Soft heal first: detach D+ long enough for the host to
+                // register a real unplug and tear down its (wedged)
+                // usbser.sys instance, then re-attach. Bench 2026-08-07:
+                // 100 ms was never registered by Windows; 1.5 s pending
+                // verification. Loop stalls here by design — the link is
+                // provably dead and the IWDG (4 s) still bounds this block.
+                PluggableUSBD().disconnect();
+                delay(1500);
+                PluggableUSBD().connect();
+            }
+            usb_win_bytes    = 0;
+            usb_win_start_ms = now_ms;
         }
     }
 #endif
