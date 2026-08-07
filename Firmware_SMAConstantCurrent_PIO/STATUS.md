@@ -8,6 +8,77 @@
 | **Owner** | Yilin |
 | **Quick test** | `pio run -e portenta_m7 -t upload`, power-cycle (USB + EVM supply), `pio device monitor` @ 115200. Expect the `[M7] Firmware_SMAConstantCurrent_PIO` banner and `[SMA] CC loop: 1000 Hz, tau=7.0 ms`. Then `arm` → `cc 200 2000` → watch `[SMA] [CC] start` and the `src=6/7` rows appear in the stream. |
 
+## 2026-08-07 later — UDP BRING-UP DONE: Steps 1+2 pass, transport SPLIT, 0.000% loss (VERIFIED on the bench)
+
+Supersedes the "UDP dormant, UNTESTED" entry below. `netcfg` was sent for the
+first time and the stream moved. Measured, `portenta_m7_nbtx_udp`:
+
+| check | result |
+|---|---|
+| `endPacket()` non-blocking (the plan's premise) | **holds** — no loop stall |
+| handoff | serial samples **975/s → 0**, UDP picks up **983 lines/s** |
+| sample loss, 75 s, per-src `seq` gaps | **0.000%** both srcs (491/s each) |
+| firmware-clock (`hw_us`) gaps > 10 ms | **none** |
+| M7 loop | `loop_hz` 12.8–14.5 k, `loop_us_avg` ~70 µs |
+| host inter-datagram | p50 1 ms, p99 2 ms |
+
+Link: PC dongle `Ethernet 5` now negotiates **100 Mbps** (was 10), APIPA
+`169.254.245.100/16` ↔ H7 static `169.254.245.50/16`. H7 answers ping 4/4 sub-ms.
+
+**THE TRANSPORT SPLIT (the real work).** First bring-up showed *all* text —
+`[STATUS]`, banner, `[ADC1]` alarms, every command reply — leaving over UDP,
+with CDC going fully silent. Cause: `#define Serial NbSerial` (`main.cpp:200`,
+the wedge-fix shim) funnels all 326 `Serial.print` sites into the SAME buffer
+the sample writers use, and the UDP/CDC switch sat *downstream* of it in
+`txEmit()`. The comment claiming "UDP mode still emits [STATUS] on serial"
+predated the shim and was wrong. `txEmit()` is now three functions:
+
+- `cdcEmit()` — the one physical CDC emitter (bounded non-blocking sender)
+- `txEmit()` — **samples only**: UDP when armed, else `cdcEmit`
+- `textWrite()` → `txt_buf[2048]` → `txtFlush()` → `cdcEmit` — **text, always CDC**
+
+M4's RPC passthrough in `pumpSensors()` was the one genuine non-sample caller
+in the sample path (it called `streamWrite` directly) and now uses `textWrite`.
+`textWrite` only diverges once `udp_on` is set, so **the USB rollback path is
+byte-for-byte unchanged**. This matches what the host already expected:
+`UdpReader` + `PortentaReader.poll_status_nb()` were written for exactly this.
+
+**A — `udp_on=0|1` in `[STATUS]`.** The board can revert to CDC without telling
+anyone (a self-heal MCU reset clears `udp_on`), stranding a host on the UDP
+socket — the failure that forced the `46e3f42` revert, reproduced here. Numeric
+on purpose: the host regex is `(\w+)=(-?\d+(?:\.\d+)?)` and drops string values.
+
+**B — the self-heal no longer kills a UDP session.** Observed live: with the
+stream on UDP the CDC endpoint accepts ~nothing, so the windowed link-health
+detector scored dead windows and **MCU-reset the board mid-measurement**
+(`t_ms` 124520 → 82909, all since-boot counters restarted). The window verdict
+gains a third branch — CDC quiet **but UDP delivered ≥4096 B this window** →
+*idle CDC*, not *dead CDC*: no re-enum, no reset. Healing there was actively
+harmful (the 1.5 s soft re-enum stalls the loop — the exact distortion UDP
+exists to remove — and the escalation clears `udp_on`).
+Verified: 75 s with the serial port closed (two full heal windows), stream flat
+at 983/s, `t_ms` 27141 → 103141, `usb_heal` 0.
+
+⚠ **Deliberate trade-off in B:** if CDC genuinely wedges *during* a UDP session
+the heal is suppressed and commands stay dead until a power cycle. Detectable
+host-side — UDP samples arriving while `[STATUS]` stops on serial *is* the wedge
+signature — and better than a reset that kills stream and commands both.
+
+⚠ **Threshold margin shrank.** The 4096 B/window test was calibrated against a
+~1 MB/window sample stream; CDC now carries ~400 B/s of text ≈ 12 KB/window.
+Still ~3× the threshold, but re-check it if `[STATUS]` is ever made less chatty.
+
+**Not yet done** (was items 2–3 of the list below): wiring `UdpReader` into
+`lib_h7_session.H7.capture()`, and reworking `H7.open()`'s gate — it aborts on
+<2000 serial bytes in 2 s, which no longer arrives now that samples are on UDP.
+Step 3 (default `transport: udp`) waits on those.
+
+**Bench note, unrelated to this work:** ADC2 died mid-run on the first attempt
+(`prod2=0`, `crc_err` 512/s, `crc_err_total` climbing) — the documented
+skipped-EVM-power-cycle signature. A proper EVM cycle restored `prod1=prod2=512`,
+`crc_err_total=0`. The 0.000% seq-gap loss is what proved it was a production
+fault, not a transport one.
+
 ## 2026-08-07 session close — UDP migration adopted; board left on `portenta_m7_nbtx_udp` (UDP dormant, UNTESTED)
 
 Decision at session end: the stream moves to UDP per

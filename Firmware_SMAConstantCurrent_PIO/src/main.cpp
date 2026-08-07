@@ -177,22 +177,35 @@
 // textually precede the first Serial use in this TU (smaTag) to catch it.
 static void streamWrite(const uint8_t* buf, size_t len);
 static void txFlush();
+static void textWrite(const uint8_t* buf, size_t len);
+static void txtFlush();
 
-// Print-derived shim: the write path goes to streamWrite (accumulate buffer,
-// flushed once per pass by txEmit's bounded sender); everything else forwards
+// Print-derived shim: the write path goes to textWrite (accumulate buffer,
+// flushed once per pass by the bounded CDC sender); everything else forwards
 // to the object `Serial` resolved to before this #define (_UART_USB_), so
 // begin/available/read/bool keep stock semantics. Formatting is Print's own
 // printNumber/printFloat — output stays byte-identical to direct
 // Serial.print, so no host parser changes.
+//
+// TRANSPORT SPLIT (2026-08-07): this shim is what made every Serial.print
+// follow the sample stream onto UDP — [STATUS], the banner, ADC alarms and
+// all command replies included — because it fed the SAME buffer the sample
+// writers use, and the UDP/CDC switch sits downstream of that buffer in
+// txEmit(). Text now goes to its own buffer (textWrite -> txt_buf ->
+// cdcEmit), so it stays on USB-CDC no matter what the sample transport is
+// doing. That restores the two-channel architecture of §2 in
+// docs/UDP_stream_migration_plan.md, which the host already assumes:
+// PortentaReader.poll_status_nb() reads [STATUS] off serial while UdpReader
+// takes the samples.
 class NbSerialShim : public Print {
 public:
-    size_t write(uint8_t c) override { streamWrite(&c, 1); return 1; }
-    size_t write(const uint8_t* b, size_t n) override { streamWrite(b, n); return n; }
+    size_t write(uint8_t c) override { textWrite(&c, 1); return 1; }
+    size_t write(const uint8_t* b, size_t n) override { textWrite(b, n); return n; }
     using Print::write;
     void begin(unsigned long baud) { _UART_USB_.begin(baud); }
     int  available()               { return _UART_USB_.available(); }
     int  read()                    { return _UART_USB_.read(); }
-    void flush()                   { txFlush(); }   // used by `reset` pre-reboot
+    void flush()                   { txFlush(); txtFlush(); }  // `reset` pre-reboot
     operator bool()                { return (bool)_UART_USB_; }
 };
 static NbSerialShim NbSerial;
@@ -813,6 +826,7 @@ static EthernetUDP  udp;
 static IPAddress    udp_pc_ip;                      // set by 'netcfg'
 static uint16_t     udp_pc_port = 0;                // 0 = not configured yet
 static bool         udp_on = false;                 // armed after a valid netcfg
+static uint32_t     udp_win_bytes = 0;              // stream bytes this heal window
 #endif
 
 // Emit one already-formatted chunk of sample lines: a UDP datagram if streaming
@@ -903,16 +917,10 @@ static bool     usb_had_link     = false; // a healthy window since boot
 static char   tx_buf[8192];
 static size_t tx_off = 0;
 
-static inline void txEmit(const uint8_t* buf, size_t len) {
+// cdcEmit() is the ONE physical USB-CDC emitter. The text path always ends
+// here; the sample path ends here only when the UDP transport is not armed.
+static inline void cdcEmit(const uint8_t* buf, size_t len) {
     if (len == 0) return;
-#if H7_TRANSPORT_UDP
-    if (udp_on) {
-        udp.beginPacket(udp_pc_ip, udp_pc_port);
-        udp.write(buf, len);
-        udp.endPacket();
-        return;
-    }
-#endif
     // USB-CDC: NEVER block. When the host stops reading (console closed), the
     // CDC TX buffer fills; a blocking Serial.write would stall the cooperative
     // M7 loop and FREEZE the state machine — leaving the SMA energized at its
@@ -989,9 +997,30 @@ static inline void txEmit(const uint8_t* buf, size_t len) {
 #endif
 }
 
-// Emit whatever has accumulated. Forced before the [STATUS] frame (which prints
-// straight to Serial, so it would otherwise jump ahead of rows generated before
-// it); otherwise reached through txService() below.
+// txEmit(): the SAMPLE-stream emitter. UDP when armed, else USB-CDC. This is
+// the only place the transport switch lives, and after the 2026-08-07 split it
+// is reached ONLY by the sample writers (pumpSensors/smaFlush) — never by
+// Serial.print, which now goes through textWrite() to cdcEmit().
+static inline void txEmit(const uint8_t* buf, size_t len) {
+    if (len == 0) return;
+#if H7_TRANSPORT_UDP
+    if (udp_on) {
+        udp.beginPacket(udp_pc_ip, udp_pc_port);
+        udp.write(buf, len);
+        udp.endPacket();
+#if H7_USB_SELFHEAL_S
+        udp_win_bytes += (uint32_t)len;   // link evidence — see the heal window
+#endif
+        return;
+    }
+#endif
+    cdcEmit(buf, len);
+}
+
+// Emit whatever sample data has accumulated; reached once per pass from loop().
+// (Ordering note: [STATUS] used to share this buffer and had to be sequenced
+// against it. It no longer does — text has its own buffer and its own emitter —
+// so there is nothing left to interleave here.)
 static uint32_t tx_last_us = 0;
 
 static inline void txFlush() {
@@ -999,6 +1028,50 @@ static inline void txFlush() {
     txEmit((const uint8_t*)tx_buf, tx_off);
     tx_off     = 0;
     tx_last_us = micros();
+}
+
+// Declared unconditionally: the shim's copy of this declaration is inside
+// #if TX_NONBLOCK, but textWrite() below falls back to streamWrite() in the
+// USB-only build, where that block is not compiled. Defined further down.
+static void streamWrite(const uint8_t* buf, size_t len);
+
+// ── TEXT path ─────────────────────────────────────────────────────────────
+// [STATUS], the boot banner, ADC alarms, M4's RPC passthrough and every
+// command reply. Low rate (~350 B/s), and it must stay on USB-CDC so that:
+//   - a reply always comes back on the channel its command arrived on;
+//   - a mistyped `netcfg` is VISIBLE instead of silently sending all feedback
+//     to a dead address (which left the board mute until a power cycle);
+//   - [STATUS] — the prod1/prod2 ground truth for UDP loss — arrives over the
+//     RELIABLE link, not the lossy one it is measuring.
+// Sized for one [STATUS] frame (~400 B) plus a burst of command replies.
+static char   txt_buf[2048];
+static size_t txt_off = 0;
+
+static inline void txtFlush() {
+    if (txt_off == 0) return;
+    cdcEmit((const uint8_t*)txt_buf, txt_off);
+    txt_off = 0;
+}
+
+static inline void textWrite(const uint8_t* buf, size_t len) {
+    if (len == 0) return;
+#if H7_TRANSPORT_UDP
+    // Only diverge from the legacy single-buffer path once the sample stream
+    // has actually moved. While the stream is still on CDC there is exactly one
+    // link, and sharing the buffer preserves the proven byte ordering and the
+    // one-write-per-pass property that the USB build was tuned around.
+    if (!udp_on) { streamWrite(buf, len); return; }
+    if (len >= sizeof(txt_buf)) {          // pathological: emit directly
+        txtFlush();
+        cdcEmit(buf, len);
+        return;
+    }
+    if (txt_off + len > sizeof(txt_buf)) txtFlush();
+    memcpy(txt_buf + txt_off, buf, len);
+    txt_off += len;
+#else
+    streamWrite(buf, len);                 // USB-only build: unchanged
+#endif
 }
 
 // TRIED AND REVERTED (2026-07-27): flushing on a size/age threshold instead of
@@ -2336,15 +2409,20 @@ static const uint32_t STATUS_PERIOD_MS = 1000;
 #endif
 
 static void pumpSensors() {
-    // 1. Boot / diagnostic text from M4 via RPC. Guarantee it ends on a newline
-    //    before the sensor batch below: a not-yet-terminated RPC message (e.g.
-    //    the periodic [ADC1] PGA alarm, delivered in chunks across passes) would
-    //    otherwise concatenate with the first sensor line and the host parser
-    //    would drop that line.
+    // 1. Boot / diagnostic text from M4 via RPC. Guarantee it ends on a newline:
+    //    a not-yet-terminated RPC message (e.g. the periodic [ADC1] PGA alarm,
+    //    delivered in chunks across passes) would otherwise concatenate with
+    //    whatever text follows it and the host parser would drop that line.
+    //    (Before the transport split this shared a buffer with the sensor rows
+    //    below, so the hazard was specifically about running into sensor data.)
     // Batched: this used to Serial.write() ONE BYTE AT A TIME, which is the same
-    // many-small-writes bug as everywhere else in this path. Goes through
-    // streamWrite so it shares the single per-pass flush and keeps its ordering
-    // relative to the sensor rows below.
+    // many-small-writes bug as everywhere else in this path.
+    //
+    // Goes through textWrite, NOT streamWrite: this is M4's TEXT (boot
+    // checkpoints, ring build-id, the periodic [ADC1] PGA alarm, FATAL
+    // messages), so it belongs on USB-CDC with the rest of the text and must
+    // not be packed into UDP sample datagrams. It was the one non-sample
+    // caller sitting in the sample path.
     int rpc_last = -1;
     {
         char   rbuf[128];
@@ -2353,10 +2431,10 @@ static void pumpSensors() {
             const int c = RPC.read();
             rbuf[rn++] = (char)c;
             rpc_last   = c;
-            if (rn == sizeof(rbuf)) { streamWrite((const uint8_t*)rbuf, rn); rn = 0; }
+            if (rn == sizeof(rbuf)) { textWrite((const uint8_t*)rbuf, rn); rn = 0; }
         }
         if (rpc_last >= 0 && rpc_last != '\n' && rn < sizeof(rbuf)) rbuf[rn++] = '\n';
-        if (rn) streamWrite((const uint8_t*)rbuf, rn);
+        if (rn) textWrite((const uint8_t*)rbuf, rn);
     }
 
     // 2. ADC samples from the shared ring buffer (untagged sensor TSV).
@@ -2481,6 +2559,19 @@ static void pumpSensors() {
         // becomes a fault mid-run.
         Serial.print(" dac_err=");        Serial.print(dac_fail_total);
         Serial.print(" tx_drop=");        Serial.print(tx_drop);
+        // WHICH TRANSPORT THE SAMPLE STREAM IS ACTUALLY ON. 1 = UDP, 0 = CDC.
+        // The board can revert to 0 without telling anyone — a self-heal MCU
+        // reset clears udp_on — which strands a host still listening on the UDP
+        // socket. That is exactly the failure that forced the 46e3f42 revert
+        // ("udp was streaming past a board that talks USB") and it recurred on
+        // the bench 2026-08-07. The host watches this field and re-sends netcfg
+        // when it reads back 0. Numeric on purpose: the host's status regex is
+        // (\w+)=(-?\d+(?:\.\d+)?), so a string value would be silently dropped.
+#if H7_TRANSPORT_UDP
+        Serial.print(" udp_on=");         Serial.print(udp_on ? 1 : 0);
+#else
+        Serial.print(" udp_on=0");
+#endif
 #if H7_USB_SELFHEAL_S
         // USB re-enumerations since boot. Nonzero right after a session opens
         // = the board healed a wedge (or idled through 30 s windows) since
@@ -2706,14 +2797,44 @@ void loop() {
         const uint32_t now_ms = millis();
         if (Serial.available()) usb_win_bytes += 64;    // RX is evidence too
         if (now_ms - usb_win_start_ms >= H7_USB_SELFHEAL_S * 1000UL) {
-            // Judge the closing window. Healthy streams move ~1 MB/window;
-            // a wedged link accepts <1 KB even while the host reopen-polls
-            // the dead driver instance (each open swallows one 64 B buffer —
-            // that fooled the previous time-since-last-byte trigger).
+            // Judge the closing window. A wedged link accepts <1 KB even while
+            // the host reopen-polls the dead driver instance (each open
+            // swallows one 64 B buffer — that fooled the previous
+            // time-since-last-byte trigger).
+            //
+            // MARGIN AFTER THE TRANSPORT SPLIT: this used to be measured
+            // against a ~1 MB/window sample stream. With the stream on UDP,
+            // CDC carries only text — [STATUS] at ~350 B/s plus ADC alarms,
+            // about 10 KB per 30 s window. Still ~2.5x the 4096 threshold, so
+            // an attached host reads healthy and wedge detection stays fully
+            // live; but the headroom is now 2.5x, not 250x. If [STATUS] is
+            // ever made less chatty, re-check this number.
             if (usb_win_bytes >= 4096) {
                 usb_had_link     = true;
                 usb_dead_windows = 0;
-            } else {
+            }
+#if H7_TRANSPORT_UDP
+            else if (udp_win_bytes >= 4096) {
+                // CDC is quiet, but the board is demonstrably delivering the
+                // sample stream to the host over UDP — so a host IS there and
+                // nothing anyone is using is wedged. Healing here is actively
+                // harmful: the soft re-enum stalls the loop 1.5 s (exactly the
+                // actuation distortion UDP exists to remove) and the escalation
+                // MCU-resets, which clears udp_on and silently drops the stream
+                // back to CDC. Bench 2026-08-07: it did precisely that, mid
+                // measurement, with the host happily receiving on :7777.
+                // Treat a delivering UDP link as IDLE CDC, not dead CDC.
+                //
+                // DELIBERATE TRADE-OFF: if CDC genuinely wedges *during* a UDP
+                // session this suppresses the heal, and commands stay dead
+                // until a power cycle. That is detectable host-side — UDP
+                // samples still arriving while [STATUS] stops on serial is the
+                // wedge signature — and it is the better failure mode: a live
+                // stream with dead commands beats a reset that kills both.
+                usb_dead_windows = 0;
+            }
+#endif
+            else {
                 usb_dead_windows++;
                 usb_heal_n++;
                 if (usb_dead_windows >= 2 && usb_had_link) {
@@ -2739,6 +2860,9 @@ void loop() {
                 PluggableUSBD().connect();
             }
             usb_win_bytes    = 0;
+#if H7_TRANSPORT_UDP
+            udp_win_bytes    = 0;
+#endif
             usb_win_start_ms = now_ms;
         }
     }
@@ -2787,7 +2911,8 @@ void loop() {
     serviceSma();
     uint32_t pd = micros(); prof_sma_us += pd - pc;
     serviceHeartbeat();
-    txFlush();                      // ONE USB write per pass, for everything
+    txFlush();                      // samples: ONE UDP datagram / USB write per pass
+    txtFlush();                     // text: always USB-CDC
     prof_hb_us += micros() - pd;
     prof_passes++;
 
@@ -2832,7 +2957,8 @@ void loop() {
     if (pollCommand(line)) dispatch(line);
     serviceSma();                   // advance the active SMA op by one step
     serviceHeartbeat();             // safe-stop if the PC has gone silent
-    txFlush();                      // ONE USB write per pass, for everything
+    txFlush();                      // samples: ONE UDP datagram / USB write per pass
+    txtFlush();                     // text: always USB-CDC
 #endif
 }
 

@@ -1,14 +1,25 @@
 # Plan — move the H7 sensor/SMA stream to UDP
 
 **Status:** ADOPTED 2026-08-07 (branch `feat/udp-stream`); was Proposed 2026-07-15. **Owner:** Yilin.
-**2026-08-07 update:** the USB wedge investigation (see
-`Firmware_SMAConstantCurrent_PIO/STATUS.md`) proved the CDC path can wedge
-HOST-side (usbser.sys) — the firmware now self-heals that, but this plan is
-the structural fix and is now in motion. `[env:portenta_m7_nbtx_udp]`
-(wedge-fix stack + UDP transport) is built and flashed, link readiness
-verified (PC `Ethernet 5` Up at 10 Mbps, APIPA 169.254.245.100/16 matching
-the H7's static 169.254.245.50/16 — the zero-host-config variant of §3).
-First UDP datagram not yet observed; bring-up steps in the firmware STATUS.
+**2026-08-07 update — STEPS 1 AND 2 PASS ON THE BENCH.** `netcfg` was sent for
+the first time and the stream moved: serial samples 975/s → 0, UDP 983 lines/s,
+**0.000% loss** over 75 s (per-src `seq` gaps), no `hw_us` gaps, `loop_hz`
+12.8–14.5 k. `endPacket()` is non-blocking — §10's core premise holds. Link runs
+at 100 Mbps (not the 10 seen earlier) on the §3 zero-host-config variant.
+
+Two deviations from this plan were found and fixed in firmware; see
+`Firmware_SMAConstantCurrent_PIO/STATUS.md` for the full write-up:
+- **§2 was not actually implemented.** The wedge-fix shim (`#define Serial
+  NbSerial`) put *all* text on UDP with the samples. `txEmit()` is now split so
+  text always goes to CDC and only samples take the UDP branch.
+- **§10 gains a risk the plan did not anticipate:** the USB self-heal
+  MCU-resets the board during a UDP session (CDC is legitimately quiet), which
+  clears `udp_on` and silently reverts the transport — the `46e3f42` failure.
+  Fixed by treating a delivering UDP link as idle-CDC, plus a new `udp_on=0|1`
+  field in `[STATUS]` so the host can detect a revert.
+
+Remaining before Step 3: host-side §6 work — `UdpReader` into
+`lib_h7_session.H7.capture()`, and `H7.open()`'s serial-byte gate.
 **Scope:** `Firmware_SMASensorHub_PIO` (M7) + host `Experiment_SMAThermalCharacterization` / `Calibrate_LaserHead/portenta_reader.py`.
 
 ## 1. Why
