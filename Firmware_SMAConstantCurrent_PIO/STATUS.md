@@ -8,7 +8,63 @@
 | **Owner** | Yilin |
 | **Quick test** | `pio run -e portenta_m7 -t upload`, power-cycle (USB + EVM supply), `pio device monitor` @ 115200. Expect the `[M7] Firmware_SMAConstantCurrent_PIO` banner and `[SMA] CC loop: 1000 Hz, tau=7.0 ms`. Then `arm` → `cc 200 2000` → watch `[SMA] [CC] start` and the `src=6/7` rows appear in the stream. |
 
-## 2026-08-07 — USB-CDC wedge: mechanism confirmed at source level, fix built (branch `fix/usb-cdc-wedge`, NOT yet bench-verified)
+## 2026-08-07 evening — WEDGE SOLVED: it is a HOST-side driver fault, and the firmware now self-heals it (VERIFIED twice on the bench)
+
+**Supersedes the diagnosis in the entry below.** The blocking-write mechanism
+described there is real as a *hazard* (a 718 ms loop stall from CDC
+back-pressure was observed live) but it is NOT the wedge. The bench walk
+tonight, five flash-test iterations with the RGB LED diagnostic:
+
+1. **Loop-hang hypothesis falsified** — wedge reproduced with the liveness
+   LED still blinking: the M7 loop was alive while the port was silent.
+2. **One wedge WAS an M7 crash** — red LED in mbed-os's death-blink, green
+   dead. A rarer second mode; the IWDG (4 s) covers it.
+3. **The decisive experiment**: with the port wedged, a manual Windows
+   driver disable/enable revived it — board untouched. Recovered [STATUS]:
+   `t_ms=252871` (H7 healthy through the whole wedge), `tx_drop=8 MB`
+   (streaming into the void the whole time). **The wedge is the Windows
+   `usbser.sys` device instance wedging.** Opens hand back a handle from
+   the dead instance; reopens/DTR toggles touch the same instance, which is
+   why only a power cycle (= re-attach = instance rebuilt) ever worked.
+4. **Two self-heal triggers failed before one stuck**: the connected()/DTR
+   flag wedges stale in either direction; a time-since-last-accepted-byte
+   stamp is defeated by reopen-polling (each open of the dead instance
+   swallows exactly one 64 B endpoint buffer — that fake progress kept
+   resetting the window; it also explains why `usb_heal=6` fired only
+   after polling stopped). The trigger that works judges 30 s WINDOWS:
+   accepted TX+RX < 4 KB/window = dead (healthy streams move ~1 MB).
+5. **The heal that works**: `PluggableUSBD().disconnect()` → **1.5 s**
+   detach → `connect()`. A 100 ms detach was never registered by Windows
+   (six invisible heals); at 1.5 s the bench observed COM8 leave the port
+   list and the driver instance rebuild. Escalation: a second consecutive
+   dead window → `disarm()` + `NVIC_SystemReset()` (gated on a
+   healthy-window-since-boot flag so an idle board never reboot-loops).
+
+**Verified end-to-end, twice:** wedge → dead window detected → detach
+registered ("COM8 GONE") → **stream flowing again at +41 s, `usb_heal=1`,
+no reset, no human.** Worst case ≈ 65 s via the escalation path.
+
+The `[env:portenta_m7_nbtx]` fix stack, all flag-gated (default env still
+byte-identical, sha256 `21e2811f…`):
+
+| flag | role |
+|---|---|
+| `TX_NONBLOCK=1` | bounded send_nb TX — removes the 718 ms loop stalls and the coil-stuck-energized hazard; provides the per-window byte accounting the heal trigger runs on |
+| `H7_LOOP_WDT_S=4` | IWDG — auto-reset for the crash mode (and any future loop hang); boot banner reports reset cause |
+| `H7_USB_SELFHEAL_S=30` | windowed link-health check + 1.5 s re-enum heal + reset escalation; `usb_heal=N` in [STATUS] counts events |
+| `DBG_LOOP_LED=1` | green = loop alive, blue = cached DTR flag, red = RX activity (and mbed's death-blink shows through on a crash) |
+
+**Still open, and now the campaign blocker:** the ADS1263 EVM. After the
+heal verification the stream shows `rate2=0` (ADC2 dead), a CRC storm at
+~630/s, and ADC1 sagging to ~390/512 — and tonight power cycles no longer
+clear it. That is the physical seating fault from the night write-up
+(restart checklist item 1: reseat EVM ribbon + supply), not the wedge.
+
+**Acceptance still owed before nbtx becomes the campaign image:** after the
+EVM reseat, one full sweep on nbtx with `tx_drop≈0`, `usb_heal=0`,
+`rate1/2=512` throughout, and a clean sweep report.
+
+## 2026-08-07 — USB-CDC wedge: mechanism confirmed at source level, fix built (branch `fix/usb-cdc-wedge`, NOT yet bench-verified — **diagnosis superseded by the entry above**)
 
 The silent-port wedge (see `Experiment_SMAThermalCharacterization/STATUS.md`
 2026-08-07 entries: port opens, 0 bytes, no reply even to `info`, only a power

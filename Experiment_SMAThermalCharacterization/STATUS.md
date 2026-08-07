@@ -8,6 +8,38 @@
 | **Owner** | Yilin |
 | **Quick test (no hardware)** | `python -c "import config, workers, recording_core, sma_console, analyze_sma"` then run the analyzer on a synthetic console session (see README). GUI: `QT_QPA_PLATFORM=offscreen` + `run_gui(..., _build_only=True)`. |
 
+## 2026-08-07 evening — USB wedge SOLVED and self-healing (verified); EVM hardware fault is now the campaign blocker
+
+The wedge is **not** firmware-side and **not** the blocking-write mechanism
+hypothesized at 03:46: the bench proved it is the **Windows `usbser.sys`
+driver instance wedging** (manual driver disable/enable revived a wedged
+port with the H7 untouched and 4 min of uptime on its clock). The
+`Firmware_SMAConstantCurrent_PIO` nbtx image now detects a dead link by
+windowed byte-throughput and heals it with a 1.5 s USB re-enumeration
+(escalating to a self-reset if needed) — **verified twice: wedge to
+flowing stream in ~41 s with no human intervention** (`usb_heal` counter in
+[STATUS] records every event; an `IWDG WATCHDOG` boot line records crash
+recoveries). Full experiment chain and the fix table:
+`Firmware_SMAConstantCurrent_PIO/STATUS.md`, top entry.
+
+What this changes operationally:
+- **No more power-cycle ransoms mid-campaign**: a wedged step recovers
+  itself within ~40-65 s; `run_step.py`'s existing 90 s silent-port retry
+  will find a healed port. The `-BetweenS 300` spacing mitigation is no
+  longer load-bearing (still harmless).
+- Wedge-window data is dropped, not delayed (`tx_drop` + `seq` gaps make it
+  visible); a wedged capture was always lost — now the *next* one isn't.
+- The heat watchdog still guards the coil during a wedge (it disarms 5 s
+  after pings stop), and the IWDG bounds a crashed core at 4 s.
+
+**The campaign blocker is now the ADS1263 EVM, not USB:** post-verification
+[STATUS] shows `rate2=0` (ADC2 dead), a ~630/s CRC storm, ADC1 sagging to
+~390/512 — and power cycles no longer clear it. That is restart-checklist
+item 1 (reseat EVM ribbon + supply), to be done before the nbtx acceptance
+sweep (`tx_drop≈0`, `usb_heal=0`, `rate1/2=512`) and campaign attempt 4.
+The sense-lead σ≈66 mA fault and the median-estimator analysis debt are
+unchanged by tonight.
+
 ## 2026-08-07 — USB wedge: fix path from the 03:46 entry EXECUTED (firmware built, awaiting bench)
 
 The wedge fix proposed below is implemented on branch **`fix/usb-cdc-wedge`**,
