@@ -1,0 +1,23 @@
+$ C:\Users\yilin\AppData\Local\Programs\Python\Python312\python.exe C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\operator_pulse_capture.py --ma 650 --heat-ms 300 --i-low 0 --cool-s 30 --cycles 2 --settle-s 10 --outdir C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\campaigns\20260807_dynalloy_10mm_night
+
+
+650 mA | 300 ms heat | 30.0 s cool | 2 cycles | i_low 0 mA
+  -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\campaigns\20260807_dynalloy_10mm_night\pulse_20260807_014017   (~74 s total)
+
+  force pull: drained 51.7 kB
+  port live (2329 bytes in probe)
+  calibration restored: vdd 5.067, offset 0.5, ioffset 0.0167
+  settle 10s ...
+  running 64s ...
+
+  2 pulses found
+   #    t[s]  dur[ms]    I[mA]    u[V]   R_est   dx[um]   dF[mN]
+   1    4.92    307.6    663.4   2.355   3.579   -112.4    -9.84
+   2   36.18    308.6    655.7   2.367   3.647   -127.0   -10.55
+
+  achieved 660 mA of 650 commanded (101%)
+  displacement -119.7 um mean signed, 119.7 um rectified (coherent â€” real motion)
+  sense check: SUSPECT â€” 1
+  -> fig1_timeline.png, fig2_pulses.png
+
+  C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\campaigns\20260807_dynalloy_10mm_night\pulse_20260807_014017

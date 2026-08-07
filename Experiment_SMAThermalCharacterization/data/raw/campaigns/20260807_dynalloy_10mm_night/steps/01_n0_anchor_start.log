@@ -1,0 +1,20 @@
+$ C:\Users\yilin\AppData\Local\Programs\Python\Python312\python.exe C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\operator_current_sweep.py --profile C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json --campaign 20260807_dynalloy_10mm_night
+
+  writing to data\raw\campaigns\20260807_dynalloy_10mm_night\sweep_20260807_032841
+
+current sweep -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\campaigns\20260807_dynalloy_10mm_night\sweep_20260807_032841
+  2 explicit conditions from C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json
+  2 conditions, ~8 min total
+
+  force pull: drained 0.0 kB
+
+  ERROR: COM8 opened but is not streaming (0 bytes in 2s).
+  1. Is another reader holding it? pio device monitor, the Arduino IDE monitor, sma_console, another script. The H7 is SINGLE-OWNER: a second handle opens and gets 0 bytes.
+  2. Otherwise power-cycle USB + EVM and retry. If the [STATUS] line then shows rate1=0 rate2=0 prod1=0 prod2=0 with crc_err=0, nothing is entering the ring at all â€” that is the M4/ADC side, not the link.
+==============================================================
+  NO LEVEL PASSED â€” error: COM8 opened but is not streaming (0 bytes in 2s).
+  1. Is another reader holding it? pio device monitor, the Arduino IDE monitor, sma_console, another script. The H7 is SINGLE-OWNER: a second handle opens and gets 0 bytes.
+  2. Otherwise power-cycle USB + EVM and retry. If the [STATUS] line then shows rate1=0 rate2=0 prod1=0 prod2=0 with crc_err=0, nothing is entering the ring at all â€” that is the M4/ADC side, not the link.
+  Lengthen --cool-s, or re-check the preload, then retry.
+  raw + summary -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\campaigns\20260807_dynalloy_10mm_night\sweep_20260807_032841
+==============================================================

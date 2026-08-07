@@ -1,0 +1,7 @@
+SWEEP REPORT — sweep_20260807_033117
+================================================================
+ 650 mA / 300 ms (seq 0):  I   651 mA, dx   -576.7 µm (1/2 valid)
+        !! sense: 1.04% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm — physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable — power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+        !! pulses: 2 segmented of 6 commanded
+================================================================
+0/1 conditions clean; outputs: summary_report.csv, fig_envelope.png

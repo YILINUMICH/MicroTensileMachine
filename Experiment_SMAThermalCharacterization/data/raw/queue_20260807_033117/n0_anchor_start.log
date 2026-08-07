@@ -1,0 +1,35 @@
+$ C:\Users\yilin\AppData\Local\Programs\Python\Python312\python.exe C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\operator_current_sweep.py --profile C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json
+
+  writing to data\raw\sweep_20260807_033117
+
+current sweep -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\sweep_20260807_033117
+  2 explicit conditions from C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\profiles\night_profiles_20260805\n0_anchor_start.json
+  2 conditions, ~8 min total
+
+  force pull: drained 48.6 kB
+  port live (2411 bytes in probe)
+  calibration restored: vdd 5.067, offset 0.5, ioffset 0.0167
+--- [1/2] 650 mA / 300 ms ----------------------------
+  elapsed 0:02 Â· remaining ~7:36 Â· ETA 03:38:56
+  cold-start settle 40s ...
+  clock align: src=1/2 shifted +2.195 s onto the M7 clock
+  cyc   I[mA]   dx[um]    base    peak    rise   clip
+    1   655.1    425.1   1.881   2.251   0.370     no (bootstrap, excluded)
+    2   650.6   -576.7   1.929   2.314   0.385     no
+  NOTE: 2 pulses found, 6 commanded
+  !! SENSE WARNING: 1.04% of cool samples exceed 312 mA, which at the 0.500 V idle bias implies R < 1.6 ohm â€” physically impossible for this wire. EITHER the current sense is corrupted (data NOT usable â€” power-cycle USB + EVM, reseat the SMA clips, re-run) OR --r-min is stale for the wire now fitted: check its cold resistance and set r_min_ohm to ~45% of it. See data/raw/sweep_20260728_215606/README.md.
+  achieved current 651 mA of 650 mA commanded (100%)
+  force: mean rise +0.3848 V, baseline drift +0.0000 V over 2 cycles
+  laser: -576.7 um mean signed / 576.7 rectified (coherent)
+
+--- [2/2] 450 mA / 400 ms ----------------------------
+  elapsed 3:51 Â· remaining ~3:52 Â· ETA 03:39:02 Â· pacing 1.02x plan
+  cold-start settle 40s ...
+  STOP â€” 450 mA: load cell (ADC2) is not streaming â€” hub fault. Power-cycle USB + EVM.
+==============================================================
+  LAST CLEAN CONDITION: 650 mA / 300 ms
+  stopped because: 450 mA: load cell (ADC2) is not streaming â€” hub fault. Power-cycle USB + EVM.
+  cool 30 s â€” any limit found is a PAIR with the
+  duty cycle; a shorter cool lowers it.
+  raw + summary -> C:\Users\yilin\Documents\GitHubRepo_Research\MicroTensileMachine\MicroTensileMachine\Experiment_SMAThermalCharacterization\data\raw\sweep_20260807_033117
+==============================================================

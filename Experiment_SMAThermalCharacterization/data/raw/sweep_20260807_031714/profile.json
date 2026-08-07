@@ -1,0 +1,25 @@
+{
+  "name": "corner_probe_reseat",
+  "description": "Post-reseat re-verify of the corner, 2026-07-31. Same three MEASURABLE cells as corner_probe_400ms; 950x400 deliberately omitted - probe 1 (sweep_20260731_134414) already characterized it at the correct 947 mA and it rails the laser AND clips the load cell, so it is excluded from the grid and has no measurement left to give, while being the cell that was firing ~2 J pulses when the SMA contact failed. Key question here: does 950x300 cycle 2 overshoot again? It did in sweep_20260731_141513 (1190 mA, load clipped) with R_est latched at 6.031 ohm. If it is clean now, that overshoot was the degrading contact, not a cool-phase control instability.",
+  "port": "COM8",
+  "max_ma": 1000,
+  "settle_s": 20,
+  "cool_s": 30,
+  "cycles": 3,
+  "i_low_ma": 0,
+  "abort_on_bad_sense": true,
+  "conditions": [
+    {
+      "i_ma": 750,
+      "heat_ms": 400
+    },
+    {
+      "i_ma": 950,
+      "heat_ms": 300
+    },
+    {
+      "i_ma": 850,
+      "heat_ms": 400
+    }
+  ]
+}

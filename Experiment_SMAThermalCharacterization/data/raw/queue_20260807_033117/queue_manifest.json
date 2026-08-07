@@ -1,0 +1,50 @@
+{
+  "started": "2026-08-07T03:31:17.809173",
+  "logdir": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\data\\raw\\queue_20260807_033117",
+  "deadline": null,
+  "profiles": [
+    {
+      "profile": "n0_anchor_start.json",
+      "path": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\profiles\\night_profiles_20260805\\n0_anchor_start.json",
+      "order": 0,
+      "started": "2026-08-07T03:31:17.810182",
+      "ended": "2026-08-07T03:35:53.242710",
+      "exit_code": 0,
+      "sweep_dir": "sweep_20260807_033117",
+      "captures": 1,
+      "conditions": 2,
+      "status": "partial 1/2",
+      "why": "stopped because: 450 mA: load cell (ADC2) is not streaming \u00e2\u20ac\u201d hub fault. Power-cycle USB + EVM.",
+      "report_exit_code": 0
+    },
+    {
+      "profile": "n4a_shortcool_test.json",
+      "path": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\profiles\\night_profiles_20260805\\n4a_shortcool_test.json",
+      "order": 1,
+      "started": "2026-08-07T03:40:56.016689",
+      "ended": "2026-08-07T03:40:59.786263",
+      "exit_code": 0,
+      "sweep_dir": "sweep_20260807_034056",
+      "captures": 0,
+      "conditions": 110,
+      "status": "no captures",
+      "why": "ERROR: COM8 opened but is not streaming (0 bytes in 2s)."
+    },
+    {
+      "profile": "n1a_shuffle_train.json",
+      "path": "C:\\Users\\yilin\\Documents\\GitHubRepo_Research\\MicroTensileMachine\\MicroTensileMachine\\Experiment_SMAThermalCharacterization\\profiles\\night_profiles_20260805\\n1a_shuffle_train.json",
+      "order": 2,
+      "started": "2026-08-07T03:45:59.788310",
+      "ended": "2026-08-07T03:46:03.557825",
+      "exit_code": 0,
+      "sweep_dir": "sweep_20260807_034559",
+      "captures": 0,
+      "conditions": 200,
+      "status": "no captures (rig appears down)",
+      "why": "ERROR: COM8 opened but is not streaming (0 bytes in 2s)."
+    }
+  ],
+  "aborted": "two consecutive profiles produced no captures \u2014 rig down",
+  "ended": "2026-08-07T03:46:03.558825",
+  "wall_s": 885.7
+}

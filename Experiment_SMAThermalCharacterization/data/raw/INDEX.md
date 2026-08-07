@@ -49,6 +49,23 @@ One campaign = one **wire + protocol**. Cold length is the axis that matters mos
 | `sweep_20260805_105318` | captures | 32 | 250–950 mA × 100–400 ms (8×4) | 30 s | 5 | cNN | `20260805_dynalloy` |
 | `sweep_20260805_154528` | captures | 12 | 200–950 mA × 100–500 ms (9×5) | 30 s | 5 | cNN | `20260805_dynalloy` |
 
+### `campaigns/20260807_dynalloy_10mm_night/`
+
+10 folders · 0.06 GB · merged table: — *(none)*
+
+| folder | kind | captures | grid | cool | cycles | naming | registered |
+|---|---|---|---|---|---|---|---|
+| `pulse_20260807_004530` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_004843` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_010155` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_011108` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_011920` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_012534` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_013305` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_013557` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `pulse_20260807_014017` | write-up | 0 | — | 30 s | 2 | — | **no** |
+| `steps` | aborted | 0 | — | — | — | — | **no** |
+
 ## Unfiled — loose in `data/raw/`
 
 `data/raw/` is an **inbox**. These runs record no wire (meta.json does not carry one), so file them under `campaigns/<key>/` while you still remember which wire was on the rig.
@@ -58,6 +75,11 @@ One campaign = one **wire + protocol**. Cold length is the axis that matters mos
 | `console_20260713_115921_laserhiddenpattern` | aborted | 0 | — | — | — |
 | `pulse_20260729_001221` | aborted | 0 | — | — | — |
 | `pulse_20260731_122707` | aborted | 0 | — | — | — |
+| `queue_20260807_033117` | aborted | 0 | — | — | — |
+| `sweep_20260807_015514` | captures | 1 | 750 mA × 400 ms (1×1) | 30 s | cNN |
+| `sweep_20260807_020840` | captures | 1 | 750 mA × 400 ms (1×1) | 30 s | cNN |
+| `sweep_20260807_031714` | captures | 2 | 750–950 mA × 300–400 ms (2×2) | 30 s | cNN |
+| `sweep_20260807_033117` | captures | 1 | 650 mA × 300 ms (1×1) | 30 s | cNN |
 
 ## `writeups/`
 
