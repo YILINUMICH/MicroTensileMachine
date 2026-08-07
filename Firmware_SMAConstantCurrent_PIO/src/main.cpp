@@ -2498,6 +2498,10 @@ void setup() {
     digitalWrite(TRIG_PIN, LOW);            // scope trigger idle LOW
 #if DBG_LOOP_LED
     pinMode(LEDG, OUTPUT);                  // loop-liveness blink (see loop())
+    pinMode(LEDB, OUTPUT);                  // host-connected flag (ON = true)
+    pinMode(LEDR, OUTPUT);                  // RX activity (ON = byte < 300 ms ago)
+    digitalWrite(LEDB, HIGH);               // Portenta LEDs are ACTIVE LOW
+    digitalWrite(LEDR, HIGH);
 #endif
 
     analogReadResolution(ADC_RES_BITS);
@@ -2587,13 +2591,26 @@ uint32_t loop_n      = 0;
 
 void loop() {
 #if DBG_LOOP_LED
-    // Loop-liveness LED, ~4 Hz square wave off millis(). THE DISCRIMINATOR for
-    // the USB wedge: after a silent-port event, LED FROZEN = the loop is hung
-    // inside a blocking CDC write (the wedge mechanism; TX_NONBLOCK is the
-    // fix). LED still BLINKING while the port is silent = the loop is alive
-    // and the CDC endpoint itself is dead — a different bug, and TX_NONBLOCK
-    // would keep the rig safe but not recover the port.
+    // RGB wedge diagnostic (LEDs are ACTIVE LOW). Read a silent port at a
+    // glance — bench result 2026-08-07 15:20: GREEN kept blinking through a
+    // full wedge, so the loop was ALIVE and the blocking-write-hang
+    // hypothesis is dead; the fault is in the mbed USB stack's CDC data
+    // path. BLUE and RED split that further:
+    //   GREEN ~4 Hz  loop alive (frozen = loop hung — never yet observed)
+    //   BLUE  ON     hostUp()'s cached connected()/DTR flag is TRUE
+    //   RED   ON     RX bytes seen in the last 300 ms
+    // Wedged + host holds port open + operator types: BLUE OFF = the
+    // DTR-assert never reached _terminal_connected (state callback dead);
+    // RED OFF while typing = OUT endpoint dead too (whole data path down);
+    // RED flashing = RX alive, replies being discarded by the stale-false
+    // connected() gate.
     digitalWrite(LEDG, ((millis() >> 7) & 1) ? HIGH : LOW);
+    digitalWrite(LEDB, host_link_up ? LOW : HIGH);
+    {
+        static uint32_t led_last_rx_ms = 0;
+        if (Serial.available()) led_last_rx_ms = millis();
+        digitalWrite(LEDR, (millis() - led_last_rx_ms < 300) ? LOW : HIGH);
+    }
 #endif
     static uint32_t last_loop_us = 0;
     uint32_t now_us = micros();
