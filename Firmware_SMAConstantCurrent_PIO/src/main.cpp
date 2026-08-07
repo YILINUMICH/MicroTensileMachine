@@ -147,6 +147,29 @@
 #include <drivers/ResetReason.h>
 #endif
 
+// ── USB self-heal (-D H7_USB_SELFHEAL_S=<seconds>, 0 = off) ───────────────
+// Bench 2026-08-07 15:50: the COMMON wedge mode leaves the loop ALIVE (green
+// LED blinking, IWDG kicked, watchdog can never fire) while the mbed USB
+// stack is dead in both directions — the firmware sees connected()==false
+// and zero RX even though the host holds the port open, which is
+// indistinguishable from "no host attached". So the only safe trigger is
+// time: if the connected flag has been false for H7_USB_SELFHEAL_S
+// continuous seconds, force a USB re-enumeration (USBDevice::disconnect()
+// → connect()), which drops D+ and rebuilds all endpoint + line state.
+// Genuinely-idle boards re-enumerate harmlessly (nobody is attached); a
+// wedged board comes back inside one window. If the corrupted stack crashes
+// during the re-init, the IWDG (above) catches it — enable both together.
+// The SMA state machine is untouched by a re-enum; this never fires while a
+// host is connected, so it cannot interrupt a live session.
+#ifndef H7_USB_SELFHEAL_S
+#define H7_USB_SELFHEAL_S 0
+#endif
+#if H7_USB_SELFHEAL_S
+#include "USB/PluggableUSBSerial.h"   // pulls in PluggableUSBDevice
+#include "USB/PluggableUSBDevice.h"   // PluggableUSBD(): the USBDevice that
+                                      //   owns connect()/disconnect()
+#endif
+
 #if TX_NONBLOCK
 #include "USB/PluggableUSBSerial.h"   // _SerialUSB: the real CDC device object
 
@@ -846,6 +869,16 @@ static inline bool hostUp() {
     return host_link_up;
 }
 
+#if H7_USB_SELFHEAL_S
+static uint32_t usb_heal_n        = 0;  // re-enumerations since boot ([STATUS])
+// Time of the last EVIDENCE the link works: a send_nb that accepted bytes, or
+// a received byte. Deliberately NOT the connected()/DTR flag — bench 2026-08-07
+// 16:01 showed the flag can wedge stale-TRUE, and under TX_NONBLOCK the loop
+// then survives happily dropping chunks forever, so a flag-gated window never
+// starts. Progress cannot lie: a wedged endpoint accepts nothing.
+static uint32_t usb_last_alive_ms = 0;
+#endif
+
 // ── ONE USB write per loop pass ───────────────────────────────────────────
 // USB-CDC penalises the NUMBER of writes far more than the bytes in them. The
 // loop used to emit two per pass — one from pumpSensors() for the src=1/2 batch
@@ -930,10 +963,16 @@ static inline void txEmit(const uint8_t* buf, size_t len) {
             tx_drop += (uint32_t)(len - sent);
             if (tx_fail_streak < 3) tx_fail_streak++;
             tx_stall_ms = millis();
+#if H7_USB_SELFHEAL_S
+            if (sent > 0) usb_last_alive_ms = millis();   // partial = link alive
+#endif
             return;
         }
     }
     tx_fail_streak = 0;
+#if H7_USB_SELFHEAL_S
+    usb_last_alive_ms = millis();       // endpoint accepted bytes: link works
+#endif
 #elif DBG_LOOP_PROFILE
     const uint32_t t_wr = micros();
     Serial.write(buf, len);
@@ -2436,6 +2475,13 @@ static void pumpSensors() {
         // becomes a fault mid-run.
         Serial.print(" dac_err=");        Serial.print(dac_fail_total);
         Serial.print(" tx_drop=");        Serial.print(tx_drop);
+#if H7_USB_SELFHEAL_S
+        // USB re-enumerations since boot. Nonzero right after a session opens
+        // = the board healed a wedge (or idled through 30 s windows) since
+        // the last session. Placed away from the m7_us/m4_us pair, whose
+        // adjacency the host's clock-offset regex requires.
+        Serial.print(" usb_heal=");       Serial.print(usb_heal_n);
+#endif
         Serial.print(" hb_ms=");          Serial.print(hb_timeout_ms);
         Serial.print(" sma_state=");      Serial.print((int)smaState);   // 0=IDLE
         // Clock-alignment check: M7's own clock vs the freshest M4 sample clock
@@ -2648,6 +2694,26 @@ void loop() {
     // Every pass. step/sweep/actuation are all state machines advanced from
     // this loop, so nothing legitimate can outlast the timeout.
     mbed::Watchdog::get_instance().kick();
+#endif
+#if H7_USB_SELFHEAL_S
+    {
+        // EVIDENCE-based trigger: usb_last_alive_ms advances on send_nb
+        // progress (txEmit) and on received bytes (here). NOT on the
+        // connected()/DTR flag, which wedges stale in either direction.
+        const uint32_t now_ms = millis();
+        if (Serial.available()) usb_last_alive_ms = now_ms;
+        if (now_ms - usb_last_alive_ms > H7_USB_SELFHEAL_S * 1000UL) {
+            // A full window with zero link evidence: idle board (harmless to
+            // re-enumerate) or wedged stack (this is the cure). If the
+            // corrupted stack hangs/crashes in here, the IWDG resets the
+            // chip — same recovery, one level harder.
+            usb_heal_n++;
+            PluggableUSBD().disconnect();   // detach D+ (host sees unplug)
+            delay(100);
+            PluggableUSBD().connect();      // re-attach → full re-enumeration
+            usb_last_alive_ms = now_ms;     // restart the window
+        }
+    }
 #endif
 #if DBG_LOOP_LED
     // RGB wedge diagnostic (LEDs are ACTIVE LOW). Read a silent port at a
