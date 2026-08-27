@@ -1,8 +1,11 @@
 # STATUS — Firmware_ADS131M04Test_PIO
 
-**Status:** **To-Test** — all three envs build clean, **nothing has been flashed
+**Status:** **To-Test** — all four envs build clean, **nothing has been flashed
 and no hardware exists yet**. Treat every number this firmware prints as
 unverified until plan §7's T1–T9 have actually been run.
+
+**Bench procedure:** [`../docs/MEMO_ADS131M04_bringup.md`](../docs/MEMO_ADS131M04_bringup.md)
+— wiring → connection → registers → configuration → conversion → UDP → sweeps.
 
 **Branch:** `feat/ads131m04`. **Plan:** [`../docs/ADS131M04_migration_plan.md`](../docs/ADS131M04_migration_plan.md).
 
@@ -43,12 +46,44 @@ than errors:
 | T8 | DC accuracy | **not implemented** |
 | T9 | reset recovery | `reset()` and `resetCommand()` exist; no console command to trigger them |
 
+## 2026-08-27 (later) — full M7 application; console replaced by host sweeps
+
+The planned interactive console was dropped in favour of scripted sweeps from
+`Experiment_ADS131M04Eval/` (plan §5.1). This firmware now provides the command
+surface those sweeps drive, plus the session contract the host's
+`lib_h7_session` requires:
+
+- commands `selftest / regs / rst / spi / osr / gain / poll / drdy / netcfg /
+  ping / help`, with **unknown commands ignored rather than wedging** — the host
+  session sends a few this image does not know
+- `[STATUS]` at 1 Hz, numeric key=value only (the host's regex accepts nothing
+  else), carrying `udp_on`, `crc_err`, `frames`, `drdy`, `rate`, `adc_ok`
+- the sample stream in the **production wire format** over UDP after `netcfg`,
+  batched to ≤1400 B of whole lines
+- `portenta_m7` now defaults to `-D H7_TRANSPORT_UDP=1`; `portenta_m7_usb` is
+  the no-Ethernet rollback
+
+All four envs build clean under `-Wall -Wextra` with **no warnings from our own
+sources** (the remaining ones are inside mbed's SocketWrapper).
+
+**Sampling is DRDY-gated, a deliberate departure from the ADS1263 path.** That
+path used blind timed polling because its DRDY was ADC1-only and an ISR waiting
+on edges freezes when they stop. Neither applies here: one DRDY covers all four
+channels, and at the default `DRDY_FMT=0` it is a LEVEL held low until the data
+is read — so a non-blocking level check in the main loop cannot hang. Every
+conversion is then read exactly once, which removes the duplicate-row problem
+the production stream has (~19% zero-order-hold rows, from polling faster than
+the ADC converts), and makes T6 free: conversions consumed == DRDY assertions.
+`poll <us>` switches to timed polling for an A/B.
+
+`adc.begin()` failing no longer halts: `[STATUS]` keeps flowing with `adc_ok=0`,
+so the host sees a diagnosable board instead of a dead port indistinguishable
+from a bad cable.
+
 ### Next
 
-Build out the plan §5 bench console (`spi`, `osr`, `gain`, `stream`, `noise`,
-`rst`, `netcfg`) and `tools/m04_bench.py`, so T3–T9 can be run at all. Until
-then this project can only demonstrate that the chip answers — not that it
-measures anything correctly.
+Flash it and walk `../docs/MEMO_ADS131M04_bringup.md`. Nothing here is
+bench-verified.
 
 ### Not started
 
