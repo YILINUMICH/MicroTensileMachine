@@ -168,59 +168,65 @@ constraint is the LCA-9PC's `Voltage Load 5 kΩ min`**; the Keyence voltage outp
 is a 100 Ω source with no minimum load stated (its spec table is column-shifted
 exactly like TI's — the "350 Ω max load" belongs to the *current* output).
 
-**The EVM's own divider provisions cannot do this.** From the BOM: `R1–R8` =
-1.00 kΩ populated, `R9–R16` = 49.9 Ω, `R17–R24` = 1.00 kΩ **DNP**. R1/R2 sit at
-the terminal block (they are the CT burden), *upstream* of R9:
+**The input network, read off the schematic (page 27).** Channel 0:
 
 ```
-J1-1 ──┬──────────── R9 (49.9) ──┬── AIN0P
-      R1 (1k)                    C9 (1nF, C0G)
-       ├── [JP1 3-4] ── GND      │
-      R2 (1k)                    │
-J1-3 ──┴──────────── R10 (49.9) ─┴── AIN0N
+J1-1 ──┬──── R9 (49.9) ──┬── R17 (1.00k, DNP) ──┬── AIN0P
+      R1 (1k)            │         │            │
+       ├── JP1[3-4] ─ GND│        GND          C9 (1nF, C0G)
+      R2 (1k)            │         │            │
+J1-3 ──┴──── R10 (49.9) ─┴── R18 (1.00k, DNP) ──┴── AIN0N
 ```
 
-Fitting R17 at its intended 1 kΩ against R9's 49.9 Ω gives ÷1.05 — nothing. A
-real ÷5 that way needs R17 ≈ 12.5 Ω, i.e. a 62 Ω load the LCA-9PC cannot drive.
+BOM: `R1–R8` = 1.00 kΩ populated, `R9–R16` = 49.9 Ω, `R17–R24` = 1.00 kΩ **DNP**.
+R1/R2 sit at the terminal block (they are the CT burden), *upstream* of R9;
+**R17/R18 are shunts to AGND**, downstream of it.
 
-**R1+R2 are already the bottom leg** — 2.00 kΩ across P–N. So one series resistor
-upstream completes it:
+Two consequences that decide the design:
 
-| Per channel | Value |
-|---|---|
-| Series resistor, inline in the signal lead | **8.2 kΩ** (0603; 10 kΩ equally fine) |
-| Bottom leg | **already fitted** — R1+R2 = 2.00 kΩ |
-| Capacitor | **none** |
+- **R17 alone cannot be the series element.** At 8.2 kΩ against R9's 49.9 Ω it
+  gives ÷1.006 — no attenuation. At its intended 1.00 kΩ it gives ÷1.05. A real
+  ÷5 from that pair needs R17 ≈ 12.5 Ω, i.e. a 62 Ω load the LCA-9PC cannot drive.
+- **R1+R2 are already a 2.00 kΩ shunt** across P–N, which is exactly the bottom
+  leg we want — so the series element is the only thing missing.
 
-- Ratio **÷5.10** → ±1.2 V FSR maps to **±6.12 V** at the sensor: a 0–5 V rail
-  with 18% headroom. (10 kΩ gives ÷6.00 / ±7.2 V; sensor-referred ADC noise is
-  12 µV vs 14 µV against an amp at 302 µV, so choose on availability.)
-- Sensor load **10.2 kΩ** — 2× the LCA-9PC minimum, 100× the Keyence source.
-- Thévenin into the ADC 1.61 kΩ vs its 330 kΩ input impedance → 0.5% gain error,
-  systematic and calibrated out in Stage 4.
-- Dissipation 2.45 mW in a 100 mW part, 5 V across a 50 V part — **ratings are
-  not a constraint here**, only values.
+### Two equivalent ways to build it
 
-**Jumpers: leave all JP1/JP2 jumpers OFF**, and run each sensor's own analog
-ground to pin 3. Installing `[3-4]` grounds R1/R2's midpoint and *halves* the
-bottom leg to 1 kΩ, which forces a 4 kΩ series resistor and drops the total load
-to exactly the LCA-9PC's 5 kΩ minimum. Jumpers off keeps the full 2 kΩ **and**
-gives a pseudo-differential connection that rejects ground-lead IR drop. JP3/JP4
-stay at the factory `[3-4]` so CH2/CH3 remain grounded for T7.
+Both give **÷5.10**, ±6.12 V at the sensor (18% headroom on a 0–5 V rail),
+10.2 kΩ sensor load (2× the LCA-9PC minimum), 1.61 kΩ Thévenin into the ADC.
 
-**Why no capacitor.** C9 is already 1000 pF **C0G/NP0**, and putting 8.2 kΩ
-upstream drops its corner from 1.594 MHz to **~93 kHz** — ~25 dB more rejection
-at f_MOD = 4.096 MHz, which is where a delta-sigma actually aliases. That is free.
-A kit capacitor would be X7R/X5R: on a node whose whole job is slow accurate DC,
-Class II ceramics bring dielectric absorption and are microphonic, on a rig with a
-moving stage and a Joule-heated wire. Their settling tails land on the same
-seconds timescale as SMA relaxation — **the artifact would be indistinguishable
-from the physics being measured**. If more filtering is ever wanted: C0G only,
-≤10 nF, across the bottom leg.
+**Option A — one resistor, no rework.** An **8.2 kΩ inline in the signal lead**,
+soldered right at the terminal block. R1+R2 stay as the bottom leg; R9 and R17
+untouched. Fully reversible. Solder it *at the terminal*, not mid-cable, so the
+high-impedance node is millimetres — the laser channel's EMI sensitivity is
+documented (`MEMORY: sma-thermal-laser-drive-feedthrough`).
 
-**Mechanical:** the series resistor has no on-board footprint (R9 is on the wrong
-side of R1/R2), so it goes inline in the signal wire — soldered between two short
-tails and heat-shrunk, or on a scrap of perfboard at the terminal block.
+**Option B — all on-board.** Per channel:
+
+| Position | Action | Value |
+|---|---|---|
+| **R9** | replace 49.9 Ω → | **8.2 kΩ** (series) |
+| **R17** | populate (was DNP) → | **2.0 kΩ** (shunt) |
+| **R1, R2** | **remove both** | — |
+
+**Removing R1/R2 is mandatory, not tidying.** They are upstream of R9, so left in
+place their 2 kΩ parallels the 10.2 kΩ divider and the sensor sees **1.67 kΩ** —
+under the LCA-9PC's 5 kΩ floor. This is the trap in the on-board route.
+
+N side either way: **R10 stays 49.9 Ω, R18 stays unfitted** — that input is the
+ground reference and needs no divider. Mirroring it (R10 → 8.2 k, R18 → 2.0 k)
+would match source impedance across the switched-cap front end, which is mildly
+better practice; the mismatch error is small and calibration absorbs it, so it is
+optional.
+
+Electrically the two options are identical. Option B is mechanically sounder and
+keeps the high-impedance node inside the board; Option A is one part and no
+rework. **Before committing to B, buzz continuity from an R17 pad to GND** — the
+schematic here was read from a text extraction, not a rendered image, and that is
+the one assumption the layout rests on.
+
+**Either way, ratings are not a constraint** — 2.45 mW in a 100 mW part, 5 V
+across a 50 V part. Only the values matter.
 
 `docs/MEMO_cable_map.md` gets a "Cable 1-M04" section when the wiring is actually
 made, filled in with the colours used — not before.
