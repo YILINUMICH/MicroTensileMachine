@@ -190,40 +190,72 @@ Two consequences that decide the design:
 - **R1+R2 are already a 2.00 kΩ shunt** across P–N, which is exactly the bottom
   leg we want — so the series element is the only thing missing.
 
-### Two equivalent ways to build it
+### How it is built — a small external board (decided 2026-08-27)
 
-Both give **÷5.10**, ±6.12 V at the sensor (18% headroom on a 0–5 V rail),
-10.2 kΩ sensor load (2× the LCA-9PC minimum), 1.61 kΩ Thévenin into the ADC.
+The on-EVM routes were considered and **rejected on practicality**: the EVM is
+dense and Option B below needs four 0603 operations per channel. The divider goes
+on a **small external board sitting between the sensors and the EVM**, which also
+keeps the ratio with the harness rather than with a particular EVM.
 
-**Option A — one resistor, no rework.** An **8.2 kΩ inline in the signal lead**,
-soldered right at the terminal block. R1+R2 stay as the bottom leg; R9 and R17
-untouched. Fully reversible. Solder it *at the terminal*, not mid-cable, so the
-high-impedance node is millimetres — the laser channel's EMI sensitivity is
-documented (`MEMORY: sma-thermal-laser-drive-feedthrough`).
+**The board carries ONLY the series resistor. This is not a shortcut — it is the
+optimum**, and the reason is worth writing down because the instinct is to put the
+whole divider on the new board:
 
-**Option B — all on-board.** Per channel:
+R1/R2 stay fitted, presenting 2 kΩ across the input whatever the jumpers do. Any
+bottom-leg resistor added externally lands in parallel with that:
 
-| Position | Action | Value |
-|---|---|---|
-| **R9** | replace 49.9 Ω → | **8.2 kΩ** (series) |
-| **R17** | populate (was DNP) → | **2.0 kΩ** (shunt) |
-| **R1, R2** | **remove both** | — |
+- effective bottom leg `B = R_bot ‖ 2 kΩ`, therefore always **< 2 kΩ**
+- for ÷5, `R_top = 4B`, so the sensor load is `5B`
+- the LCA-9PC needs ≥ 5 kΩ, i.e. `B ≥ 1 kΩ`
 
-**Removing R1/R2 is mandatory, not tidying.** They are upstream of R9, so left in
-place their 2 kΩ parallels the 10.2 kΩ divider and the sensor sees **1.67 kΩ** —
-under the LCA-9PC's 5 kΩ floor. This is the trap in the on-board route.
+`B = 2 kΩ` — the ceiling, and the lightest load available — occurs exactly when
+**no** external bottom resistor is fitted. Every resistor added there strictly
+lowers the load. So while R1/R2 are populated, the external board should hold one
+series resistor per channel and nothing else.
 
-N side either way: **R10 stays 49.9 Ω, R18 stays unfitted** — that input is the
-ground reference and needs no divider. Mirroring it (R10 → 8.2 k, R18 → 2.0 k)
-would match source impedance across the switched-cap front end, which is mildly
-better practice; the mismatch error is small and calibration absorbs it, so it is
-optional.
+| Per channel | |
+|---|---|
+| Series resistor | **8.2 kΩ** (10 kΩ equally fine → ÷6.00, ±7.2 V) |
+| Bottom leg | none — the EVM's R1+R2 = 2.00 kΩ |
+| Capacitor | none — the EVM's C9 is already 1000 pF C0G |
 
-Electrically the two options are identical. Option B is mechanically sounder and
-keeps the high-impedance node inside the board; Option A is one part and no
-rework. **Before committing to B, buzz continuity from an R17 pad to GND** — the
-schematic here was read from a text extraction, not a rendered image, and that is
-the one assumption the layout rests on.
+On a board a through-hole 1% metal film is preferable to a kit SMD (better
+tempco, easier handling); the difference is sub-mN against 5 mN of hysteresis, so
+either is acceptable.
+
+**Board features worth the space:**
+
+- **Silkscreen `JP1/JP2 ON EVM MUST BE OFF`.** The ratio now lives on *two*
+  boards. Installing JP1[3-4] — the factory default — halves the bottom leg to
+  1 kΩ and silently shifts the ratio **÷5.10 → ÷9.2**: a 1.8× gain error with no
+  error indication, reading as the load cell measuring 55% of true.
+- **A bypass jumper per channel** shorting the series resistor. The ADS1263 wants
+  no divider (±5 V FSR), so one harness then serves both ADCs and the Stage 2
+  same-day A/B becomes a jumper move instead of a rewire.
+- **Unpopulated bottom-leg pads** labelled *"fit only if EVM R1/R2 removed"* — a
+  path to a self-contained divider later, at no cost now.
+
+Wiring per channel: sensor signal → series resistor → J1-1 (AIN0P); sensor analog
+ground → J1-3 (AIN0N) straight through; star the grounds at the board.
+
+### Rejected: the two on-EVM routes
+
+Kept for the record, and because the second contains a trap.
+
+**A — 8.2 kΩ inline at the terminal block.** Electrically identical to the
+external board; rejected only because a bare 0603 in a flying lead is fragile.
+
+**B — all on-board:** R9 replace 49.9 Ω → 8.2 kΩ; R17 populate (was DNP) →
+2.0 kΩ; **R1, R2 remove both**. Rejected as too much rework on a dense EVM.
+**Removing R1/R2 there is mandatory, not tidying** — they sit upstream of R9, so
+left in place their 2 kΩ parallels the divider and the sensor sees **1.67 kΩ**,
+under the LCA-9PC's 5 kΩ floor.
+
+Either on-EVM route needs an **R17-pad-to-GND continuity check** first: the
+schematic above was read from a text extraction, not a rendered image.
+
+N side, all routes: **R10 stays 49.9 Ω, R18 stays unfitted** — that input is the
+ground reference and needs no divider.
 
 **Either way, ratings are not a constraint** — 2.45 mW in a 100 mW part, 5 V
 across a 50 V part. Only the values matter.
