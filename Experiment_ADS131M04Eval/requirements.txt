@@ -1,0 +1,5 @@
+# Host-side deps for the ADS131M04 evaluation.
+# The stream parser + UDP session are REUSED from
+# ../Experiment_SMAThermalCharacterization/lib_h7_session.py via a sys.path
+# shim (see lib_m04.py), so that module's requirements apply too.
+pyserial>=3.5

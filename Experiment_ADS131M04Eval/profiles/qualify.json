@@ -1,0 +1,32 @@
+{
+  "name": "qualify",
+  "port": "COM8",
+  "transport": "udp",
+  "conditions": [
+    {"label": "t3_spi_0500k", "spi_hz":   500000, "osr": 6, "gain": 1, "secs": 60,
+     "note": "T3 clock ladder - 500 kHz is what the ADS1263 uses on this harness"},
+    {"label": "t3_spi_2000k", "spi_hz":  2000000, "osr": 6, "gain": 1, "secs": 60,
+     "note": "T3 clock ladder - driver default"},
+    {"label": "t3_spi_8000k", "spi_hz":  8000000, "osr": 6, "gain": 1, "secs": 60,
+     "note": "T3 clock ladder"},
+    {"label": "t3_spi_16000k","spi_hz": 16000000, "osr": 6, "gain": 1, "secs": 60,
+     "note": "T3 clock ladder - 25 MHz is the part's ceiling"},
+
+    {"label": "t5_osr_4096",  "spi_hz": 2000000, "osr": 5, "gain": 1, "secs": 60,
+     "note": "T5 rate - nominal 1000 SPS"},
+    {"label": "t5_osr_8192",  "spi_hz": 2000000, "osr": 6, "gain": 1, "secs": 60,
+     "note": "T5 rate - nominal 500 SPS, the production candidate"},
+    {"label": "t5_osr_16256", "spi_hz": 2000000, "osr": 7, "gain": 1, "secs": 60,
+     "note": "T5 rate - settles the 16256-vs-16384 datasheet contradiction"},
+
+    {"label": "t7_gain_1",    "spi_hz": 2000000, "osr": 6, "gain": 1, "secs": 60,
+     "note": "T7 shorted-input noise - THE DECIDING TEST, spec 2.39 uV rms"},
+    {"label": "t7_gain_2",    "spi_hz": 2000000, "osr": 6, "gain": 2, "secs": 60,
+     "note": "T7 - spec 2.13 uV rms"},
+    {"label": "t7_gain_4",    "spi_hz": 2000000, "osr": 6, "gain": 4, "secs": 60,
+     "note": "T7 - spec 2.13 uV rms"},
+
+    {"label": "t4_soak",      "spi_hz": 2000000, "osr": 6, "gain": 1, "secs": 900,
+     "note": "T4 CRC integrity - needs >= 1e6 frames with zero errors. Re-run at the T3-adopted clock once T3 has an answer."}
+  ]
+}

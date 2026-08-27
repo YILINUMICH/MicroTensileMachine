@@ -481,34 +481,75 @@ The project therefore also ships an **M4 idle image** (`portenta_m4_idle`, the
 first, so that whatever M4 firmware is currently resident is not hammering SPI1
 underneath the test.
 
-**Commands** (USB-CDC, same single-owner text channel as the CC fork):
+**Commands** (USB-CDC, same single-owner text channel as the CC fork). These
+are driven by the host sweep, not typed:
 
 | Command | Does |
 |---|---|
-| `id` | read ID / STATUS / MODE / CLOCK / GAIN1 and print decoded |
-| `regs` | full register dump |
-| `read` | one frame, print four channels as code + volts + CRC state |
-| `spi <hz>` | change SPI clock at runtime — this is how T3 is run |
-| `osr <n>` / `gain <ch> <g>` | reconfigure without a reflash |
-| `stream <sec>` | free-run frames, report achieved rate, CRC error count, DRDY edge count |
-| `noise <sec>` | stream and report per-channel mean / rms / peak-to-peak in µV |
-| `netcfg <ip> <port>` | arm the UDP stream — identical syntax and semantics to the CC fork |
-| `rst` | hardware SYNC/RESET pulse + re-init |
+| `selftest` | re-run T1 (ID) + T2 (register round-trip), print `[T1]`/`[T2]` verdicts |
+| `spi <hz>` | change SPI clock at runtime — this is how T3's ladder is walked |
+| `osr <code>` / `gain <ch> <g>` | reconfigure without a reflash (T5, T7) |
+| `rst` | hardware SYNC/RESET pulse + re-init (T9) |
+| `netcfg <ip> <port>` | arm the UDP stream — identical to the CC fork |
+| `ping` | no-op; the host session sends it as a heartbeat |
+| `regs` | full register dump (diagnostic) |
+
+Unknown commands **must be ignored, never wedge the parser** — the host session
+sends a few the firmware will not know.
+
+**`[STATUS]` at 1 Hz on serial**, carrying at minimum `udp_on` (required by
+`lib_h7_session`), plus `crc_err` and `frames` as running totals — the report
+takes deltas across a condition, so a board that arrives with a nonzero count
+does not fail a condition that added none.
 
 **Wire format is deliberately identical to the production stream** —
-`t_ms \t src \t raw \t volts \t hw_us \t seq`, with CH0 emitted as `src=1` and CH1
-as `src=2`. That is what lets the existing host tooling read this firmware with no
-changes at all, and it means Stage 2 can be captured and analysed with
-`lib_h7_session` rather than a throwaway script.
+`t_ms 	 src 	 raw 	 volts 	 hw_us 	 seq` — with CH0 as `src=1` and CH1 as
+`src=2`. CH2/CH3 borrow `src=3`/`src=4`, which in production mean SMA
+voltage/current: harmless because this firmware is standalone, but it is why
+these captures must never be fed to the thermal module's pipeline.
 
-**Host side:** `Firmware_ADS131M04Test_PIO/tools/m04_bench.py` — drives the
-commands over serial, receives the UDP stream, and prints the acceptance numbers
-from §7 directly (rate, CRC error rate, per-channel noise in µV rms, seq-gap
-loss). It reuses `Experiment_SMAThermalCharacterization/lib_h7_session.py` through
-the same `sys.path` shim the rest of the repo uses, rather than reimplementing a
-parser that could disagree with production.
+### 5.1 Host side — a sweep and a report, NOT a console
 
----
+**Superseded 2026-08-27.** This section originally specified an interactive
+bench console. It is replaced by a sweep runner plus a report, in a separate
+module: **`Experiment_ADS131M04Eval/`**.
+
+The reasoning is that the T-list is *already* a set of parameter ladders — T3
+sweeps the SPI clock, T5 sweeps OSR, T7 sweeps gain — and every acceptance
+criterion in §7 is a measurement over a *held condition*, not something to read
+off scrollback. Captured to files a run is reproducible, diffable against the
+next one, and committed with the results. This mirrors
+`Experiment_SMAThermalCharacterization`'s sweep + report split, for the same
+reasons, and the module follows its conventions (`operator_` entry points,
+`lib_` internals, `--dry-run` before anything opens the port, profile copied
+into the output folder).
+
+```
+python operator_m04_sweep.py --profile profiles/qualify.json --dry-run
+python operator_m04_sweep.py --profile profiles/qualify.json
+python operator_m04_report.py data/m04_<stamp>
+```
+
+`data/` stays **flat**: per `CLAUDE.md` a module earns the `raw/`+`derived/`
+split only once it mixes code, captures and outputs, and this one does not.
+
+The report turns §7 into computed verdicts (`crc`, `rate`, `noise`, `spread`,
+`loss`) with the thresholds living in `lib_m04.py` so the sweep and the report
+can never disagree. It also resolves T3 explicitly — fastest clean clock, then
+one step back — keyed on the **CRC check alone**, since a condition failing on
+noise or rate says nothing about link integrity.
+
+**A frozen converter reads as a perfect noise result**, which is why `rate` and
+`loss` are checked alongside `noise`. That failure is real on this part: with
+CLKIN absent the chip still answers register reads and simply never converts.
+The rate check derives SPS from `hw_us` — the ADC's own timeline — so a stalled
+converter cannot hide behind a healthy-looking capture duration.
+
+**The session contract** is what makes this cheap: the sweep reuses
+`lib_h7_session` rather than reimplementing a parser that could disagree with
+production about what a sample line means. It passes `cal=()` (the SMA
+calibration commands mean nothing here) and never calls `disarm()` (nothing is
+actuated).
 
 ## 6. What does **not** change
 
