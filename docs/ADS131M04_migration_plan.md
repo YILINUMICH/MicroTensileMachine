@@ -215,51 +215,76 @@ series resistor per channel and nothing else.
 
 | Per channel | |
 |---|---|
-| Series resistor | **15 kΩ** through-hole → ÷8.50, FSR ±10.2 V |
+| Series resistor | **10 kΩ** through-hole → ÷6.00, FSR ±7.2 V |
 | Bottom leg | none — the EVM's R1+R2 = 2.00 kΩ |
 | Capacitor | none — the EVM's C9 is already 1000 pF C0G |
 
-**Why 15 kΩ and not less** (chosen from 6.8 / 10 / 15 kΩ on hand):
+**Why 10 kΩ** (chosen from 6.8 / 10 / 15 kΩ on hand):
 
 | R_top | ratio | FSR at sensor | Load | |
 |---|---|---|---|---|
 | 6.8 k | ÷4.40 | ±5.28 V | 8.8 kΩ | rejected |
-| 10 k | ÷6.00 | ±7.20 V | 12 kΩ | workable |
-| **15 k** | **÷8.50** | **±10.2 V** | **17 kΩ** | **chosen** |
+| **10 k** | **÷6.00** | **±7.20 V** | **12 kΩ** | **chosen** |
+| 15 k | ÷8.50 | ±10.2 V | 17 kΩ | over-ranged |
 
-**The binding ceiling today is the amp, not the ADC.** The LCA-9PC is on its
-0–5 V range and **already rails at exactly 5.000 V = 490.15 mN**: that value is
-the single most common peak in both merged campaign tables (8/260 rows in
-`20260731_dynalloy_15mm_cool30s`, 28/264 in `20260805_dynalloy_10mm` — 3% and
-11% of cycles), while every other peak value occurs at most twice. It is a clip,
-not a coincidence. The pipeline's `railed` column already flags it.
+Signals to cover: the load cell reaches **5.000 V** (see below) and the Keyence
+emits a fixed **5.5 V** when it has no target. ÷6.00 covers 5.5 V with 31%
+headroom.
 
-- **6.8 kΩ rejected:** ±5.28 V is only 5.6% above that rail, and it clips the
-  Keyence's **5.5 V fixed "no target" output** — a lost laser target would become
+- **6.8 kΩ rejected:** ±5.28 V is only 5.6% above the load cell's rail, and it
+  clips the Keyence's 5.5 V no-target output — a lost target would become
   indistinguishable from a saturated reading instead of an identifiable value.
-- **15 kΩ over 10 kΩ:** because the force channel is already railing, re-jumpering
-  the LCA-9PC to its `0 to ±10V` range is a live prospect, and ±10.2 V FSR is the
-  only one of the three that survives it without another change. It also gives the
-  lightest sensor load — 3.4× the LCA-9PC minimum, 170× the Keyence source.
-- **Cost of the extra attenuation: nil.** Sensor-referred ADC noise is 20.3 µV
-  against the amp's own 302 µV (+0.23% in quadrature), and 40 nm against the
-  laser's ~3.3 µm of documented artifact.
+- **15 kΩ rejected as over-ranged.** It was briefly chosen to survive a possible
+  re-jumper of the LCA-9PC to `0 to ±10V`, but that re-range is not decided, and
+  changing it later is one through-hole resistor on our own board. Size to the
+  signal that exists.
+- A unipolar 0–5.5 V signal uses only the positive half of a bipolar ADC, so
+  ~38% of the code space is unused at ÷6. That is inherent and not worth fixing:
+  ADC noise is 14.3 µV against the amp's own 302 µV, so three bits could be
+  thrown away without a measurable difference.
 
-Absolute input range at gain 1 is **AGND − 1.3 V to AVDD**, so the load cell's
-bipolar output is safe: −5 V lands at −0.59 V at ÷8.5, well inside.
+**Context — the amp rails before the ADC does.** The LCA-9PC is on its 0–5 V
+range and already saturates at exactly **5.000 V = 490.15 mN**: that value is the
+single most common peak in both merged campaign tables (8/260 rows in
+`20260731_dynalloy_15mm_cool30s`, 28/264 in `20260805_dynalloy_10mm` — 3% and 11%
+of cycles), while every other peak occurs at most twice. A clip, not a
+coincidence; the pipeline's `railed` column already flags it. If that ceiling ever
+becomes limiting the fix is the LCA-9PC range jumper, not the ADC — and then the
+divider resistor changes to 15 kΩ.
 
-A through-hole 1% metal film is preferable to a kit SMD here (better tempco,
-easier handling); the difference is sub-mN against 5 mN of hysteresis.
+### Negative inputs are fine — the POSITIVE side is the tight one
 
-**Board features worth the space:**
+Worth stating because it inverts the usual single-supply intuition:
+
+| | limit |
+|---|---|
+| AIN recommended operating (gain 1) | **AGND − 1.3 V** … AVDD (3.3 V) |
+| AIN absolute maximum | **AGND − 1.6 V** … AVDD + 0.3 V (**3.6 V**) |
+| Input current, absolute maximum | ±10 mA |
+
+The ADC is natively bipolar (24-bit two's complement, `800000h` at −FSR to
+`7FFFFFh` at +FSR), and the integrated negative charge pump lets the pins sit
+1.3 V *below* ground — the datasheet is explicit that there are deliberately no
+shunt diodes to AGND, which is what permits it. At ÷6 the load cell's bipolar
+−5 V lands at −0.833 V, inside with 36% margin; normal operation is barely
+negative at all (`V0 = −34 mV` at zero force → −5.7 mV at the ADC).
+
+But there is only **0.3 V of headroom above AVDD**. Any path that puts an
+undivided sensor output on an ADS131M04 input is a **destructive** fault, not a
+bad reading: 5.5 V is 1.9 V past absolute maximum, and with only R9's 49.9 Ω plus
+the sensor's ~100 Ω limiting it, ~13 mA flows against a ±10 mA absolute maximum.
+
+**Therefore: no bypass jumper on the divider board.** An earlier draft proposed
+one so a single harness could serve the ADS1263 A/B; that jumper, left installed
+with the M04 connected, destroys the part. For the A/B, unplug the divider board
+and wire the sensor to the ADS1263 directly.
+
+**Board features worth the space:****Board features worth the space:**
 
 - **Silkscreen `JP1/JP2 ON EVM MUST BE OFF`.** The ratio now lives on *two*
   boards. Installing JP1[3-4] — the factory default — halves the bottom leg to
   1 kΩ and silently shifts the ratio **÷5.10 → ÷9.2**: a 1.8× gain error with no
   error indication, reading as the load cell measuring 55% of true.
-- **A bypass jumper per channel** shorting the series resistor. The ADS1263 wants
-  no divider (±5 V FSR), so one harness then serves both ADCs and the Stage 2
-  same-day A/B becomes a jumper move instead of a rewire.
 - **Unpopulated bottom-leg pads** labelled *"fit only if EVM R1/R2 removed"* — a
   path to a self-contained divider later, at no cost now.
 
