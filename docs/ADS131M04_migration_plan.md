@@ -161,6 +161,67 @@ The REF7050 (Cable 2) is **not connected to this board** — it has no external
 reference input. Leave the reference wired to the ADS1263 EVM so that board stays
 functional for A/B without a rebuild.
 
+### 3.1 The ÷5 attenuator — one resistor per channel, no capacitor
+
+Settled 2026-08-27 from the EVM BOM plus both sensor manuals. **The binding
+constraint is the LCA-9PC's `Voltage Load 5 kΩ min`**; the Keyence voltage output
+is a 100 Ω source with no minimum load stated (its spec table is column-shifted
+exactly like TI's — the "350 Ω max load" belongs to the *current* output).
+
+**The EVM's own divider provisions cannot do this.** From the BOM: `R1–R8` =
+1.00 kΩ populated, `R9–R16` = 49.9 Ω, `R17–R24` = 1.00 kΩ **DNP**. R1/R2 sit at
+the terminal block (they are the CT burden), *upstream* of R9:
+
+```
+J1-1 ──┬──────────── R9 (49.9) ──┬── AIN0P
+      R1 (1k)                    C9 (1nF, C0G)
+       ├── [JP1 3-4] ── GND      │
+      R2 (1k)                    │
+J1-3 ──┴──────────── R10 (49.9) ─┴── AIN0N
+```
+
+Fitting R17 at its intended 1 kΩ against R9's 49.9 Ω gives ÷1.05 — nothing. A
+real ÷5 that way needs R17 ≈ 12.5 Ω, i.e. a 62 Ω load the LCA-9PC cannot drive.
+
+**R1+R2 are already the bottom leg** — 2.00 kΩ across P–N. So one series resistor
+upstream completes it:
+
+| Per channel | Value |
+|---|---|
+| Series resistor, inline in the signal lead | **8.2 kΩ** (0603; 10 kΩ equally fine) |
+| Bottom leg | **already fitted** — R1+R2 = 2.00 kΩ |
+| Capacitor | **none** |
+
+- Ratio **÷5.10** → ±1.2 V FSR maps to **±6.12 V** at the sensor: a 0–5 V rail
+  with 18% headroom. (10 kΩ gives ÷6.00 / ±7.2 V; sensor-referred ADC noise is
+  12 µV vs 14 µV against an amp at 302 µV, so choose on availability.)
+- Sensor load **10.2 kΩ** — 2× the LCA-9PC minimum, 100× the Keyence source.
+- Thévenin into the ADC 1.61 kΩ vs its 330 kΩ input impedance → 0.5% gain error,
+  systematic and calibrated out in Stage 4.
+- Dissipation 2.45 mW in a 100 mW part, 5 V across a 50 V part — **ratings are
+  not a constraint here**, only values.
+
+**Jumpers: leave all JP1/JP2 jumpers OFF**, and run each sensor's own analog
+ground to pin 3. Installing `[3-4]` grounds R1/R2's midpoint and *halves* the
+bottom leg to 1 kΩ, which forces a 4 kΩ series resistor and drops the total load
+to exactly the LCA-9PC's 5 kΩ minimum. Jumpers off keeps the full 2 kΩ **and**
+gives a pseudo-differential connection that rejects ground-lead IR drop. JP3/JP4
+stay at the factory `[3-4]` so CH2/CH3 remain grounded for T7.
+
+**Why no capacitor.** C9 is already 1000 pF **C0G/NP0**, and putting 8.2 kΩ
+upstream drops its corner from 1.594 MHz to **~93 kHz** — ~25 dB more rejection
+at f_MOD = 4.096 MHz, which is where a delta-sigma actually aliases. That is free.
+A kit capacitor would be X7R/X5R: on a node whose whole job is slow accurate DC,
+Class II ceramics bring dielectric absorption and are microphonic, on a rig with a
+moving stage and a Joule-heated wire. Their settling tails land on the same
+seconds timescale as SMA relaxation — **the artifact would be indistinguishable
+from the physics being measured**. If more filtering is ever wanted: C0G only,
+≤10 nF, across the bottom leg.
+
+**Mechanical:** the series resistor has no on-board footprint (R9 is on the wrong
+side of R1/R2), so it goes inline in the signal wire — soldered between two short
+tails and heat-shrunk, or on a scrap of perfboard at the terminal block.
+
 `docs/MEMO_cable_map.md` gets a "Cable 1-M04" section when the wiring is actually
 made, filled in with the colours used — not before.
 
@@ -450,9 +511,11 @@ be kept unmerged indefinitely for the write-up.
    would be cleaner still but invalidates `k`/`V₀`
    (`MEMORY: laser-analog-window-vs-sensor-range`) — a weaker objection than
    usual here, since Stage 4 recalibrates regardless.
-   **Recommendation: divider on the EVM inputs.** It is reversible, it keeps the
-   two boards swap-in-place for A/B, and the SNR argument for re-ranging buys
-   nothing when the amp is already 25× noisier than the converter.
+   **RESOLVED 2026-08-27 — see §3.1.** Divider at the EVM input terminals: one
+   8.2 kΩ series resistor per channel against the board's existing 2.00 kΩ
+   (R1+R2), no capacitor. Reversible, keeps both boards swap-in-place for A/B,
+   and the SNR argument for re-ranging the amps buys nothing when the amp is
+   already 25× noisier than the converter.
 2. **500 SPS or 1 kSPS?** OSR 8192 matches today's 400 SPS most closely; OSR 4096
    doubles the rate for a 1.4× noise cost (3.38 vs 2.39 µV rms). The M4 poll loop
    and the ring absorb either. Cheap to A/B once T5 passes.
