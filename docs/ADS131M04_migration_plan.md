@@ -215,13 +215,41 @@ series resistor per channel and nothing else.
 
 | Per channel | |
 |---|---|
-| Series resistor | **8.2 kΩ** (10 kΩ equally fine → ÷6.00, ±7.2 V) |
+| Series resistor | **15 kΩ** through-hole → ÷8.50, FSR ±10.2 V |
 | Bottom leg | none — the EVM's R1+R2 = 2.00 kΩ |
 | Capacitor | none — the EVM's C9 is already 1000 pF C0G |
 
-On a board a through-hole 1% metal film is preferable to a kit SMD (better
-tempco, easier handling); the difference is sub-mN against 5 mN of hysteresis, so
-either is acceptable.
+**Why 15 kΩ and not less** (chosen from 6.8 / 10 / 15 kΩ on hand):
+
+| R_top | ratio | FSR at sensor | Load | |
+|---|---|---|---|---|
+| 6.8 k | ÷4.40 | ±5.28 V | 8.8 kΩ | rejected |
+| 10 k | ÷6.00 | ±7.20 V | 12 kΩ | workable |
+| **15 k** | **÷8.50** | **±10.2 V** | **17 kΩ** | **chosen** |
+
+**The binding ceiling today is the amp, not the ADC.** The LCA-9PC is on its
+0–5 V range and **already rails at exactly 5.000 V = 490.15 mN**: that value is
+the single most common peak in both merged campaign tables (8/260 rows in
+`20260731_dynalloy_15mm_cool30s`, 28/264 in `20260805_dynalloy_10mm` — 3% and
+11% of cycles), while every other peak value occurs at most twice. It is a clip,
+not a coincidence. The pipeline's `railed` column already flags it.
+
+- **6.8 kΩ rejected:** ±5.28 V is only 5.6% above that rail, and it clips the
+  Keyence's **5.5 V fixed "no target" output** — a lost laser target would become
+  indistinguishable from a saturated reading instead of an identifiable value.
+- **15 kΩ over 10 kΩ:** because the force channel is already railing, re-jumpering
+  the LCA-9PC to its `0 to ±10V` range is a live prospect, and ±10.2 V FSR is the
+  only one of the three that survives it without another change. It also gives the
+  lightest sensor load — 3.4× the LCA-9PC minimum, 170× the Keyence source.
+- **Cost of the extra attenuation: nil.** Sensor-referred ADC noise is 20.3 µV
+  against the amp's own 302 µV (+0.23% in quadrature), and 40 nm against the
+  laser's ~3.3 µm of documented artifact.
+
+Absolute input range at gain 1 is **AGND − 1.3 V to AVDD**, so the load cell's
+bipolar output is safe: −5 V lands at −0.59 V at ÷8.5, well inside.
+
+A through-hole 1% metal film is preferable to a kit SMD here (better tempco,
+easier handling); the difference is sub-mN against 5 mN of hysteresis.
 
 **Board features worth the space:**
 
