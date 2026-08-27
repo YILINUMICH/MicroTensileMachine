@@ -178,10 +178,21 @@ corrupted command is caught by reading the register back, and enabling it would
 cost a word on every frame.
 
 **4.4 SYNC/RESET is one pin doing two jobs, distinguished only by pulse width**
-(§6.6): low for ≥8 t_CLKIN resets the device, low for ≥2048 t_CLKIN synchronises
-it. At 8.192 MHz that is ~1 µs versus ~250 µs. The driver must hold the line low
-long enough to be unambiguous and must never generate an accidental
-mid-length pulse.
+(§6.6, §8.4.1.2, §8.5.2) — and **the short pulse is the one that does NOT reset**:
+
+- **≥ 2048 t_CLKIN** (t_w(RSL)) → **reset**. At 8.192 MHz that is **250 µs**.
+- **1 … 2047 t_CLKIN** (t_w(SYL)) → **synchronise** — filters realigned, registers
+  left alone. That is 122 ns … 250 µs.
+
+So a "reset" pulse of a few microseconds silently performs a *sync* instead: the
+chip keeps whatever configuration it had, keeps streaming, and looks fine. The
+driver holds the line low for 1 ms to sit clear of the boundary, and then waits
+t_REGACQ (5 µs) or a DRDY rising edge before talking to it — the device ignores
+all SPI traffic before that point. Power-on reset takes t_POR = 250 µs.
+
+*(Noted because the `-layout` text extraction of Table 6.6 mangles these two rows
+into each other and reads as though reset were 8 t_CLKIN. It is not. Values above
+are read off the raw table: t_w(RSL) min 2048 t_CLKIN, t_w(SYL) 1–2047 t_CLKIN.)*
 
 **4.5 WREG payload sits immediately after the command word**, and the input CRC —
 when enabled — goes *after* the data, not in a fixed slot (§8.5.1.10.8). With
