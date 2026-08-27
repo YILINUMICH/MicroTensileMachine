@@ -60,9 +60,30 @@ maps ~10 mm onto 0–5 V (`MEMORY: laser-analog-window-vs-sensor-range`), so
 divider — both are one to two orders of magnitude below the laser's *own*
 documented artifacts (a ~3.3 µm drive-feedthrough step, a 65.8 Hz instrumental
 tone carrying 74% of the idle variance; `MEMORY: sma-thermal-laser-drive-feedthrough`).
-The laser channel is not ADC-limited either way. **The load cell is the open
-question** — its LCA-9PC output span and working noise have to be measured before
-this trade can be called, and that measurement is Stage 2.
+The laser channel is not ADC-limited either way.
+
+**The load cell is not ADC-limited either — resolved 2026-08-27 from existing
+data, not from the bench.** `Calibrate_LoadCell/data/2026-05-28_run07_points.csv`
+already holds what was needed:
+
+- Sensitivity **10.2 mV/mN** (`calibration.json`), sweeping 0 → 447 mN as
+  **0 → 4.53 V**. So the amp works on a 0–5 V rail and needs **÷5** to fit ±1.2 V
+  (÷4.17 bare minimum). Undivided, the ADS131M04 would clip at **±118 mN** —
+  well inside the 172–490 mN `F_base` the thermal campaigns actually run at.
+- Per-point scatter over 500 samples: **302 µV rms median, 547 µV max**. The
+  ADS1263's own noise is 1.3 µV; the ADS131M04 behind ÷5 would be **~12 µV**.
+  Added in quadrature onto 302 µV that is **+0.08%**, or **1.2 µN rms** in force
+  units — against the **~5 mN of mechanical hysteresis** already carried as a
+  known uncertainty in `calibration.json`, a factor of ~4000.
+
+What makes that conclusive rather than suggestive: run07 recorded the *same* load
+cell through **both** ADS1263 converters at once (the `adc2_xcompare` path), and
+both saw ~300–600 µV. The noise is upstream of the converter — the amp and the
+mechanics — so changing the ADC cannot move it.
+
+**Both sensor channels therefore absorb the 17 dB loss.** What Stage 2 still has
+to prove is the *divider*: that ÷5 is built accurately, is stable, and does not
+clip at peak force — not whether the converter is quiet enough.
 
 Secondary benefits, none of which alone would justify the swap: the REF7050 and
 its cable disappear; one frame replaces two multi-byte register transactions, so
@@ -342,9 +363,11 @@ kill the whole idea, so run it early.
 through whatever attenuation §2.2 forced. Still M7-only, still no ring, still no
 SMA drive.
 
-- Measure the LCA-9PC output span and its noise on this converter. **This is the
-  measurement that decides whether the 17 dB DR loss is affordable** (§1) — it is
-  the one channel where the answer is genuinely unknown.
+- ~~Measure the LCA-9PC output span and its noise.~~ **Answered from
+  `Calibrate_LoadCell/` run07 (§1): 10.2 mV/mN, 0–4.53 V rail, ÷5 divider,
+  amp noise ~302 µV rms vs the ADC's ~12 µV.** What is left is to verify the
+  divider as built — ratio accuracy, tempco, and no clipping at peak force
+  (`F_base` reaches 490 mN, `dF` up to 309 mN on top).
 - Zaber displacement sweep: laser volts must be monotonic in µm with the same
   slope sign and a sane residual. Compare directly against a `Calibrate_LaserHead`
   sweep run on the ADS1263 **the same day, same setup** — this is what the
@@ -420,11 +443,16 @@ be kept unmerged indefinitely for the write-up.
 
 ## 12. Open questions for the bench
 
-1. **What attenuation, and where?** A divider on the EVM inputs is quickest; the
-   Keyence amp's own output range is selectable and would be cleaner for SNR but
-   invalidates `k`/`V₀` (`MEMORY: laser-analog-window-vs-sensor-range`) — though
-   Stage 4 recalibrates anyway, so that objection is weaker here than usual.
-   Needs the actual LCA-9PC span from Stage 2 before it can be settled.
+1. **What attenuation, and where?** The *ratio* is now known — **÷5 on both
+   channels** (load cell 0–4.53 V per §1; laser 0–5 V). What is still open is
+   *where*: a divider on the EVM inputs is quickest and its noise cost is
+   provably negligible (§1), while re-ranging the sensors' own analog outputs
+   would be cleaner still but invalidates `k`/`V₀`
+   (`MEMORY: laser-analog-window-vs-sensor-range`) — a weaker objection than
+   usual here, since Stage 4 recalibrates regardless.
+   **Recommendation: divider on the EVM inputs.** It is reversible, it keeps the
+   two boards swap-in-place for A/B, and the SNR argument for re-ranging buys
+   nothing when the amp is already 25× noisier than the converter.
 2. **500 SPS or 1 kSPS?** OSR 8192 matches today's 400 SPS most closely; OSR 4096
    doubles the rate for a 1.4× noise cost (3.38 vs 2.39 µV rms). The M4 poll loop
    and the ring absorb either. Cheap to A/B once T5 passes.
