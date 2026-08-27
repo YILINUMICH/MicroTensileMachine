@@ -32,7 +32,7 @@ than errors:
   until timeout in exactly that case.) Setting `DRDY_FMT = 1b` turns the pin
   into a ~0.5 µs pulse that polling cannot see; the driver never sets it.
 
-### Test progress — plan §7
+### Test progress — plan §7 *(SUPERSEDED by the entry below)*
 
 | | Test | State |
 |---|---|---|
@@ -80,13 +80,28 @@ the ADC converts), and makes T6 free: conversions consumed == DRDY assertions.
 so the host sees a diagnosable board instead of a dead port indistinguishable
 from a bad cable.
 
+### Test progress — plan §7 (CURRENT)
+
+| | Test | State |
+|---|---|---|
+| T1 | ID reads `0x24xx` | **implemented** (`selftest`, boot) — unrun |
+| T2 | register round-trip | **implemented** (`selftest`) — unrun |
+| T3 | SPI clock ladder | **implemented** — `spi <hz>` + host ladder + adoption logic |
+| T4 | CRC integrity ≥10⁶ frames | **implemented** — `t4_soak` cell, `crc_err`/`frames` in `[STATUS]` |
+| T5 | rate accuracy ±1% | **implemented** — `osr <code>` + host rate check off `hw_us` |
+| T6 | DRDY count | **partial** — `drdy` counts conversions consumed and is exact under DRDY gating; no automated host check yet |
+| T7 | shorted-input noise | **implemented** — `gain <ch> <g>` + host check vs Table 7-1 |
+| T8 | DC accuracy | **not implemented** — needs a known DC source and a nominal |
+| T9 | reset recovery | **partial** — `rst` exists; no host condition drives it mid-capture |
+
 ### Next
 
-Flash it and walk `../docs/MEMO_ADS131M04_bringup.md`. Nothing here is
-bench-verified.
+Flash it and walk [`../docs/MEMO_ADS131M04_bringup.md`](../docs/MEMO_ADS131M04_bringup.md).
+**Nothing here is bench-verified** — every T above is unrun.
 
 ### Not started
 
 Stage 2 (real sensors), Stage 3 (M4 swap + ring + UDP), Stage 4
-(recalibration). No wiring exists; the attenuation question in plan §12 is still
-open and blocks Stage 2.
+(recalibration). Stage 2 needs the ÷6 divider board built first — the
+attenuation question is **settled** (plan §3.1: one 10 kΩ series resistor per
+channel, no capacitor), it just is not built.
