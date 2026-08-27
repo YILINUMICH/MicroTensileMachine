@@ -252,6 +252,36 @@ coincidence; the pipeline's `railed` column already flags it. If that ceiling ev
 becomes limiting the fix is the LCA-9PC range jumper, not the ADC — and then the
 divider resistor changes to 15 kΩ.
 
+### The divider, explicitly
+
+```
+sensor ──[ R_top 10 k ]──┬── AIN0P
+                         │
+                    [ R_bot 2 k ]   <- the ADC measures ACROSS this
+                         │
+      sensor GND ────────┴── AIN0N
+```
+
+`V_out/V_in = R_bot/(R_top+R_bot) = 2/(10+2) = 1/6`. The output is taken across
+the **bottom** leg. At 5.0 V in, chain current is 5.0/12 kΩ = 0.417 mA and the
+2 kΩ drops **0.833 V**; the other 4.167 V is dropped across the 10 kΩ and
+discarded. (10/12 is the fraction *discarded* — the answer only if the 10 k were
+the shunt.) Backwards: ±1.2 V FSR × 6 = ±7.2 V at the sensor.
+
+### Two independent input limits — the differential one binds
+
+| | |
+|---|---|
+| **Differential**, gain 1 | **±1.2 V** — beyond this the code clips at `7FFFFFh`/`800000h` |
+| **Absolute**, per pin, recommended operating | AGND − 1.3 V … **AVDD = 3.3 V** |
+| **Absolute**, per pin, absolute maximum | AGND − 1.6 V … AVDD + 0.3 V = 3.6 V |
+
+Design to the *recommended* row, not absolute maximum: TI's footnote says
+operation between the two "may not be fully functional, and this may affect
+reliability". At ÷6 the worst-case 5.5 V gives 0.917 V differential — inside
+±1.2 V with 24% margin, and nowhere near the absolute limits. **The differential
+range sizes the divider; the absolute range merely must not be violated.**
+
 ### Negative inputs are fine — the POSITIVE side is the tight one
 
 Worth stating because it inverts the usual single-supply intuition:
@@ -268,6 +298,21 @@ The ADC is natively bipolar (24-bit two's complement, `800000h` at −FSR to
 shunt diodes to AGND, which is what permits it. At ÷6 the load cell's bipolar
 −5 V lands at −0.833 V, inside with 36% margin; normal operation is barely
 negative at all (`V0 = −34 mV` at zero force → −5.7 mV at the ADC).
+
+**Why sub-ground capability matters rather than being a curiosity.** On a
+converter that cannot go below ground, a signal sitting at 0 V with symmetric
+noise has its negative excursions clipped. That rectifies the noise into a
+**positive bias that grows with noise amplitude** — an error appearing exactly at
+zero, entirely plausible-looking, worse the noisier the setup. Same family as the
+`E[V/I]` bias in `MEMORY: mean-of-ratios-bias-fooled-diagnosis`. Here it is not
+hypothetical: the load cell's zero is genuinely below ground (`V0 = −34 mV`), so
+a unipolar converter would be actively wrong in exactly that region.
+
+**Global-chop mode is not needed.** It cancels the ADC's own offset, but
+uncompensated offset is ±175 ppm of FSR ≈ ±210 µV at the ADC — through ÷6 and
+10.2 mV/mN that is **0.12 mN**, against 5 mN of mechanical hysteresis. It would
+also cost two-thirds of the data rate (three internal conversions per settled
+result).
 
 But there is only **0.3 V of headroom above AVDD**. Any path that puts an
 undivided sensor output on an ADS131M04 input is a **destructive** fault, not a
