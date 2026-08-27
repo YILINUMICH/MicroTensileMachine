@@ -203,23 +203,95 @@ python operator_m04_sweep.py --profile profiles/qualify.json      # ~25 min
 python operator_m04_report.py data/m04_<stamp>
 ```
 
-Covers T3 (clock), T4 (CRC soak), T5 (rate), T7 (shorted-input noise).
+Covers **T3** (clock), **T4** (CRC soak), **T5** (rate), **T7** (noise) and
+**T8** (DC accuracy) — 15 conditions.
 
 **T7 is the test that can kill the whole idea** — measured noise must be within
 2× of Table 7-1 (2.39 µV rms at gain 1 / OSR 8192), and all four channels
 within 2× of each other. If it comes in far worse, stop and report before
 doing any integration work.
 
-## Step 10 — what happens next
+### T8 inside that sweep — DC accuracy with no external hardware
+
+The chip has an **internal DC test signal** of 2/15 × FSR that auto-scales with
+gain, selected through each channel's input mux (§8.3.9). So T8 needs no bench
+supply and no divider: the expected value is exact, and it exists in **both
+polarities** — which is what makes it test *sign extension*, not just scaling.
+
+| Condition | Mux | Expect |
+|---|---|---|
+| `t8_dc_pos` | test+ , gain 1 | **+160.0 mV** |
+| `t8_dc_neg` | test− , gain 1 | **−160.0 mV** |
+| `t8_dc_pos_g2` | test+ , gain 2 | **+80.0 mV** (signal follows the gain) |
+| `t7_shorted` | internal short | ~0 V — a *cleaner* noise floor than the EVM jumpers, with the 1 kΩ resistors and external pickup removed |
+
+The report checks the measured mean against those, and raises a **separate
+`dc_sign` failure** when a channel reads the wrong polarity, so a broken sign
+extension is named rather than hidden inside a large percentage error.
+
+Tolerance is a deliberately loose **2%**: the datasheet calls the signal
+"nominally" 2/15 × VREF and gives it no tolerance of its own, so a tight bound
+would be judging an unspecified internal divider. T8's job per plan §7 is to
+confirm `lsbVolts()` scaling and sign extension, which 2% does decisively.
+Absolute accuracy against the REF7050 is a Stage-2 question.
+
+By hand, without the sweep:
+
+```
+mux all 2      ->  [CFG] ch0 mux=2 expect=160.0000 mV   (x4)
+mux all 3      ->  [CFG] ch0 mux=3 expect=-160.0000 mV  (x4)
+mux all 0      ->  back to the real inputs
+```
+
+## Step 10 — reset recovery (T9)
+
+With the board streaming, issue:
+
+```
+rst
+```
+
+**Expect:**
+```
+[RST] OK id=0x2400 status=0x0500 reset_bit=1 clock 0x0F1A->0x0F0E
+[CFG] osr=8192 rate=500.00 SPS
+```
+
+Check all four:
+
+- [ ] `reset_bit=1` — STATUS bit 10, set by a genuine reset
+- [ ] `clock 0x0F1A->0x0F0E` — registers actually returned to defaults
+- [ ] `[STATUS]` resumes within a second or two, `drdy` advancing, `rate` ≈ 500
+- [ ] **no power cycle was needed**
+
+**If CLOCK still reads `0x0F1A` after the reset**, the pulse was a **SYNC, not a
+reset** — the firmware prints an explicit warning for this. SYNC/RESET is one
+pin doing two jobs separated only by pulse width: ≥2048 t_CLKIN (250 µs) resets,
+1–2047 t_CLKIN synchronises and leaves the configuration intact while looking
+perfectly healthy. The driver holds the line low 1 ms to sit clear of that
+boundary, so this warning firing means something is wrong with the pin or the
+clock, not with the choice of width.
+
+**Why this test matters:** the ADS1263 could not recover from a wedged state
+without a power cycle — that is what the `adcreset` command in the CC fork
+exists to work around, and what the "crc storm = skipped EVM power cycle"
+failure is about. If the ADS131M04 recovers from a pin reset alone, that is a
+real operational improvement and should be recorded in
+`Firmware_ADS131M04Test_PIO/STATUS.md`.
+
+**After a reset the mux and gain are back at defaults** — the firmware re-applies
+only the OSR. Re-issue any `mux` / `gain` you were using before continuing.
+
+## Step 11 — what happens next
 
 - All green → commit the sweep folder (captures are tracked on purpose) and
   update `Firmware_ADS131M04Test_PIO/STATUS.md` with the adopted SPI clock and
   the measured T7 numbers.
 - Then, and only then, plan Stage 2: build the ÷6 divider board (plan §3.1) and
   connect real sensors.
-- **T6 (DRDY count), T8 (DC accuracy) and T9 (reset recovery) are not yet
-  automated.** T6 is readable by hand from `[STATUS]`'s `drdy` versus `rate`;
-  T8 needs a known DC source; T9 is `rst` mid-capture.
+- **T6 (DRDY count) has no automated host check** — read it by hand from
+  `[STATUS]`: under DRDY gating `drdy` counts conversions consumed, so it should
+  advance by exactly `rate` each second. T8 and T9 are covered by Steps 9 and 10.
 
 ---
 
@@ -235,3 +307,6 @@ doing any integration work.
 | Noise perfect, `rate` wrong | a frozen converter reads as *perfect* noise — trust `rate` |
 | `udp_on=1` but no samples arrive | PC NIC not on `169.254.245.x`, or a firewall on UDP 7777 |
 | Host warns and falls back to serial | the flashed image is `portenta_m7_usb` (no UDP) |
+| T8 `dc_sign` fires | sign extension broken in the driver — `sext24()` |
+| T8 `dc` off by a clean ratio (2×, 6×…) | `lsbVolts()` / FSR wrong for that gain |
+| T9 warns "may have been a SYNC" | SYNC/RESET pulse landed under 2048 t_CLKIN, or the pin is not reaching the EVM |

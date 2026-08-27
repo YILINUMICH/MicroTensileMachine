@@ -27,6 +27,15 @@ CHECKS — one per acceptance criterion in docs/ADS131M04_migration_plan.md §7:
                   part has an offset spec of its own.
     T7 spread     the four channels within 2x of each other. One deviant
                   channel is a wiring or PGA fault, not a noise floor.
+    T8 dc         with the input mux on the internal DC test signal
+                  (2/15 x FSR = 160 mV at gain 1), the measured mean vs that
+                  expected value. Tolerance is a loose 2% on purpose: the
+                  datasheet calls the signal "nominally" 2/15 x VREF with no
+                  tolerance of its own, so this confirms lsbVolts() scaling and
+                  SIGN EXTENSION -- which is T8's stated job -- not absolute
+                  accuracy. `dc_sign` fires separately when a channel reads the
+                  wrong polarity, because that is the specific defect T8 exists
+                  to catch and it should not hide inside a large percentage.
     loss          UDP seq gaps. Reported, never hidden -- a capture that lost
                   datagrams can still pass the noise check while being wrong
                   about the rate.
@@ -131,7 +140,9 @@ def analyse(csv_path: Path) -> dict:
 
     return {"label": cond.get("label", csv_path.stem), "cond": cond,
             "chans": chans, "status": st, "loss_pct": loss,
-            "secs": secs, "nominal_sps": nominal, "spec_noise_uv": spec_uv}
+            "secs": secs, "nominal_sps": nominal, "spec_noise_uv": spec_uv,
+            "mux": int(cond.get("mux", 0)),
+            "expected_v": cond.get("expected_v")}
 
 
 def verdicts(r: dict) -> "list[tuple[str, bool, str]]":
@@ -176,6 +187,27 @@ def verdicts(r: dict) -> "list[tuple[str, bool, str]]":
                 out.append(("spread", hi / lo <= M.ACC_CH_SPREAD,
                             f"ch spread {hi/lo:.2f}x "
                             f"(lo {lo:.2f}, hi {hi:.2f} uV)"))
+
+    # T8 — DC accuracy against the internal test signal. Only meaningful when
+    # the mux is driving one; on real inputs or the internal short the expected
+    # value is 0 and there is nothing to judge.
+    if r["mux"] in (M.MUX_TEST_POS, M.MUX_TEST_NEG) and r["expected_v"]:
+        exp = float(r["expected_v"])
+        means = {ch: c["mean_v"] for ch, c in chans.items() if c["mean_v"] is not None}
+        if means:
+            worst_ch = max(means, key=lambda k: abs(means[k] - exp))
+            err = abs(means[worst_ch] - exp) / abs(exp)
+            out.append(("dc", err <= M.ACC_DC_TOL,
+                        f"worst ch{worst_ch} {means[worst_ch]*1e3:+.3f} mV vs "
+                        f"{exp*1e3:+.3f} mV expected ({err*100:+.2f}%, "
+                        f"tol {M.ACC_DC_TOL*100:g}%)"))
+            # A sign flip is the specific defect T8 exists to catch, so name it
+            # rather than letting it hide inside a large percentage error.
+            wrong_sign = [ch for ch, v in means.items() if v * exp < 0]
+            if wrong_sign:
+                out.append(("dc_sign", False,
+                            f"ch{wrong_sign} read the WRONG SIGN — "
+                            f"sign extension is broken in the driver"))
 
     if r["loss_pct"]:
         worst = max(float(v) for v in r["loss_pct"].values())

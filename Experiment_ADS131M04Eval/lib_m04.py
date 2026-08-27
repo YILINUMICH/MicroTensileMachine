@@ -67,6 +67,25 @@ NOISE_UV = {
 
 GAIN_CODES = {1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6, 128: 7}
 
+# ── Input multiplexer — CHn_CFG[1:0] (§8.3.9) ─────────────────────────────
+# The internal DC test signal is 2/15 x VREF and AUTO-SCALES with gain, so it
+# is always 2/15 of full scale (160 mV at gain 1). No external hardware, an
+# exact expected value, and BOTH polarities — which is what lets T8 test sign
+# extension rather than only scaling.
+MUX_AIN, MUX_SHORTED, MUX_TEST_POS, MUX_TEST_NEG = 0, 1, 2, 3
+MUX_NAMES = {0: "ain", 1: "shorted", 2: "test+", 3: "test-"}
+TEST_FRAC = 2.0 / 15.0
+
+
+def expected_volts(mux: int, gain: int) -> float:
+    """Expected reading for a mux setting. 0 for real inputs and the short."""
+    mag = fsr_v(gain) * TEST_FRAC
+    if mux == MUX_TEST_POS:
+        return mag
+    if mux == MUX_TEST_NEG:
+        return -mag
+    return 0.0
+
 # ── src IDs as this TEST firmware emits them ──────────────────────────────
 # CH0/CH1 keep the production meanings (laser / load) so the M4 swap in Stage 3
 # is a no-op for the host. CH2/CH3 borrow src=3/4, which in PRODUCTION mean SMA
@@ -101,6 +120,12 @@ ACC_CH_SPREAD = 2.0          # T7: all four channels within 2x of each other
 ACC_RATE_TOL = 0.01          # T5: measured SPS within 1% of nominal
 ACC_CRC_ERR = 0              # T4: zero CRC errors
 ACC_T4_FRAMES = 1_000_000    # T4: over at least this many frames
+# T8: fraction of the expected test-signal amplitude. Deliberately loose at 2%.
+# The datasheet calls the internal signal "nominally" 2/15 x VREF and gives it
+# no tolerance of its own, so a tight bound would be judging an unspecified
+# divider. T8's job per plan §7 is confirming lsbVolts() and SIGN EXTENSION,
+# which 2% does decisively; absolute accuracy against the REF7050 is Stage 2.
+ACC_DC_TOL = 0.02
 
 
 @dataclass
@@ -112,6 +137,7 @@ class Condition:
     gain: int = 1
     secs: float = 60.0
     pwr: int = PWR_HR
+    mux: int = MUX_AIN                 # 0 ain, 1 shorted, 2 test+, 3 test-
     note: str = ""
 
     @property
@@ -122,16 +148,22 @@ class Condition:
     def spec_noise_uv(self) -> float:
         return spec_noise_uv(self.osr, self.gain)
 
+    @property
+    def expected_v(self) -> float:
+        return expected_volts(self.mux, self.gain)
+
     def commands(self) -> "list[str]":
         """Firmware commands that put the board into this condition."""
         cmds = [f"spi {self.spi_hz}", f"osr {self.osr}"]
         cmds += [f"gain {ch} {self.gain}" for ch in range(NUM_CH)]
+        cmds.append(f"mux all {self.mux}")
         return cmds
 
     def describe(self) -> str:
         return (f"{self.label:<22s} spi={self.spi_hz/1e6:5.2f} MHz  "
                 f"osr={OSR_DIV[self.osr]:<5d} ({self.nominal_sps:7.1f} SPS)  "
-                f"gain={self.gain:<3d}  {self.secs:5.1f} s"
+                f"gain={self.gain:<3d}  mux={MUX_NAMES[self.mux]:<7s} "
+                f"{self.secs:5.1f} s"
                 + (f"   # {self.note}" if self.note else ""))
 
 

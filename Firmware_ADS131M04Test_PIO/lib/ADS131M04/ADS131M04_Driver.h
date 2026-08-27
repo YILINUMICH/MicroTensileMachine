@@ -186,6 +186,25 @@ typedef enum {
     ADS131M04_GAIN_128 = 7,
 } ADS131M04_Gain_t;
 
+// ── Input multiplexer — CHn_CFG[1:0] (§8.3.9, §8.6.10) ────────────────────
+// The internal DC test signal is nominally 2/15 x VREF and AUTO-SCALES with
+// gain, so it is always 2/15 of full scale: 160 mV at gain 1, 80 mV at gain 2.
+// It needs no external hardware, which is what makes T8 runnable on a bare
+// board, and it exists in both polarities — so it exercises sign extension,
+// not just scaling. MUX_SHORTED is a cleaner noise reference than grounding
+// the inputs through the EVM's jumpers, because it removes the 1 k resistors
+// and any external pickup from the measurement.
+typedef enum {
+    ADS131M04_MUX_AIN      = 0,   // AINnP / AINnN (default)
+    ADS131M04_MUX_SHORTED  = 1,   // ADC inputs shorted internally
+    ADS131M04_MUX_TEST_POS = 2,   // +2/15 x FSR
+    ADS131M04_MUX_TEST_NEG = 3,   // -2/15 x FSR
+} ADS131M04_Mux_t;
+
+// Test-signal amplitude as a fraction of FSR (§8.3.9).
+#define ADS131M04_TEST_NUM  2
+#define ADS131M04_TEST_DEN  15
+
 // ── One simultaneous sample of all four channels ──────────────────────────
 struct ADS131M04_Reading {
     bool     valid;                      // output CRC matched
@@ -247,6 +266,13 @@ public:
     /** Per-channel PGA gain. Read-modify-writes GAIN1 so channels stay free. */
     bool setGain(uint8_t ch, ADS131M04_Gain_t gain);
     ADS131M04_Gain_t getGain(uint8_t ch) const;
+
+    /** Per-channel input mux: real inputs, internal short, or DC test signal. */
+    bool setInputMux(uint8_t ch, ADS131M04_Mux_t mux);
+    ADS131M04_Mux_t getInputMux(uint8_t ch) const;
+
+    /** Expected volts for the current mux setting: +/-2/15 x FSR, else 0. */
+    float expectedVolts(uint8_t ch) const;
 
     /**
      * One NULL frame: STATUS + all four channels + CRC check.
@@ -313,6 +339,7 @@ private:
     ADS131M04_PWR_t _pwr;
     uint8_t         _ch_mask;
     uint8_t         _gain[ADS131M04_NUM_CH];   // ADS131M04_Gain_t codes
+    uint8_t         _mux[ADS131M04_NUM_CH];    // ADS131M04_Mux_t codes
 
     uint32_t _crc_err;
     uint32_t _frames;

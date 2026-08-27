@@ -211,6 +211,7 @@ static bool selftest() {
 // ══════════════════════════════════════════════════════════════════════════
 static void help() {
     Serial.println(F("[CMD] selftest | regs | rst | spi <hz> | osr <0-7> | gain <ch> <1..128>"));
+    Serial.println(F("[CMD] mux <ch|all> <0=ain 1=short 2=test+ 3=test-> (T8)"));
     Serial.println(F("[CMD] poll <us> | drdy | netcfg <ip> <port> | ping | help"));
 }
 
@@ -234,13 +235,57 @@ static void handleCommand(String in) {
     if (low == "regs") { adc.printRegisters(Serial); adc.printConfig(Serial); return; }
 
     if (low == "rst") {
-        // Hardware SYNC/RESET (>= 2048 t_CLKIN). Registers return to defaults,
-        // so the condition must be re-applied by the host afterwards.
+        // T9. Hardware SYNC/RESET, held 1 ms — comfortably past t_w(RSL)'s
+        // 2048 t_CLKIN (250 us), because a SHORTER pulse is a SYNC and would
+        // silently leave the configuration intact while looking like a reset.
+        // Registers return to defaults, so the caller must re-apply.
+        const uint16_t clock_before = adc.readRegister(ADS131M04_REG_CLOCK);
         const bool ok = adc.reset();
+        const uint16_t st    = adc.readRegister(ADS131M04_REG_STATUS);
+        const uint16_t clock = adc.readRegister(ADS131M04_REG_CLOCK);
+
         Serial.print(F("[RST] ")); Serial.print(ok ? F("OK id=0x") : F("FAILED id=0x"));
-        Serial.println(adc.deviceID(), HEX);
+        Serial.print(adc.deviceID(), HEX);
+        Serial.print(F(" status=0x"));       Serial.print(st, HEX);
+        Serial.print(F(" reset_bit="));      Serial.print((st & ADS131M04_ST_RESET) ? 1 : 0);
+        Serial.print(F(" clock 0x"));        Serial.print(clock_before, HEX);
+        Serial.print(F("->0x"));             Serial.println(clock, HEX);
+        // A real reset returns CLOCK to its 0x0F0E default. If it still reads
+        // the configured value, the pulse was a SYNC, not a reset.
+        if (ok && clock != 0x0F0E)
+            Serial.println(F("[RST] WARNING: CLOCK not at reset default — pulse may have been a SYNC"));
+
         adc_ok = ok;
         if (ok) applyConfig(OSR_DEFAULT);
+        return;
+    }
+
+    if (low.startsWith("mux ")) {
+        // T8. The internal DC test signal is 2/15 x FSR and auto-scales with
+        // gain, so it needs no external hardware and exists in both polarities
+        // — which is what makes it test SIGN EXTENSION, not just scaling.
+        String rest = in.substring(4); rest.trim();
+        const int sp = rest.indexOf(' ');
+        if (sp < 0) { Serial.println(F("[CFG] usage: mux <ch|all> <0..3>")); return; }
+        const String chStr = rest.substring(0, sp);
+        const int m = rest.substring(sp + 1).toInt();
+        if (m < 0 || m > 3) { Serial.println(F("[CFG] bad mux (0..3)")); return; }
+
+        const bool all = chStr.equalsIgnoreCase("all");
+        const int ch0 = all ? 0 : chStr.toInt();
+        const int ch1 = all ? ADS131M04_NUM_CH - 1 : ch0;
+        if (ch0 < 0 || ch1 >= ADS131M04_NUM_CH) { Serial.println(F("[CFG] bad ch")); return; }
+
+        for (int ch = ch0; ch <= ch1; ch++) {
+            if (!adc.setInputMux((uint8_t)ch, (ADS131M04_Mux_t)m)) {
+                Serial.print(F("[CFG] FAIL: setInputMux ch")); Serial.println(ch);
+                continue;
+            }
+            Serial.print(F("[CFG] ch")); Serial.print(ch);
+            Serial.print(F(" mux=")); Serial.print(m);
+            Serial.print(F(" expect=")); Serial.print(adc.expectedVolts((uint8_t)ch) * 1000.0f, 4);
+            Serial.println(F(" mV"));
+        }
         return;
     }
 

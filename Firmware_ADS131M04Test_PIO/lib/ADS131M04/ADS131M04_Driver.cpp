@@ -48,7 +48,10 @@ ADS131M04_Driver::ADS131M04_Driver()
       _crc_err(0),
       _frames(0)
 {
-    for (uint8_t i = 0; i < ADS131M04_NUM_CH; i++) _gain[i] = ADS131M04_GAIN_1;
+    for (uint8_t i = 0; i < ADS131M04_NUM_CH; i++) {
+        _gain[i] = ADS131M04_GAIN_1;
+        _mux[i]  = ADS131M04_MUX_AIN;
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -218,7 +221,10 @@ bool ADS131M04_Driver::reset() {
     _osr     = ADS131M04_OSR_1024;
     _pwr     = ADS131M04_PWR_HR;
     _ch_mask = 0x0F;
-    for (uint8_t i = 0; i < ADS131M04_NUM_CH; i++) _gain[i] = ADS131M04_GAIN_1;
+    for (uint8_t i = 0; i < ADS131M04_NUM_CH; i++) {
+        _gain[i] = ADS131M04_GAIN_1;
+        _mux[i]  = ADS131M04_MUX_AIN;
+    }
 
     const uint16_t id = readRegister(ADS131M04_REG_ID);
     _present = ((id & ADS131M04_ID_MASK) == ADS131M04_ID_EXPECTED);
@@ -242,7 +248,10 @@ bool ADS131M04_Driver::resetCommand() {
     _osr     = ADS131M04_OSR_1024;
     _pwr     = ADS131M04_PWR_HR;
     _ch_mask = 0x0F;
-    for (uint8_t i = 0; i < ADS131M04_NUM_CH; i++) _gain[i] = ADS131M04_GAIN_1;
+    for (uint8_t i = 0; i < ADS131M04_NUM_CH; i++) {
+        _gain[i] = ADS131M04_GAIN_1;
+        _mux[i]  = ADS131M04_MUX_AIN;
+    }
 
     const uint16_t id = readRegister(ADS131M04_REG_ID);
     _present = ((id & ADS131M04_ID_MASK) == ADS131M04_ID_EXPECTED);
@@ -315,6 +324,44 @@ bool ADS131M04_Driver::setGain(uint8_t ch, ADS131M04_Gain_t gain) {
 ADS131M04_Gain_t ADS131M04_Driver::getGain(uint8_t ch) const {
     if (ch >= ADS131M04_NUM_CH) return ADS131M04_GAIN_1;
     return (ADS131M04_Gain_t)_gain[ch];
+}
+
+bool ADS131M04_Driver::setInputMux(uint8_t ch, ADS131M04_Mux_t mux) {
+    if (ch >= ADS131M04_NUM_CH) return false;
+
+    // CHn_CFG (§8.6.10): MUXn[1:0] are bits 1:0; PHASEn and DCBLKn_DIS live
+    // above them, so this is read-modify-write, not a blind store.
+    const uint8_t addr = ADS131M04_CH_CFG(ch);
+    uint16_t reg = readRegister(addr);
+    reg = (uint16_t)((reg & ~0x0003u) | ((uint16_t)mux & 0x0003u));
+
+    if (!writeRegister(addr, reg)) return false;
+    if ((readRegister(addr) & 0x0003u) != ((uint16_t)mux & 0x0003u)) {
+        DRV_LOG(String("CH") + ch + "_CFG mux readback mismatch");
+        return false;
+    }
+    _mux[ch] = (uint8_t)mux;
+
+    // Changing the mux resets the digital filter (§8.5.2) — sinc3 needs three
+    // conversion cycles to settle, so the first frames after this are garbage.
+    const float rate = sps();
+    if (rate > 0.0f) delay((uint32_t)(3000.0f / rate) + 2);
+    return true;
+}
+
+ADS131M04_Mux_t ADS131M04_Driver::getInputMux(uint8_t ch) const {
+    if (ch >= ADS131M04_NUM_CH) return ADS131M04_MUX_AIN;
+    return (ADS131M04_Mux_t)_mux[ch];
+}
+
+float ADS131M04_Driver::expectedVolts(uint8_t ch) const {
+    if (ch >= ADS131M04_NUM_CH) return 0.0f;
+    const float mag = fsrVolts(ch) * (float)ADS131M04_TEST_NUM / (float)ADS131M04_TEST_DEN;
+    switch (_mux[ch]) {
+        case ADS131M04_MUX_TEST_POS: return  mag;
+        case ADS131M04_MUX_TEST_NEG: return -mag;
+        default:                     return 0.0f;   // AIN and SHORTED alike
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════

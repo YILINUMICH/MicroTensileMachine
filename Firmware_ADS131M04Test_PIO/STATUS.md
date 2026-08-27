@@ -76,6 +76,19 @@ the production stream has (~19% zero-order-hold rows, from polling faster than
 the ADC converts), and makes T6 free: conversions consumed == DRDY assertions.
 `poll <us>` switches to timed polling for an A/B.
 
+**T8 needs no external hardware.** The chip has an internal DC test signal of
+2/15 × FSR that auto-scales with gain (§8.3.9), selectable per channel through
+`CHn_CFG[1:0]`. `mux all 2` / `mux all 3` give +160.0 / −160.0 mV at gain 1 —
+an exact expected value in *both polarities*, which is what makes T8 test sign
+extension rather than only scaling. `mux all 1` (internal short) is also a
+cleaner T7 reference than the EVM jumpers, since it removes the 1 kΩ resistors
+and any external pickup.
+
+**T9 is verifiable, not just runnable.** `rst` now reports the STATUS `RESET`
+bit and CLOCK before→after, and warns explicitly when CLOCK did not return to
+its `0x0F0E` default — because a SYNC/RESET pulse under 2048 t_CLKIN performs a
+*synchronise* and leaves the configuration intact while looking healthy.
+
 `adc.begin()` failing no longer halts: `[STATUS]` keeps flowing with `adc_ok=0`,
 so the host sees a diagnosable board instead of a dead port indistinguishable
 from a bad cable.
@@ -91,8 +104,8 @@ from a bad cable.
 | T5 | rate accuracy ±1% | **implemented** — `osr <code>` + host rate check off `hw_us` |
 | T6 | DRDY count | **partial** — `drdy` counts conversions consumed and is exact under DRDY gating; no automated host check yet |
 | T7 | shorted-input noise | **implemented** — `gain <ch> <g>` + host check vs Table 7-1 |
-| T8 | DC accuracy | **not implemented** — needs a known DC source and a nominal |
-| T9 | reset recovery | **partial** — `rst` exists; no host condition drives it mid-capture |
+| T8 | DC accuracy | **implemented** — `mux <ch\|all> <0..3>` drives the chip's own DC test signal (2/15 × FSR, both polarities); host checks value **and** sign |
+| T9 | reset recovery | **implemented** — `rst` reports `reset_bit` and the CLOCK before→after, and warns if the pulse acted as a SYNC. Manual (memo Step 10), not a sweep condition |
 
 ### Next
 
