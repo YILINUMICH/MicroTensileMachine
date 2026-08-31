@@ -129,8 +129,15 @@ static bool   emit_on = true;
 // with those bits set delivers every conversion exactly once — which is what T5
 // (rate accuracy) and T6 (DRDY count) require — while the extra reads dilute
 // the ~125/s disturbance from ~25 % of delivered frames to a few percent.
-static uint32_t fast_us = 0;
+static uint32_t fast_us = 0;            // 0 = one DRDY-gated read per conv
 static uint32_t dedup_skipped = 0;
+static bool     fast_auto = true;       // track the configured data rate
+
+// How many reads per conversion when fast_auto is on. 4 takes the delivered
+// frame-CRC failure rate from ~25 % to ~4 % (measured); beyond that it flattens,
+// so more only costs bus time.
+#define FAST_OVERSAMPLE 4
+#define FAST_MIN_US     40
 static bool     adc_ok = false;
 
 static uint32_t last_status_ms = 0;
@@ -399,7 +406,23 @@ static bool selftest() {
 static void help() {
     Serial.println(F("[CMD] selftest | regs | rst | spi <hz> | osr <0-7> | gain <ch> <1..128>"));
     Serial.println(F("[CMD] mux <ch|all> <0=ain 1=short 2=test+ 3=test-> (T8)"));
-    Serial.println(F("[CMD] poll <us> | fast <us> | dly <us> | batch <n> | emit <0|1> | drdy | raw [n] | rawx [n] | wtest <a> <v> | drdyscan | cipotest | bitbang | pintest | hold <line> <0|1> | walk | clocktest <s> | xtalk | netcfg <ip> <port> | ping | help"));
+    Serial.println(F("[CMD] poll <us> | fast <us|auto> | dly <us> | batch <n> | emit <0|1> | drdy | raw [n] | rawx [n] | wtest <a> <v> | drdyscan | cipotest | bitbang | pintest | hold <line> <0|1> | walk | clocktest <s> | xtalk | netcfg <ip> <port> | ping | help"));
+}
+
+// Keep the oversampled poll period tied to the configured data rate.
+//
+// The device loses ~25 % of conversions in a way nothing host-side influences
+// (see STATUS.md). Reading several times per conversion and keeping only the
+// frames whose STATUS[3:0] flags fresh data recovers a clean, duplicate-free
+// stream; a fixed period would silently stop oversampling as soon as someone
+// changed the OSR, so derive it.
+static void updateFastPeriod() {
+    if (!fast_auto) return;
+    const float sps = adc.sps();
+    if (sps <= 0.0f) return;
+    uint32_t us = (uint32_t)(1000000.0f / sps / FAST_OVERSAMPLE);
+    if (us < FAST_MIN_US) us = FAST_MIN_US;
+    fast_us = us;
 }
 
 static void applyConfig(ADS131M04_OSR_t osr) {
@@ -409,6 +432,10 @@ static void applyConfig(ADS131M04_OSR_t osr) {
         Serial.print(F(" rate="));     Serial.print(adc.sps(), 2);
         Serial.println(F(" SPS"));
     }
+    updateFastPeriod();
+    Serial.print(F("[CFG] fast_us=")); Serial.print(fast_us);
+    Serial.print(F(" ("));             Serial.print(FAST_OVERSAMPLE);
+    Serial.println(F("x oversampled, de-duplicated on STATUS[3:0])"));
 }
 
 static void handleCommand(String in) {
@@ -517,8 +544,15 @@ static void handleCommand(String in) {
     }
 
     if (low.startsWith("fast")) {
-        const long us = low.substring(4).toInt();
-        fast_us = (us > 0 && us <= 100000) ? (uint32_t)us : 0;
+        const String a = low.substring(4);
+        if (a.indexOf("auto") >= 0) {
+            fast_auto = true;
+            updateFastPeriod();
+        } else {
+            const long us = a.toInt();
+            fast_auto = false;
+            fast_us = (us > 0 && us <= 100000) ? (uint32_t)us : 0;
+        }
         Serial.print(F("[CFG] fast_us=")); Serial.println(fast_us);
         if (fast_us) {
             Serial.println(F("[CFG]   read every fast_us, keep CRC-good frames"));

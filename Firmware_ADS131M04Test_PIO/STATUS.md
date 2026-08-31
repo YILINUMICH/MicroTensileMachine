@@ -463,15 +463,45 @@ established, and is enough to hand to TI:
   scope at both 2 and 8 MHz; CRC implementation exact on 23/23 good frames;
   command encoding re-verified against Table 8-11.
 
-**Recommended: raise it with TI** rather than continue. The remaining
-possibilities are a device erratum or an EVM-specific interaction, and neither
-is reachable from here.
+**DECISION (2026-08-30): the 25 % is TABLED.** It is characterised well enough
+to report and not worth more bench time. A support email to TI is drafted; the
+remaining possibilities are a device erratum or an EVM-specific interaction and
+neither is reachable from here. **Do not reopen this without new information
+from TI** — the eliminated list above is long and every entry cost measurements.
 
-**Meanwhile the mitigation is measured and sound:** run oversampled with
-`fast <us>` + de-duplication. That delivers **2059 clean samples/s x 4
-simultaneous channels** — 5x the ADS1263's 400 SPS on twice the channels — with
-independent losses and `hw_us` on every sample so the gaps are visible in the
-data rather than silent. Candidates to eliminate, cheapest first —
+**Adopted instead: oversample and de-duplicate, as the default data path.**
+
+> **BUILT BUT NOT FLASHED — start the next session here.** The `fast auto`
+> change below compiles clean but was never uploaded: the H7 dropped off USB
+> (no present serial port, no DFU device, only stale `COM8` ghosts in the
+> registry) before the upload could run. **Nothing in this section is
+> bench-verified.** Replug the H7, power-cycle the EVM,
+> `pio run -e portenta_m7 -t upload`, then confirm `[CFG] fast_us=` appears at
+> boot and that `[STATUS]` shows a delivered `rate` near 75 % of the configured
+> SPS with `dedup` climbing.
+
+`fast` now defaults to **auto**: the poll period tracks the configured data
+rate at `FAST_OVERSAMPLE = 4` reads per conversion, recomputed inside
+`applyConfig()` so changing OSR cannot silently stop the oversampling. Frames
+are kept only when `STATUS[3:0]` flags a fresh conversion, so the delivered
+stream carries no duplicates.
+
+Measured: delivered frame-CRC failure ~25 % -> ~4 %, delivered rate constant at
+75 % of nominal however fast we poll (no duplicates, no extra recovery).
+`fast <us>` pins it manually; `fast 0` restores one DRDY-gated read per
+conversion for A/B work.
+
+**Why this is acceptable rather than a compromise:** at OSR 1024 it delivers
+**2059 clean samples/s x 4 simultaneous channels** against the ADS1263's 400 SPS
+on two skewed ones — 5x the production rate on twice the channels, after the
+loss. Losses are independent (gap histogram above), so the effective bandwidth
+really is 75 % of nominal, and every delivered sample carries `hw_us` so the
+gaps are visible in the data rather than silent.
+
+**Consequence for T5:** its "+/-1 % of the configured OSR" criterion will fail
+by 25 % by design on an oversampled device. It needs amending to a delivered-rate
+requirement before it is run — see the note above; that is a plan §7 change and
+has not been made. Candidates to eliminate, cheapest first —
 the UDP/Serial emit path (vary the batch size and watch whether bad/s tracks
 packets/s), Ethernet housekeeping, and any mbed background task. If bad/s stays
 pinned at ~150 while every host-side rate is varied, it is internal to the
