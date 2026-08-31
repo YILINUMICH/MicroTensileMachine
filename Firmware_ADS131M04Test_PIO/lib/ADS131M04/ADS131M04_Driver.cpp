@@ -5,6 +5,7 @@
  */
 
 #include "ADS131M04_Driver.h"
+#include <mbed.h>
 
 // Set to 1 to trace every frame on Serial. Very noisy — bring-up only.
 #ifndef ADS131M04_DEBUG
@@ -19,7 +20,11 @@
 
 // SPI mode 1 (CPOL=0, CPHA=1): SCLK idles low, DOUT is launched on the rising
 // edge and DIN is latched on the falling edge (§8.5.1, §6.6).
-static const uint8_t ADS131M04_SPI_MODE = SPI_MODE1;
+// This is the mbed mode number passed straight to SPI::format(); it is NOT
+// Arduino's SPI_MODE1 constant, because this driver no longer goes through the
+// Arduino wrapper — see the header note on why.
+static const int ADS131M04_SPI_MODE = 1;
+static const int ADS131M04_SPI_BITS = 8;
 
 // OSR code -> decimation factor. Index is ADS131M04_OSR_t.
 // Code 7 is 16256 per the CLOCK register table (8-17); the data-rate table
@@ -39,7 +44,7 @@ static float clkinForMode(ADS131M04_PWR_t pwr) {
 }
 
 ADS131M04_Driver::ADS131M04_Driver()
-    : _spi(2000000, MSBFIRST, ADS131M04_SPI_MODE),
+    : _spi_dev(nullptr),
       _spi_hz(2000000),
       _present(false),
       _osr(ADS131M04_OSR_1024),        // chip reset defaults
@@ -80,7 +85,46 @@ int32_t ADS131M04_Driver::sext24(uint32_t v) {
 void ADS131M04_Driver::setSpiHz(uint32_t hz) {
     if (hz > ADS131M04_SCLK_MAX_HZ) hz = ADS131M04_SCLK_MAX_HZ;
     _spi_hz = hz;
-    _spi    = SPISettings(hz, MSBFIRST, ADS131M04_SPI_MODE);
+    applyFormat();          // no-op while the bus is released
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  Bus ownership
+//
+//  Acquiring the pins and applying the format are ONE operation. Keeping them
+//  separate is precisely how the Arduino wrapper loses the mode across an
+//  end()/begin() cycle (header note), and that failure is silent: every word
+//  arrives shifted one bit and only the CRC notices.
+// ══════════════════════════════════════════════════════════════════════════
+void ADS131M04_Driver::applyFormat() {
+    if (!_spi_dev) return;
+    _spi_dev->format(ADS131M04_SPI_BITS, ADS131M04_SPI_MODE);
+    _spi_dev->frequency(_spi_hz);
+}
+
+void ADS131M04_Driver::busAcquire() {
+    if (!_spi_dev) {
+        _spi_dev = new mbed::SPI(ADS131M04_COPI_PIN,
+                                 ADS131M04_CIPO_PIN,
+                                 ADS131M04_SCLK_PIN);
+    }
+    applyFormat();
+}
+
+void ADS131M04_Driver::busRelease() {
+    if (_spi_dev) {
+        delete _spi_dev;
+        _spi_dev = nullptr;
+    }
+}
+
+void ADS131M04_Driver::clockBurst(uint8_t pattern, uint32_t count) {
+    if (!_spi_dev) return;
+    digitalWrite(ADS131M04_CS_PIN, HIGH);      // ADC ignores all of it
+    char tx = (char)pattern, rx = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        _spi_dev->write(&tx, 1, &rx, 1);
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -116,12 +160,22 @@ bool ADS131M04_Driver::transferFrame(uint16_t cmd,
         }
     }
 
-    SPI.beginTransaction(_spi);
-    digitalWrite(ADS131M04_CS_PIN, LOW);
-    for (size_t i = 0; i < ADS131M04_FRAME_BYTES; i++) rx[i] = SPI.transfer(tx[i]);
-    digitalWrite(ADS131M04_CS_PIN, HIGH);
-    SPI.endTransaction();
+    if (!_spi_dev) {                    // bus handed to a GPIO diagnostic
+        memset(&out, 0, sizeof(out));
+        return false;
+    }
 
+    // ONE block transfer, not 18 byte-at-a-time calls. /CS must stay low for
+    // the whole frame: the device discards an incomplete frame (§8.5.1.7).
+    digitalWrite(ADS131M04_CS_PIN, LOW);
+    delayMicroseconds(ADS131M04_CS_SETUP_US);      // td(CSSC)
+    _spi_dev->write((const char *)tx, (int)ADS131M04_FRAME_BYTES,
+                    (char *)rx,       (int)ADS131M04_FRAME_BYTES);
+    delayMicroseconds(ADS131M04_CS_HOLD_US);       // td(SCCS)
+    digitalWrite(ADS131M04_CS_PIN, HIGH);
+    delayMicroseconds(ADS131M04_CS_HIGH_US);       // tw(CSH) before the next frame
+
+    memcpy(out.rx, rx, ADS131M04_FRAME_BYTES);
     out.response = (uint16_t)((uint16_t)rx[0] << 8 | rx[1]);
     for (uint8_t c = 0; c < ADS131M04_NUM_CH; c++) {
         const size_t o = (size_t)(c + 1) * ADS131M04_WORD_BYTES;
@@ -141,6 +195,17 @@ bool ADS131M04_Driver::transferFrame(uint16_t cmd,
     return out.crc_ok;
 }
 
+bool ADS131M04_Driver::transferRaw(const uint8_t *tx, uint8_t *rx, size_t len) {
+    if (!_spi_dev || !tx || !rx || !len) return false;
+    digitalWrite(ADS131M04_CS_PIN, LOW);
+    delayMicroseconds(ADS131M04_CS_SETUP_US);
+    _spi_dev->write((const char *)tx, (int)len, (char *)rx, (int)len);
+    delayMicroseconds(ADS131M04_CS_HOLD_US);
+    digitalWrite(ADS131M04_CS_PIN, HIGH);
+    delayMicroseconds(ADS131M04_CS_HIGH_US);
+    return true;
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 //  Register access
 //
@@ -149,33 +214,160 @@ bool ADS131M04_Driver::transferFrame(uint16_t cmd,
 //  always carries NULL, the NEXT frame a caller runs gets STATUS in word 0 —
 //  never a stale register value or a stale write ack.
 // ══════════════════════════════════════════════════════════════════════════
+//  Both retry on a CRC failure, because a failed frame is KNOWN BAD and its
+//  response word is garbage — using it is strictly worse than asking again.
+//
+//  Why this is needed at all: when a conversion completes part-way through a
+//  frame the device restarts its output frame, so the CRC slot arrives holding
+//  the next frame's STATUS (§8.5.1.9, "avoid reading ADC data during the time
+//  where new conversions complete"). Bench-measured at ~1 frame in 11 with
+//  back-to-back reads. That is harmless for streaming — the sample is simply
+//  flagged invalid — but fatal for register access, where one disturbed frame
+//  turns a perfectly good write into "WREG not acked". T2 failed 12/12 for
+//  exactly this reason while the writes themselves were landing correctly.
+#define ADS131M04_REG_TRIES 8
+
+// Put the frames that follow in the MIDDLE of a conversion period rather than
+// on its edge.
+//
+// The sampling loop is DRDY-gated, so it calls in the instant a conversion
+// lands — which is exactly when §8.5.1.9 says not to be reading ("avoid reading
+// ADC data during the time where new conversions complete"). Consuming the
+// pending sample first clears DRDY and buys the whole conversion period: at
+// 500 SPS that is ~2 ms of clear space for a frame pair that takes ~150 us.
+//
+// Retrying into the disturbance instead of stepping away from it is why four
+// attempts still left T2 failing.
+void ADS131M04_Driver::quiesce() {
+    if (!_spi_dev) return;
+    // UNCONDITIONAL, and that is the whole point. Measured on the bench, at one
+    // and the same data rate:
+    //
+    //     frames issued back-to-back, nothing between ->  1/24 bad  (~4 %)
+    //     frames issued after an idle gap            -> ~25 % bad
+    //
+    // The disturbance tracks the GAP BEFORE the frame, not the SPI clock
+    // (250 k-8 M all ~25 %), not the frame duration (66 vs 177 µs, unchanged),
+    // and not the conversion rate (252 vs 4000 SPS, unchanged). The first frame
+    // after an idle bus is the one that pays.
+    //
+    // That is exactly the WREG signature: f1, the command frame, follows the
+    // caller's own processing and comes back corrupted every time, while f2 --
+    // issued immediately after f1 -- is always clean. The command is lost in the
+    // frame that pays for the gap, so the device answers NULL and the ack can
+    // never be matched.
+    //
+    // So absorb the gap with a throwaway frame first. An earlier version only
+    // did this when DRDY was low, which is why it changed nothing.
+    // TWO frames, not one. The output FIFO holds two samples per channel and
+    // DRDY stays asserted until BOTH are read (§8.5.1.9.1); the datasheet's own
+    // remedy after a gap in reading is to "quickly read two data packets".
+    // One throwaway frame leaves the second slot occupied and the next frame is
+    // still the disturbed one.
+    ADS131M04_Frame junk;
+    for (uint8_t i = 0; i < 2; i++) {
+        transferFrame(ADS131M04_CMD_NULL, nullptr, 0, junk);
+        // A NULL frame's response IS the STATUS register, so this records
+        // exactly what a "command was dropped" answer looks like right now.
+        if (junk.crc_ok) _last_status = junk.response;
+    }
+}
+
 uint16_t ADS131M04_Driver::readRegister(uint8_t addr) {
     ADS131M04_Frame f;
     const uint16_t cmd = ADS131M04_CMD_RREG | ((uint16_t)(addr & 0x3F) << 7);
 
-    transferFrame(cmd, nullptr, 0, f);                 // issue RREG
-    transferFrame(ADS131M04_CMD_NULL, nullptr, 0, f);  // collect the answer
-    return f.response;
+    ADS131M04_Frame fc;
+    for (uint8_t attempt = 0; attempt < ADS131M04_REG_TRIES; attempt++) {
+        quiesce();
+        transferFrame(cmd, nullptr, 0, fc);                // issue RREG
+        transferFrame(ADS131M04_CMD_NULL, nullptr, 0, f);  // collect the answer
+
+        // BOTH frames must be clean, and the COMMAND frame is the one that
+        // actually matters. A disturbed frame is incomplete, and the device
+        // ignores an incomplete command (§8.5.1.7) — so the answer arrives
+        // perfectly formed, passes CRC, and contains STATUS instead of the
+        // register.
+        //
+        // CRC ALONE CANNOT CATCH THAT: the output CRC validates DOUT, never
+        // DIN, so a dropped command produces a flawless frame carrying the NULL
+        // response. quiesce() just told us what that response looks like, so
+        // compare against it. STATUS itself is exempt — reading STATUS is
+        // supposed to return exactly that value.
+        if (fc.crc_ok && f.crc_ok) {
+            // Compare only the STABLE bits. STATUS[3:0] is DRDY[3:0], which
+            // changes from frame to frame, so an exact match misses roughly
+            // half the dropped commands — bench signature "wrote 0xF16 read
+            // 0x50F" against a recorded 0x0500. Masking the low nibble catches
+            // both. No collision risk: a real register value would have to
+            // match STATUS in bits 15:4, and the CLOCK values under test
+            // (0x0F1A / 0x0F0E / 0x0F16) differ in the high byte.
+            const uint16_t kStable = 0xFFF0;
+            const bool looks_dropped =
+                (addr != ADS131M04_REG_STATUS) &&
+                ((f.response & kStable) == (_last_status & kStable));
+            if (!looks_dropped) return f.response;
+        }
+    }
+    DRV_LOG(String("RREG 0x") + String(addr, HEX) + " gave no clean frame pair");
+    return f.response;      // last value, whatever it was — caller sees junk
 }
 
 bool ADS131M04_Driver::writeRegister(uint8_t addr, uint16_t value) {
     ADS131M04_Frame f;
     const uint16_t cmd = ADS131M04_CMD_WREG | ((uint16_t)(addr & 0x3F) << 7);
 
-    transferFrame(cmd, &value, 1, f);                  // command + payload
-    transferFrame(ADS131M04_CMD_NULL, nullptr, 0, f);  // collect the ack
-
     // Ack is 010a aaaa ammm mmmm, where mmm mmmm is the count ACTUALLY written
     // minus one — which the datasheet warns can be less than what was asked
     // (§8.5.1.10.8). For a single-register write anything but 0 means the chip
     // did not do what we told it.
     const uint16_t expect = ADS131M04_RSP_WREG | ((uint16_t)(addr & 0x3F) << 7);
-    if (f.response != expect) {
-        DRV_LOG(String("WREG ack mismatch: got 0x") + String(f.response, HEX) +
+
+    ADS131M04_Frame fc;
+    for (uint8_t attempt = 0; attempt < ADS131M04_REG_TRIES; attempt++) {
+        quiesce();
+        transferFrame(cmd, &value, 1, fc);                 // command + payload
+        transferFrame(ADS131M04_CMD_NULL, nullptr, 0, f);  // collect the ack
+
+        if (fc.crc_ok && f.crc_ok && f.response == expect) return true;
+
+        // A frame that failed CRC says nothing about whether the write landed:
+        // the device writes registers as they are shifted in, so a disturbed
+        // ACK does not mean a disturbed WRITE (§8.5.1.10.8). Re-issuing is safe
+        // — writing the same value twice is idempotent.
+        DRV_LOG(String("WREG 0x") + String(addr, HEX) + " attempt " +
+                String(attempt) + ": crc_ok=" + String(f.crc_ok) +
+                " got 0x" + String(f.response, HEX) +
                 " want 0x" + String(expect, HEX));
-        return false;
     }
-    return true;
+
+    // Last word goes to the register itself. The ack is only a report; the
+    // register content is the thing the caller actually cares about, and on
+    // this bench the write repeatedly landed while its ack was lost.
+    //
+    // WHY THE ACK IS LOST — cause NOT yet established. Do not trust a tidy
+    // story here; two were tried on 2026-08-30 and both were wrong:
+    //
+    //   * "only CLOCK writes fail, because writing CLOCK resynchronises the
+    //     device" — from a 5-sample A/B. A later `regs` with NO preceding write
+    //     showed MODE, CLOCK, CH1_CFG and CH2_CFG all returning STATUS while
+    //     GAIN1, CFG and CH0_CFG read correctly. Reads fail too, scattered.
+    //   * "the frame pair does not fit between conversions" — raising SPI from
+    //     2 MHz to 8 MHz shrinks a frame 4x and changed nothing (~25 % either
+    //     way, and the same across 250 kHz-8 MHz).
+    //
+    // What IS established: roughly a quarter of frames arrive with the device's
+    // output frame restarted one word early (STATUS in the CRC slot), and the
+    // device sometimes misses a command while its OUTPUT frame stays perfectly
+    // CRC-clean. That second part is why retrying on !crc_ok does not rescue
+    // this: **the DOUT CRC does not validate DIN.** A clean frame carrying the
+    // NULL response is indistinguishable, by CRC alone, from a good answer.
+    //
+    // The settle-then-read-back below is a mitigation, not a fix. See STATUS.md
+    // for the one measurement that has not been made yet: scope /CS and SCLK
+    // through a frame and count edges per CS-low window.
+    delay(ADS131M04_RESYNC_SETTLE_MS);
+    return readRegister(addr) == value;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -192,11 +384,14 @@ bool ADS131M04_Driver::begin(uint32_t spi_hz) {
     // as a plain input keeps the pad from floating without fighting the driver.
     pinMode(ADS131M04_DRDY_PIN, INPUT);
 
-    setSpiHz(spi_hz);
-    SPI.begin();
+    _spi_hz = (spi_hz > ADS131M04_SCLK_MAX_HZ) ? ADS131M04_SCLK_MAX_HZ : spi_hz;
+    busAcquire();
 
     // A cold board may still be inside t_POR; the device ignores all SPI before
-    // its first DRDY rising edge (§8.4.1).
+    // its first DRDY rising edge (§8.4.1). This covers the case where the EVM
+    // and the H7 come up together — it does NOT cover the EVM coming up later,
+    // which is why reset() polls rather than trusting this delay. See
+    // waitInterfaceReady() in the header for the full argument.
     delayMicroseconds(ADS131M04_TPOR_US * 2);
 
     return reset();
@@ -211,11 +406,6 @@ bool ADS131M04_Driver::reset() {
     delayMicroseconds(ADS131M04_RESET_LOW_US);
     digitalWrite(ADS131M04_RESET_PIN, HIGH);
 
-    // "The host must wait for at least t_REGACQ after SYNC/RESET is brought
-    // high or for the DRDY rising edge before communicating" (§8.4.1.2).
-    // t_REGACQ is 5 us; 1 ms is free here and covers a slow supply too.
-    delay(1);
-
     // Registers are back at defaults now, so mirror that in our shadow state
     // rather than letting a stale cached config lie to sps()/lsbVolts().
     _osr     = ADS131M04_OSR_1024;
@@ -226,14 +416,44 @@ bool ADS131M04_Driver::reset() {
         _mux[i]  = ADS131M04_MUX_AIN;
     }
 
-    const uint16_t id = readRegister(ADS131M04_REG_ID);
-    _present = ((id & ADS131M04_ID_MASK) == ADS131M04_ID_EXPECTED);
+    // "The host must wait for at least t_REGACQ after SYNC/RESET is brought
+    // high or for the DRDY rising edge before communicating" (§8.4.1.2).
+    // waitInterfaceReady() spends t_REGACQ and then asks, instead of assuming.
+    return waitInterfaceReady();
+}
 
-    if (!_present) {
+bool ADS131M04_Driver::waitInterfaceReady(uint32_t timeout_ms) {
+    // t_REGACQ = 5 us is the floor after SYNC/RESET goes high. Spend it before
+    // the first read so a healthy part is never failed on a technicality.
+    delayMicroseconds(ADS131M04_TREGACQ_US * 2);
+
+    const uint32_t t0 = millis();
+    uint16_t id = 0;
+
+    for (;;) {
+        id = readRegister(ADS131M04_REG_ID);
+        if ((id & ADS131M04_ID_MASK) == ADS131M04_ID_EXPECTED) {
+            _present = true;
+            return true;
+        }
+        if (millis() - t0 >= timeout_ms) break;
+        delay(1);
+    }
+
+    _present = false;
+
+    // Split the two failures the operator actually has to tell apart. An
+    // all-zero read means nothing is driving CIPO at all — an unpowered DVDD
+    // cannot drive DOUT, so the bus reads as idle-low. A non-zero but wrong ID
+    // means the chip IS talking and the fault is upstream of power.
+    if (id == 0x0000) {
+        DRV_LOG(String("no response in ") + String(timeout_ms) +
+                " ms (id=0x0) — DVDD/AVDD absent, or CIPO not landing on the H7");
+    } else {
         DRV_LOG(String("bad ID 0x") + String(id, HEX) +
                 " — check SPI wiring AND that CLKIN is running (EVM JP6/Y1)");
     }
-    return _present;
+    return false;
 }
 
 bool ADS131M04_Driver::resetCommand() {

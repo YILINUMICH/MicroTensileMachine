@@ -60,6 +60,25 @@ Envs:
 
 ---
 
+## Bench state (2026-08-30)
+
+**T1 passes — `id=0x2403`.** The ADC converts on all four channels and the sample
+stream runs over UDP. **T2 fails**, which blocks `configure()` and therefore
+T3–T9. Details, and the list of theories already eliminated, in
+[`STATUS.md`](STATUS.md).
+
+Two things to know before touching this code:
+
+- **Never use the Arduino `SPI` object on this bus.** The mbed core silently
+  drops the SPI mode across `SPI.end()`/`SPI.begin()`, leaving the peripheral in
+  mode 0 while the caller believes mode 1; every word then arrives right-shifted
+  by one. The driver owns an `mbed::SPI` and exposes `busAcquire()` /
+  `busRelease()` — acquiring the bus and applying the format are the same
+  operation on purpose. See the driver header.
+- **Hold one long-lived serial reader that never stops draining.** The stream
+  saturates USB-CDC and any gap blocks the M7 in `Serial.write` permanently,
+  needing a USB force-pull. Send `netcfg <pc_ip> 7777` first after every boot.
+
 ## What the driver does differently from `ADS1263_Driver`
 
 Detail lives in the header comment of
@@ -90,7 +109,13 @@ production fork only if Stage 3 passes.
 
 ## Scope — what is *not* here yet
 
-The smoke test in `src/main.cpp` covers plan §7 **T1** (ID) and **T2** (register
-round-trip) and then prints a 1 Hz live summary. The full bench console of plan
-§5 — the `spi` clock ladder (T3), `stream`/`noise` (T4–T7), `netcfg` and the UDP
-sample stream, and the `tools/m04_bench.py` host script — is **not written yet**.
+The command surface for T1–T9 is written (see [`STATUS.md`](STATUS.md) for what
+each test uses), and `netcfg` plus the UDP sample stream work. What is **not**
+done is the running of them: only T1 is bench-verified.
+
+Bring-up scaffolding beyond the test suite — `raw`, `wtest`, `drdyscan`,
+`cipotest`, `bitbang`, `pintest`, `hold`, `clocktest`, `xtalk`, `walk` — should
+be stripped once T2 passes. Several were written against a since-disproved
+premise and their verdict lines are more confident than the evidence warranted;
+`raw` and `wtest` are the exceptions worth keeping, because they print evidence
+rather than a conclusion.
